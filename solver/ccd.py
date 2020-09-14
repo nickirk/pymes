@@ -26,13 +26,19 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
 
     # construct the needed integrals here on spot.
 
-    tV_abij = ctf.einsum("iaG, bjG -> abij", ctf.conj(tGamma_pqG[:no,no:,:]), tGamma_pqG[no:,:no,:])
-    tV_ijab = ctf.einsum("aiG, jbG -> ijab", ctf.conj(tGamma_pqG[no:,:no,:]), tGamma_pqG[:no,no:,:])
-    tV_klij = ctf.einsum("ikG, ljG -> klij", ctf.conj(tGamma_pqG[:no,:no,:]), tGamma_pqG[:no,:no,:])
-    tV_iajb = ctf.einsum("jiG, abG -> iajb", ctf.conj(tGamma_pqG[:no,:no,:]), tGamma_pqG[no:,no:,:])
-    tV_iabj = ctf.einsum("biG, ajG -> iabj", ctf.conj(tGamma_pqG[no:,:no,:]), tGamma_pqG[no:,:no,:])
-    tV_abcd = ctf.einsum("caG, bdG -> abcd", ctf.conj(tGamma_pqG[no:,no:,:]), tGamma_pqG[no:,no:,:])
+    tConjGamma_iaG = ctf.einsum("aiG->iaG", ctf.conj(tGamma_pqG[no:,:no,:]))
+    tV_iabj = ctf.einsum("ibG, ajG -> iabj", tConjGamma_iaG, tGamma_pqG[no:,:no,:])
+    tConjGamma_aiG = ctf.einsum("iaG->aiG", ctf.conj(tGamma_pqG[:no,no:,:]))
+    tV_aijb = ctf.einsum("ajG, ibG -> aijb", tConjGamma_aiG, tGamma_pqG[:no,no:,:])
+    tV_ijab = ctf.einsum("iaG, jbG -> ijab", tConjGamma_iaG, tGamma_pqG[:no,no:,:])
+    tConjGamma_ji = ctf.einsum("ijG->jiG", ctf.conj(tGamma_pqG[:no,:no,:]))
+    tV_klij = ctf.einsum("kiG, ljG -> klij", tConjGamma_ji, tGamma_pqG[:no,:no,:])
+    tV_iajb = ctf.einsum("ijG, abG -> iajb", tConjGamma_ji, tGamma_pqG[no:,no:,:])
+    tV_abij = ctf.einsum("aiG, bjG -> abij", tConjGamma_aiG, tGamma_pqG[no:,:no,:])
+    tConjGamma_ba = ctf.einsum("abG->baG", ctf.conj(tGamma_pqG[no:,no:,:]))
+    tV_abcd = ctf.einsum("acG, bdG -> abcd", tConjGamma_ba, tGamma_pqG[no:,no:,:])
     
+    print("V_klij[4,3,0,0]",tV_klij[4,3,0,0])
     eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a)
 
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=1) 
@@ -99,6 +105,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     # tTildeT_abij
     # tested using MP2 energy, the below tensor op is correct
     tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
+    tTildeT_abij.set_zero()
     tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
 
     # Xai_kbcj for the quadratic terms
@@ -108,7 +115,9 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
 
     # intermediate for exchange of ia and jb indices
     tFock_ab = ctf.tensor([nv,nv], dtype=complex, sp=1)
+    tFock_ab.set_zero()
     tFock_ij = ctf.tensor([no,no], dtype=complex, sp=1)
+    tFock_ij.set_zero()
     tFock_ab.i("aa") << tEpsilon_a.i("a")
     tFock_ij.i("ii") << tEpsilon_i.i("i")
     tX_ac = tFock_ab - 1./2.*ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
@@ -123,7 +132,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
                           - tV_iajb.i("kbic") * tT_abij.i("ackj")\
                           + tTildeT_abij.i("acik") * tV_iabj.i("kbcj")
 
-    tEx_baji.i("baji") << tEx_abij.i("baji") 
+    tEx_baji.i("baji") << tEx_abij.i("abij") 
     #tEx_baji.i("baji") << tX_ac.i("bc") * tT_abij.i("caji") \
     #                        - tX_ki.i("kj") * tT_abij.i("baki") \
     #                        - tV_iajb.i("kbjc") * tT_abij.i("caki")\

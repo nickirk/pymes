@@ -22,8 +22,8 @@ def write2Cc4sTensor(tensor, dim, fileName, dtype="r"):
     tensor=tensor.flatten("C")
 
     if dtype == "c":
-        np.savetxt(f, tensor, fmt="(%.10e,%.10e)")
+        np.savetxt(f, tensor, fmt="(%.18e,%.18e)")
     else:
-        np.savetxt(f, tensor)
+        np.savetxt(f, tensor, fmt="%.18e")
     f.close()
     return

@@ -20,13 +20,16 @@ def write2Fcidump(integrals, kinetic, no, ms2=0, orbsym=1, isym=1, dtype='r'):
     f.write(" ISYM=%i,\n" % isym)
     f.write("/\n")
 
-    for i in range(nP):
-        for a in range(nP):
-            for j in range(nP):
-                for b in range(nP):
-                    if np.abs(integrals[i,a,j,b]) > 1e-8:
-                        f.write("  " + str(integrals[i,a,j,b]) + "  " + str(i+1) \
-                                + "  " + str(j+1) + "  " + str(a+1) + "  " + str(b+1) + "\n")
+    for a in range(nP):
+        for i in range(0,a+1):
+            for b in range(0,a+1):
+                for j in range(0,b+1):
+                    if np.abs(integrals[a,b,i,j]) > 1e-8:
+                        f.write("  " + str(integrals[a,b,i,j]) + "  " + str(a+1) \
+                                + "  " + str(i+1) + "  " + str(b+1) + "  " + str(j+1) + "\n")
+
+    print("V[0,3,4,0]=",integrals[0,3,4,0])
+    print("V[4,3,0,0]=",integrals[4,3,0,0])
     for i in range(nP):
         f.write("  " + str(kinetic[i]) + "  " + str(i+1) + "  "\
                 + str(i+1) +"  0  0\n")

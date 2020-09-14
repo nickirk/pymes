@@ -58,26 +58,35 @@ def calcGamma(sys, basis, overlap_basis, nP):
     return gamma_pqG
 
 def calcOccupiedOrbE(kinetic_G, gamma_ijG, no):
-    e = kinetic_G[0:no]
-    coul = np.einsum('kiG,jlG->ijkl', np.conj(gamma_ijG), gamma_ijG)
-    exCoul = np.einsum('kiG,ljG->ilkj', np.conj(gamma_ijG), gamma_ijG)
-    dirE = 2.* np.einsum('ijij->i', coul)
-    exE = - 1.* np.einsum('ijij->i', exCoul)
-    print("Direct=", dirE)
+    e = ctf.astensor(kinetic_G[0:no], dtype = complex)
+    coul = ctf.einsum('kiG,jlG->ijkl', np.conj(gamma_ijG), gamma_ijG)
+    exCoul = ctf.einsum('kiG,ljG->ilkj', np.conj(gamma_ijG), gamma_ijG)
+    dirE = 2.* ctf.einsum('ijij->i', coul)
+    exE = - 1.* ctf.einsum('ijji->i', coul)
+    print("Direct=", np.sum(dirE))
     print("Exe=", np.sum(exE))
     e = e + dirE 
     e = e + exE
     return e
 
 def calcVirtualOrbE(kinetic_G, gamma_ijG, gamma_iaG, gamma_aiG, gamma_abG, no, nv):
-    e = kinetic_G[no:]
-    print(len(e)==nv)
-    exCoul = np.einsum('iaG,bjG->abij',np.conj(gamma_iaG), gamma_aiG)
-    dirCoul = np.einsum('baG,ijG->aibj',np.conj(gamma_abG), gamma_ijG)
-    dirE = 2.* np.einsum('aiai->a', dirCoul)
-    exE = - 1.* np.einsum('aaii->a', exCoul)
+    algoName = "calcVirtualOrbE"
+    print(algoName+": evaluating virtual orbital energies.")
+    e = ctf.astensor(kinetic_G[no:], dtype = complex)
+    print(algoName+": evaluating direct integrals")
+    dirCoul_aibj =  ctf.einsum('iaG,bjG->aibj',np.conj(gamma_iaG), gamma_aiG)
+    print(algoName+": evaluating exchange integrals")
+    exCoul_aijb = ctf.einsum('jaG,ibG->aijb',np.conj(gamma_iaG), gamma_iaG)
+    print(algoName+": evaluating direct contribution")
+    dirE = ctf.tensor([nv], dtype=complex, sp=1)
+    dirE.i("a") << 2. * dirCoul_aibj.i("aiai")
+    print(algoName+": evaluating exchange contribution")
+    exE = ctf.tensor([nv], dtype=complex, sp=1)
+    exE.i("a") << -1. * exCoul_aijb.i("aiia")
 
+    print(algoName+": adding direct contribution")
     e = e + dirE
+    print(algoName+": adding exchange contribution")
     e = e + exE
     return e
 
@@ -119,10 +128,10 @@ def main():
     no = int(nel/2)
     nalpha = 7
     nbeta = 7
-    rs = 2.
+    rs = 1.
 
     # Cutoff for the single-particle basis set.
-    cutoff = 2.
+    cutoff = 4.
 
     # correspond to cell parameter in neci
     nMax = 3
@@ -139,6 +148,7 @@ def main():
     timeBasis = time.time()
     print_title('Basis set', '-')
     basis_fns = sys.init_single_basis(nMax, cutoff, gamma)
+    print(basis_fns[4*2], basis_fns[3*2])
     overlap_basis_fns = sys.init_single_basis(2*nMax, 10*cutoff, gamma)
     
     print('# %i spin-orbitals\n' % (len(basis_fns)))
@@ -188,51 +198,55 @@ def main():
     gamma_ijG = gamma_pqG[:no,:no,:]
     tGamma_ijG = ctf.astensor(gamma_ijG)
 
-    holeEnergy = np.real(calcOccupiedOrbE(kinetic_G, gamma_ijG, no))
-    tEpsilon_i = ctf.astensor(holeEnergy,dtype=complex)
+    tEpsilon_i = calcOccupiedOrbE(kinetic_G, gamma_ijG, no)
+    #tEpsilon_i = ctf.astensor(holeEnergy,dtype=complex)
+    holeEnergy = np.real(tEpsilon_i.to_nparray())
 
     write2Cc4sTensor(holeEnergy, [1,no], "HoleEigenEnergies")
-    gamma_iaG = gamma_pqG[:no,no:nP,:]
-    gamma_aiG = gamma_pqG[no:nP,:no,:]
-    gamma_abG = gamma_pqG[no:nP,no:nP,:]
-    particleEnergy = np.real(calcVirtualOrbE(kinetic_G, gamma_ijG, gamma_iaG, gamma_aiG,gamma_abG, no, nv))
-    tEpsilon_a = ctf.astensor(particleEnergy,dtype=complex)
+    gamma_iaG = gamma_pqG[:no,no:,:]
+    gamma_aiG = gamma_pqG[no:,:no,:]
+    gamma_abG = gamma_pqG[no:,no:,:]
+    tEpsilon_a = calcVirtualOrbE(kinetic_G, gamma_ijG, gamma_iaG, gamma_aiG,gamma_abG, no, nv)
+    particleEnergy = np.real(tEpsilon_a.to_nparray())
+    #tEpsilon_a = particleEnergy
     write2Cc4sTensor(particleEnergy, [1,nv], "ParticleEigenEnergies")
 
     print("%f.3 seconds spent on CoulombVertex." % (time.time()-timeCoulombVertex))
 
 
-    ## calculate HF energy: E_{HF} = \sum_i epsilon_i +1/2 * \sum_ij (2*V_{ijij}-V_{ijji})
+    ## calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     tEHF = 2*ctf.einsum('i->',tEpsilon_i)
     print("Sum of Orbital energies=", tEHF)
-    tV_klij = ctf.einsum('kiG,ljG->klij',tGamma_ijG, tGamma_ijG)
+    tV_klij = ctf.einsum('ikG,ljG->klij',ctf.conj(tGamma_ijG), tGamma_ijG)
     Vklij = tV_klij.to_nparray()
     write2Cc4sTensor(Vklij,[4,no,no,no,no],"Vklij")
     #print(tV_ijkl.read_local_nnz())
-    #print("Exchange=",np.einsum('iijj->',tV_ijkl))
-    tEHF = tEHF-(-1.0*ctf.einsum('iijj->',tV_klij))
+    dirHFE = 2. * ctf.einsum('jiji->',tV_klij)
+    excHFE = -1. * ctf.einsum('ijji->',tV_klij)
+    print("Direct =", dirHFE)
+    print("Exchange =", excHFE)
+    tEHF = tEHF-(dirHFE + excHFE)
     print("HF energy=", tEHF)
 
     tGamma_iaG = ctf.astensor(gamma_iaG)
     tGamma_aiG = ctf.astensor(gamma_aiG)
     tV_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
-    #Vabij = np.einsum('iaG,jbG->jiba',gamma_iaG, gamma_iaG)
     tV_abij = ctf.einsum('iaG,bjG->abij',ctf.conj(tGamma_iaG),tGamma_aiG)
     write2Cc4sTensor(tV_abij.to_nparray(),[4,nv,nv,no,no],"Vabij")
 
 
 
 
-    mp2E,amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a) 
 
+    mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
     dcdE, dcdAmp = dcd.solve(tGamma_pqG, tEpsilon_i, tEpsilon_a)
 
-    tV_pqrs = ctf.einsum("rpG, qsG -> pqrs", ctf.conj(tGamma_pqG), tGamma_pqG)
+    tConjGamma_qpG = ctf.einsum("pqG->qpG", ctf.conj(tGamma_pqG))
+    tV_pqrs = ctf.einsum("rpG, qsG -> pqrs", tConjGamma_qpG, tGamma_pqG)
 
     
     
     V_pqrs = np.real(tV_pqrs.to_nparray())
-    print("V_pqrs=",V_pqrs[0,3,4,0])
 
     write2Fcidump(V_pqrs,kinetic_G, no)
     write2Cc4sTensor(V_pqrs, [4, nP, nP, nP, nP], "V_pqrs")
