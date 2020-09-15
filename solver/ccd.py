@@ -22,7 +22,7 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
     levelShift = 0.
     maxIter = 1000
     epsilonE = 1e-10
-    delta = 1
+    delta = 0.2
 
     # construct the needed integrals here on spot.
 
@@ -88,16 +88,27 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
 def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_iajb, \
         tV_iabj, tV_abcd, fDcd):
 
+    algoName = "ccd.getResidual"
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
     tR_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1) 
 
     # tV_ijkl and tV_klij are not the same in transcorrelated Hamiltonian!
-    tI_klij = tV_klij
+    tI_klij = ctf.tensor([no,no,no,no], dtype=complex,sp=1)
+
+    # = operatore pass the reference instead of making a copy.
+    # if we want a copy, we need to specify that.
+    tI_klij = tV_klij.copy()
     if not fDcd:
+        #tI_klij += ctf.tensor([nv,nv,no,no], dtype=complex,sp=1)
         tI_klij += ctf.einsum("klcd, cdij -> klij", tV_ijab, tT_abij)
+
     tR_abij.i("abij") << tV_abij.i("abij") + tV_abcd.i("abcd") * tT_abij.i("cdij")\
     + tI_klij.i("klij") * tT_abij.i("abkl") 
+
+    if not fDcd:
+        tX_alcj = ctf.einsum("klcd, adkj -> alcj", tV_ijab, tT_abij)
+        tR_abij += ctf.einsum("alcj, cbil -> abij", tX_alcj, tT_abij)
 
 
 
@@ -120,8 +131,12 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     tFock_ij.set_zero()
     tFock_ab.i("aa") << tEpsilon_a.i("a")
     tFock_ij.i("ii") << tEpsilon_i.i("i")
-    tX_ac = tFock_ab - 1./2.*ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
-    tX_ki = tFock_ij + 1./2.*ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+    tX_ac = tFock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
+    tX_ki = tFock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+    if not fDcd:
+        tX_ac -= 1./2. * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
+        tX_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+
 
     tEx_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
     tEx_baji = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
@@ -131,6 +146,10 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
                           - tV_iajb.i("kaic") * tT_abij.i("cbkj")\
                           - tV_iajb.i("kbic") * tT_abij.i("ackj")\
                           + tTildeT_abij.i("acik") * tV_iabj.i("kbcj")
+    if not fDcd:
+        tXai_aibj = ctf.einsum("klcd, daki -> alci", tV_ijab, tT_abij)
+        tEx_abij -= ctf.einsum("alci, cblj -> abij", tXai_aibj, tT_abij)
+        tEx_abij += ctf.einsum("alci, bclj -> abij", tXai_aibj, tT_abij)
 
     tEx_baji.i("baji") << tEx_abij.i("abij") 
     #tEx_baji.i("baji") << tX_ac.i("bc") * tT_abij.i("caji") \
@@ -139,10 +158,6 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     #                        - tV_iajb.i("kajc") * tT_abij.i("bcki")\
     #                        + tTildeT_abij.i("bcjk") * tV_iabj.i("kaci")
     # CCD has more terms than DCD
-    if not fDcd:
-        tXai_iabj = ctf.einsum("klcd, daki -> laci", tV_ijab, tT_abij)
-        tEx_abij -= ctf.einsum("laci, cblj -> abij", tXai_iabj, tT_abij)
-        tEx_abij += ctf.einsum("laci, bclj -> abij", tXai_iabj, tT_abij)
 
     ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
     #tEx_baji.i("baji") << tEx_abij.i("abij")
