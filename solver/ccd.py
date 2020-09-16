@@ -3,6 +3,7 @@ import numpy as np
 import ctf
 from ctf.core import *
 from pymes.solver import mp2
+from pymes.mixer import diis
 
 def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     '''
@@ -23,7 +24,7 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     levelShift = 0.
     maxIter = 1000
     epsilonE = 1e-10
-    delta = 0.2
+    delta = 1.
 
     # construct the needed integrals here on spot.
 
@@ -65,11 +66,26 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     eExCcd = 0.
     if world.rank() == 0:
         print(algoName, ": Solving doubles amplitude equation")
+    residules = []
+    amps = []
+    mixSize = 4
+    #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
+    fDiis = True
     while np.abs(dE) > epsilonE and iteration < maxIter:
         iteration += 1
-        tR_abij = getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
+        tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
                 tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd)
-        tT_abij += delta * ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
+        if fDiis:
+            if len(residules) == 4:
+                residules.pop(0)
+                amps.pop(0)
+            residules.append(tR_abij)
+            amps.append(tT_abij.copy())
+        
+        if iteration == 1 or not fDiis:
+            tT_abij += delta * ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
+        else:
+            tT_abij = diis.optimize(residules,amps)
         # update energy and norm of amplitudes
         eDirCcd, eExCcd = getEnergy(tV_abij, tT_abij)
         eCcd = np.real(eDirCcd + eExCcd)

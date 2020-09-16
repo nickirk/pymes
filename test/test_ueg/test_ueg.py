@@ -139,14 +139,14 @@ def findKVec(k, basis_fns):
 
 def main():
     world=ctf.comm()
-    nel = 54
+    nel = 14
     no = int(nel/2)
-    nalpha = 27
-    nbeta = 27
-    rs = 0.5
+    nalpha = 7
+    nbeta = 7
+    rs = 1.
 
     # Cutoff for the single-particle basis set.
-    cutoff = 6.
+    cutoff = 2.
 
     # correspond to cell parameter in neci
     nMax = 2
