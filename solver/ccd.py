@@ -4,7 +4,7 @@ import ctf
 from ctf.core import *
 from pymes.solver import mp2
 
-def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
+def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -14,6 +14,7 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
     '''
     algoName = "ccd.solve"
     timeCcd = time.time()
+    world = ctf.comm()
 
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
@@ -26,19 +27,26 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
 
     # construct the needed integrals here on spot.
 
-    tConjGamma_iaG = ctf.einsum("aiG->iaG", ctf.conj(tGamma_pqG[no:,:no,:]))
-    tV_iabj = ctf.einsum("ibG, ajG -> iabj", tConjGamma_iaG, tGamma_pqG[no:,:no,:])
-    tConjGamma_aiG = ctf.einsum("iaG->aiG", ctf.conj(tGamma_pqG[:no,no:,:]))
-    tV_aijb = ctf.einsum("ajG, ibG -> aijb", tConjGamma_aiG, tGamma_pqG[:no,no:,:])
-    tV_ijab = ctf.einsum("iaG, jbG -> ijab", tConjGamma_iaG, tGamma_pqG[:no,no:,:])
-    tConjGamma_ji = ctf.einsum("ijG->jiG", ctf.conj(tGamma_pqG[:no,:no,:]))
-    tV_klij = ctf.einsum("kiG, ljG -> klij", tConjGamma_ji, tGamma_pqG[:no,:no,:])
-    tV_iajb = ctf.einsum("ijG, abG -> iajb", tConjGamma_ji, tGamma_pqG[no:,no:,:])
-    tV_abij = ctf.einsum("aiG, bjG -> abij", tConjGamma_aiG, tGamma_pqG[no:,:no,:])
-    tConjGamma_ba = ctf.einsum("abG->baG", ctf.conj(tGamma_pqG[no:,no:,:]))
-    tV_abcd = ctf.einsum("acG, bdG -> abcd", tConjGamma_ba, tGamma_pqG[no:,no:,:])
+    #tConjGamma_iaG = ctf.einsum("aiG->iaG", ctf.conj(tGamma_pqG[no:,:no,:]))
+    #tV_iabj = ctf.einsum("ibG, ajG -> iabj", tConjGamma_iaG, tGamma_pqG[no:,:no,:])
+    #tConjGamma_aiG = ctf.einsum("iaG->aiG", ctf.conj(tGamma_pqG[:no,no:,:]))
+    #tV_aijb = ctf.einsum("ajG, ibG -> aijb", tConjGamma_aiG, tGamma_pqG[:no,no:,:])
+    #tV_ijab = ctf.einsum("iaG, jbG -> ijab", tConjGamma_iaG, tGamma_pqG[:no,no:,:])
+    #tConjGamma_ji = ctf.einsum("ijG->jiG", ctf.conj(tGamma_pqG[:no,:no,:]))
+    #tV_klij = ctf.einsum("kiG, ljG -> klij", tConjGamma_ji, tGamma_pqG[:no,:no,:])
+    #tV_iajb = ctf.einsum("ijG, abG -> iajb", tConjGamma_ji, tGamma_pqG[no:,no:,:])
+    #tV_abij = ctf.einsum("aiG, bjG -> abij", tConjGamma_aiG, tGamma_pqG[no:,:no,:])
+    #tConjGamma_ba = ctf.einsum("abG->baG", ctf.conj(tGamma_pqG[no:,no:,:]))
+    #tV_abcd = ctf.einsum("acG, bdG -> abcd", tConjGamma_ba, tGamma_pqG[no:,no:,:])
+
+    tV_iabj = tV_pqrs[:no,no:,no:,:no]
+    tV_aijb = tV_pqrs[no:,:no,:no,no:]
+    tV_ijab = tV_pqrs[:no,:no,no:,no:]
+    tV_klij = tV_pqrs[:no,:no,:no,:no]
+    tV_iajb = tV_pqrs[:no,no:,:no,no:]
+    tV_abij = tV_pqrs[no:,no:,:no,:no]
+    tV_abcd = tV_pqrs[no:,no:,no:,no:]
     
-    print("V_klij[4,3,0,0]",tV_klij[4,3,0,0])
     eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a)
 
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=1) 
@@ -55,7 +63,8 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
     eCcd = 0.
     eDirCcd = 0.
     eExCcd = 0.
-    print(algoName, ": Solving doubles amplitude equation")
+    if world.rank() == 0:
+        print(algoName, ": Solving doubles amplitude equation")
     while np.abs(dE) > epsilonE and iteration < maxIter:
         iteration += 1
         tR_abij = getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
@@ -70,18 +79,21 @@ def solve(tGamma_pqG, tEpsilon_i, tEpsilon_a, fDcd=False):
         l1NormT2 = ctf.norm(tT_abij)
 
         if iteration <= maxIter:
-            print("\tIteration =", iteration)
-            print("\t\tCorrelation Energy =", eCcd)
-            print("\t\tL1 Norm of T2 =", l1NormT2)
+            if world.rank() == 0:
+                print("\tIteration =", iteration)
+                print("\t\tCorrelation Energy =", eCcd)
+                print("\t\tL1 Norm of T2 =", l1NormT2)
         else:
-            print("A converged solution is not found!")
+            if world.rank() == 0:
+                print("A converged solution is not found!")
 
 
     
-    print("\tDirect contribution =",np.real(eDirCcd))
-    print("\tExchange contribution =", np.real(eExCcd))
-    print("\tCCD correlation energy =",eCcd)
-    print("\t%f.3 seconds spent on CCD" % (time.time()-timeCcd))
+    if world.rank() == 0:
+        print("\tDirect contribution =",np.real(eDirCcd))
+        print("\tExchange contribution =", np.real(eExCcd))
+        print("\tCCD correlation energy =",eCcd)
+        print("\t%f.3 seconds spent on CCD" % (time.time()-timeCcd))
 
     return [eCcd, tT_abij]
 

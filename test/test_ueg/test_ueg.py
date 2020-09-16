@@ -57,36 +57,29 @@ def calcGamma(sys, basis, overlap_basis, nP):
                         gamma_pqG[p,q,g] = np.sqrt(4.*np.pi/GSquare/sys.Omega)
     return gamma_pqG
 
-def calcOccupiedOrbE(kinetic_G, gamma_ijG, no):
+def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     e = ctf.astensor(kinetic_G[0:no], dtype = complex)
-    coul = ctf.einsum('kiG,jlG->ijkl', np.conj(gamma_ijG), gamma_ijG)
-    exCoul = ctf.einsum('kiG,ljG->ilkj', np.conj(gamma_ijG), gamma_ijG)
-    dirE = 2.* ctf.einsum('ijij->i', coul)
-    exE = - 1.* ctf.einsum('ijji->i', coul)
-    print("Direct=", np.sum(dirE))
-    print("Exe=", np.sum(exE))
+    #tConjGamma_jiG = ctf.einsum("ijG->jiG", ctf.conj(tGamma_ijG))
+    #coul = ctf.einsum('ikG,jlG->ijkl', tConjGamma_jiG, tGamma_ijG)
+    #exCoul = ctf.einsum('ikG,ljG->ilkj', tConjGamma_jiG, tGamma_ijG)
+    dirE = 2.* ctf.einsum('ijij->i', tV_ijkl)
+    exE = - 1.* ctf.einsum('ijji->i', tV_ijkl)
     e = e + dirE 
     e = e + exE
     return e
 
-def calcVirtualOrbE(kinetic_G, gamma_ijG, gamma_iaG, gamma_aiG, gamma_abG, no, nv):
+def calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv):
     algoName = "calcVirtualOrbE"
-    print(algoName+": evaluating virtual orbital energies.")
     e = ctf.astensor(kinetic_G[no:], dtype = complex)
-    print(algoName+": evaluating direct integrals")
-    dirCoul_aibj =  ctf.einsum('iaG,bjG->aibj',np.conj(gamma_iaG), gamma_aiG)
-    print(algoName+": evaluating exchange integrals")
-    exCoul_aijb = ctf.einsum('jaG,ibG->aijb',np.conj(gamma_iaG), gamma_iaG)
-    print(algoName+": evaluating direct contribution")
+    #tConjGamma_aiG = ctf.einsum("iaG -> aiG", ctf.conj(tGamma_iaG))
+    #dirCoul_aibj =  ctf.einsum('aiG,bjG->aibj',tConjGamma_aiG, tGamma_aiG)
+    #exCoul_aijb = ctf.einsum('ajG,ibG->aijb',tConjGamma_aiG, tGamma_iaG)
     dirE = ctf.tensor([nv], dtype=complex, sp=1)
-    dirE.i("a") << 2. * dirCoul_aibj.i("aiai")
-    print(algoName+": evaluating exchange contribution")
+    dirE.i("a") << 2. * tV_aibj.i("aiai")
     exE = ctf.tensor([nv], dtype=complex, sp=1)
-    exE.i("a") << -1. * exCoul_aijb.i("aiia")
+    exE.i("a") << -1. * tV_aijb.i("aiia")
 
-    print(algoName+": adding direct contribution")
     e = e + dirE
-    print(algoName+": adding exchange contribution")
     e = e + exE
     return e
 
@@ -96,19 +89,42 @@ def genGCoeff(nG, nP):
     return c
 
 
-def evalCoulIntegrals(basis_fns):
+def evalCoulIntegrals(basis_fns,sys):
+    world = ctf.comm()
+    algoName = "evalCoulIntegrals"
 
     nP = int(len(basis_fns)/2)
-    V_pq = np.zeros((nP,nP))
+    tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=complex, sp=1)
+    indices = []
+    values = []
     
-    for p in range(0,nP,1):
-        for q in range(0,nP,1):
-           G = basis_fns[2*p].kp-basis_fns[2*q].kp
-           GSquare = G.dot(G)
-           if np.abs(GSquare) > 1e-12 :
-               V_pq[p,q] = 4.*np.pi/GSquare/sys.Omega
-    return V_pq
+    basisKp = [ basis_fns[2*i].kp.tolist() for i in range(nP)]
+    
 
+    rank = world.rank()
+    for p in range(nP):
+          for r in range(nP):
+              dk = basis_fns[p*2].kp-basis_fns[r*2].kp
+              for q in range(nP):
+                  if (p+r+q) % world.np() == rank:
+                    s = -1
+                    ks = basis_fns[q*2].kp + dk
+                    ks = ks.tolist()
+                    if ks in basisKp:
+                      s = basisKp.index(ks)
+                    dkSquare = dk.dot(dk)
+                    if np.abs(dkSquare) > 0. and s >= 0:
+                        indices.append(nP**3*p + nP**2*q + nP*r + s)
+                        values.append(4.*np.pi/dkSquare/sys.Omega)
+                        #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
+    tV_pqrs.write(indices,values)
+    return tV_pqrs
+
+def findKVec(k, basis_fns):
+    for i in range(int(len(basis_fns)/2)):
+        if (np.abs(basis_fns[2*i].kp - k) == [0.,0.,0.]).all():
+            return i
+    return -1
 
 #def evalTransCorr2BodyIntegrals(tV_pqrs, basis_fns, correlator):
 #
@@ -123,40 +139,46 @@ def evalCoulIntegrals(basis_fns):
 
 def main():
     world=ctf.comm()
-    # 4 electron UEG system at r_s=1 a.u.
-    nel = 14
+    nel = 54
     no = int(nel/2)
-    nalpha = 7
-    nbeta = 7
-    rs = 1.
+    nalpha = 27
+    nbeta = 27
+    rs = 0.5
 
     # Cutoff for the single-particle basis set.
-    cutoff = 4.
+    cutoff = 6.
 
     # correspond to cell parameter in neci
-    nMax = 3
+    nMax = 2
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     gamma = np.zeros(3)
+    timeSys = time.time()
     sys = ueg.UEG(nel, nalpha, nbeta, rs)
-    print("%i electrons" % nel)
-    print("rs=", rs)
-    print("Volume of the box : %f " % sys.Omega)
-    print("Length of the box : %f " % sys.L)
+    if world.rank() == 0:
+        print("%i electrons" % nel)
+        print("rs=", rs)
+        print("Volume of the box : %f " % sys.Omega)
+        print("Length of the box : %f " % sys.L)
+        print("%f.3 seconds spent on setting up system" % (time.time()-timeSys))
 
 
     timeBasis = time.time()
-    print_title('Basis set', '-')
     basis_fns = sys.init_single_basis(nMax, cutoff, gamma)
-    print(basis_fns[4*2], basis_fns[3*2])
-    overlap_basis_fns = sys.init_single_basis(2*nMax, 10*cutoff, gamma)
+    if world.rank() == 0:
+        print_title('Basis set', '-')
+        print('# %i spin-orbitals\n' % (len(basis_fns)))
+        print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
+
+
+    timeCoulInt = time.time()
+    tV_pqrs = evalCoulIntegrals(basis_fns,sys)
+    if world.rank() == 0:
+        print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
     
-    print('# %i spin-orbitals\n' % (len(basis_fns)))
-    print('# %i G vectors for overlap integrals\n' % (len(overlap_basis_fns)/2))
     nSpatialOrb = int(len(basis_fns)/2)
     nP = nSpatialOrb
     nGOrb = nSpatialOrb
-    nGOverlap = int(len(overlap_basis_fns)/2)
 
     nv = nP - no
     G = []
@@ -166,95 +188,51 @@ def main():
         kinetic_G.append(basis_fns[i].kinetic)
     kinetic_G = np.asarray(kinetic_G)
 
-    GOverlap = []
-    for i in range(0,len(overlap_basis_fns),2):
-        GOverlap.append(overlap_basis_fns[i].k)
-
-
-    print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
-
-    # calculate CoulombVertex, $\Gamma_{pq}(G)=\sqrt{\frac{4\pi}{G^2}}C^*_p(G)C_q(G)$
-    timeCoulombVertex = time.time()
-    gamma_pqG = calcGamma(sys, basis_fns, overlap_basis_fns, nP)
-
-    # see if this changes the ordering of the tensor elements?
-
-    dim = [3,len(gamma_pqG[0,0,:]), nP, nP]
-    gamma_pqG = gamma_pqG.astype(complex)
-    write2Cc4sTensor(gamma_pqG,dim,"CoulombVertex","c")
-
-    tGamma_pqG = ctf.astensor(gamma_pqG)
-
     
     G = np.asarray(G)
-    GOverlap = np.asarray(GOverlap)
-    print("G size=",G.shape)
-    write2Cc4sTensor(G, [2,3,nGOrb], "OrbitalMomenta")
-    write2Cc4sTensor(GOverlap, [2,3,nGOverlap], "Momenta")
 
     tKinetic_G = ctf.astensor(kinetic_G)
-    print("Type of kinetic_G=", type(kinetic_G))
 
-    gamma_ijG = gamma_pqG[:no,:no,:]
-    tGamma_ijG = ctf.astensor(gamma_ijG)
-
-    tEpsilon_i = calcOccupiedOrbE(kinetic_G, gamma_ijG, no)
-    #tEpsilon_i = ctf.astensor(holeEnergy,dtype=complex)
+    tV_ijkl = tV_pqrs[:no,:no,:no,:no]
+    tEpsilon_i = calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
     holeEnergy = np.real(tEpsilon_i.to_nparray())
 
-    write2Cc4sTensor(holeEnergy, [1,no], "HoleEigenEnergies")
-    gamma_iaG = gamma_pqG[:no,no:,:]
-    gamma_aiG = gamma_pqG[no:,:no,:]
-    gamma_abG = gamma_pqG[no:,no:,:]
-    tEpsilon_a = calcVirtualOrbE(kinetic_G, gamma_ijG, gamma_iaG, gamma_aiG,gamma_abG, no, nv)
+    tV_aibj = tV_pqrs[no:,:no,no:,:no]
+    tV_aijb = tV_pqrs[no:,:no,:no,no:]
+    tEpsilon_a = calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
     particleEnergy = np.real(tEpsilon_a.to_nparray())
-    #tEpsilon_a = particleEnergy
-    write2Cc4sTensor(particleEnergy, [1,nv], "ParticleEigenEnergies")
-
-    print("%f.3 seconds spent on CoulombVertex." % (time.time()-timeCoulombVertex))
 
 
-    ## calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
+    ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     tEHF = 2*ctf.einsum('i->',tEpsilon_i)
-    print("Sum of Orbital energies=", tEHF)
-    tV_klij = ctf.einsum('ikG,ljG->klij',ctf.conj(tGamma_ijG), tGamma_ijG)
-    Vklij = tV_klij.to_nparray()
-    write2Cc4sTensor(Vklij,[4,no,no,no,no],"Vklij")
-    #print(tV_ijkl.read_local_nnz())
-    dirHFE = 2. * ctf.einsum('jiji->',tV_klij)
-    excHFE = -1. * ctf.einsum('ijji->',tV_klij)
-    print("Direct =", dirHFE)
-    print("Exchange =", excHFE)
+    tV_klij = tV_pqrs[:no,:no,:no,:no]
+    ## !!!!! The following code is buggy when more than 1 cores are used!!!!
+    ## !!!!! Report to ctf lib
+    #tDirHFE_i = 2. * ctf.einsum('jiji->i',tV_klij)
+    #dirHFE = ctf.einsum('i->', tDirHFE_i)
+    #excHFE_i = -1. * ctf.einsum('ijji->i',tV_klij)
+    #excHFE = ctf.einsum('i->', excHFE_i)
+
+    ### for now I will use einsum from numpy
+    dirHFE = 2. * ctf.einsum('jiji->',tV_klij.to_nparray())
+    excHFE = -1. * ctf.einsum('ijji->',tV_klij.to_nparray())
+
     tEHF = tEHF-(dirHFE + excHFE)
-    print("HF energy=", tEHF)
-
-    tGamma_iaG = ctf.astensor(gamma_iaG)
-    tGamma_aiG = ctf.astensor(gamma_aiG)
-    tV_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
-    tV_abij = ctf.einsum('iaG,bjG->abij',ctf.conj(tGamma_iaG),tGamma_aiG)
-    write2Cc4sTensor(tV_abij.to_nparray(),[4,nv,nv,no,no],"Vabij")
+    if world.rank() == 0:
+        print("Direct =", dirHFE)
+        print("Exchange =", excHFE)
+        print("HF energy=", tEHF)
 
 
 
 
 
-    mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
-    dcdE, dcdAmp = dcd.solve(tGamma_pqG, tEpsilon_i, tEpsilon_a)
+    #tV_abij = tV_pqrs[no:,no:,:no,:no]
 
-    tConjGamma_qpG = ctf.einsum("pqG->qpG", ctf.conj(tGamma_pqG))
-    tV_pqrs = ctf.einsum("rpG, qsG -> pqrs", tConjGamma_qpG, tGamma_pqG)
+    #mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
+    ##mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
+    ccdE, dcdAmp = ccd.solve(tV_pqrs, tEpsilon_i, tEpsilon_a)
 
-    
-    
-    V_pqrs = np.real(tV_pqrs.to_nparray())
-
-    write2Fcidump(V_pqrs,kinetic_G, no)
-    write2Cc4sTensor(V_pqrs, [4, nP, nP, nP, nP], "V_pqrs")
-
-
-    #tV_pq = ctf.astensor(evalCoulIntegrals(basis_fns),dtype=complex)
-
-    #eDir = 2*ctf.eisum('ia,ia->', tV_pq[:no,no:], tV_pq[:no.no:])
 
 if __name__ == '__main__':
     main()

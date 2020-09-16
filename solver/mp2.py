@@ -8,15 +8,16 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a):
     mp2 algorithm
     '''
     algoName = "mp2.solve"
+    world = ctf.comm()
     timeMp2 = time.time()
 
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
-
-    print(algoName, f'no={no:d}, nv={nv:d}')
+    if world.rank() == 0:
+        print(algoName, 'no=%i, nv=%i' % (no,nv))
     
     tT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1) 
-    tT_abij = tV_abij
+    tT_abij += tV_abij
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=1) 
     
     # the following ctf.einsum gives wrong result, with nan
@@ -53,8 +54,9 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a):
     #exc.i("") << -1.*tT_abij.i("abij") * tV_abij.i("baij")
     eExc = -1.0*ctf.einsum('abij,baij->',tT_abij, tV_abij)
     
-    print("\tDirect contribution =",np.real(eDir))
-    print("\tExchange contribution =", np.real(eExc))
-    print("\tMP2 energy =",np.real(eDir+eExc))
-    print("\t%f.3 seconds spent on Mp2" % (time.time()-timeMp2))
+    if world.rank() == 0:
+        print("\tDirect contribution =",np.real(eDir))
+        print("\tExchange contribution =", np.real(eExc))
+        print("\tMP2 energy =",np.real(eDir+eExc))
+        print("\t%f.3 seconds spent on Mp2" % (time.time()-timeMp2))
     return [eDir+eExc, tT_abij]

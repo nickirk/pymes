@@ -45,7 +45,6 @@ class UEG:
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
         imax = nMax #int(np.ceil(np.sqrt(cutoff*2)))
-        print('imax = %i' % imax)
         basis_fns = []
         for i in range(-imax, imax+1):
             for j in range(-imax, imax+1):
