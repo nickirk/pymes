@@ -40,22 +40,6 @@ def print_title(title, under='='):
 
 
 
-def calcGamma(sys, basis, overlap_basis, nP):
-    '''
-    FTOD : Fourier Transformed Overlap Density
-    C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}} 
-    '''
-    nG = int(len(overlap_basis)/2)
-    gamma_pqG = np.zeros((nP,nP,nG))
-
-    for p in range(0,nP,1):
-        for q in range(0,nP,1):
-            for g in range(0,nG,1):
-                if ((basis[2*p].k-basis[2*q].k) == overlap_basis[2*g].k).all():
-                    GSquare = overlap_basis[2*g].kp.dot(overlap_basis[2*g].kp)
-                    if np.abs(GSquare) > 1e-12 :
-                        gamma_pqG[p,q,g] = np.sqrt(4.*np.pi/GSquare/sys.Omega)
-    return gamma_pqG
 
 def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     e = ctf.astensor(kinetic_G[0:no], dtype = complex)
@@ -89,42 +73,6 @@ def genGCoeff(nG, nP):
     return c
 
 
-def evalCoulIntegrals(basis_fns,sys):
-    world = ctf.comm()
-    algoName = "evalCoulIntegrals"
-
-    nP = int(len(basis_fns)/2)
-    tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=complex, sp=1)
-    indices = []
-    values = []
-    
-    basisKp = [ basis_fns[2*i].kp.tolist() for i in range(nP)]
-    
-
-    rank = world.rank()
-    for p in range(nP):
-          for r in range(nP):
-              dk = basis_fns[p*2].kp-basis_fns[r*2].kp
-              for q in range(nP):
-                  if (p+r+q) % world.np() == rank:
-                    s = -1
-                    ks = basis_fns[q*2].kp + dk
-                    ks = ks.tolist()
-                    if ks in basisKp:
-                      s = basisKp.index(ks)
-                    dkSquare = dk.dot(dk)
-                    if np.abs(dkSquare) > 0. and s >= 0:
-                        indices.append(nP**3*p + nP**2*q + nP*r + s)
-                        values.append(4.*np.pi/dkSquare/sys.Omega)
-                        #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
-    tV_pqrs.write(indices,values)
-    return tV_pqrs
-
-def findKVec(k, basis_fns):
-    for i in range(int(len(basis_fns)/2)):
-        if (np.abs(basis_fns[2*i].kp - k) == [0.,0.,0.]).all():
-            return i
-    return -1
 
 #def evalTransCorr2BodyIntegrals(tV_pqrs, basis_fns, correlator):
 #
@@ -143,7 +91,7 @@ def main():
     no = int(nel/2)
     nalpha = 7
     nbeta = 7
-    rs = 1.
+    rs = 0.5
 
     # Cutoff for the single-particle basis set.
     cutoff = 2.
@@ -152,7 +100,6 @@ def main():
     nMax = 2
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
-    gamma = np.zeros(3)
     timeSys = time.time()
     sys = ueg.UEG(nel, nalpha, nbeta, rs)
     if world.rank() == 0:
@@ -164,28 +111,28 @@ def main():
 
 
     timeBasis = time.time()
-    basis_fns = sys.init_single_basis(nMax, cutoff, gamma)
+    sys.init_single_basis(cutoff)
     if world.rank() == 0:
         print_title('Basis set', '-')
-        print('# %i spin-orbitals\n' % (len(basis_fns)))
+        print('# %i spin-orbitals\n' % (len(sys.basis_fns)))
         print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
 
 
     timeCoulInt = time.time()
-    tV_pqrs = evalCoulIntegrals(basis_fns,sys)
+    tV_pqrs = sys.evalCoulIntegrals()
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
     
-    nSpatialOrb = int(len(basis_fns)/2)
+    nSpatialOrb = int(len(sys.basis_fns)/2)
     nP = nSpatialOrb
     nGOrb = nSpatialOrb
 
     nv = nP - no
     G = []
     kinetic_G = []
-    for i in range(0,len(basis_fns),2):
-        G.append(basis_fns[i].k)
-        kinetic_G.append(basis_fns[i].kinetic)
+    for i in range(nSpatialOrb):
+        G.append(sys.basis_fns[2*i].k)
+        kinetic_G.append(sys.basis_fns[2*i].kinetic)
     kinetic_G = np.asarray(kinetic_G)
 
     

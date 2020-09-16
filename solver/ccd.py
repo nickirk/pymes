@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
+def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False, fDiis=True):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -50,7 +50,7 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     
     eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a)
 
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=1) 
+    tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=0) 
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
             -tEpsilon_a.i("a")-tEpsilon_a.i("b")
@@ -70,22 +70,19 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False):
     amps = []
     mixSize = 4
     #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
-    fDiis = True
     while np.abs(dE) > epsilonE and iteration < maxIter:
         iteration += 1
         tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
                 tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd)
+        tDeltaT_abij = ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
+        tT_abij += delta * tDeltaT_abij
         if fDiis:
             if len(residules) == 4:
                 residules.pop(0)
                 amps.pop(0)
-            residules.append(tR_abij)
+            residules.append(tDeltaT_abij.copy())
             amps.append(tT_abij.copy())
-        
-        if iteration == 1 or not fDiis:
-            tT_abij += delta * ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
-        else:
-            tT_abij = diis.optimize(residules,amps)
+            tT_abij = diis.mix(residules,amps)
         # update energy and norm of amplitudes
         eDirCcd, eExCcd = getEnergy(tV_abij, tT_abij)
         eCcd = np.real(eDirCcd + eExCcd)
@@ -119,10 +116,10 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     algoName = "ccd.getResidual"
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
-    tR_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1) 
+    tR_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0) 
 
     # tV_ijkl and tV_klij are not the same in transcorrelated Hamiltonian!
-    tI_klij = ctf.tensor([no,no,no,no], dtype=complex,sp=1)
+    tI_klij = ctf.tensor([no,no,no,no], dtype=complex,sp=0)
 
     # = operatore pass the reference instead of making a copy.
     # if we want a copy, we need to specify that.
@@ -143,7 +140,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     # intermediates 
     # tTildeT_abij
     # tested using MP2 energy, the below tensor op is correct
-    tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
+    tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
     tTildeT_abij.set_zero()
     tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
 
@@ -153,9 +150,9 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     tR_abij += ctf.einsum("acik, cbkj -> abij", tTildeT_abij, tXai_cbkj)
 
     # intermediate for exchange of ia and jb indices
-    tFock_ab = ctf.tensor([nv,nv], dtype=complex, sp=1)
+    tFock_ab = ctf.tensor([nv,nv], dtype=complex, sp=0)
     tFock_ab.set_zero()
-    tFock_ij = ctf.tensor([no,no], dtype=complex, sp=1)
+    tFock_ij = ctf.tensor([no,no], dtype=complex, sp=0)
     tFock_ij.set_zero()
     tFock_ab.i("aa") << tEpsilon_a.i("a")
     tFock_ij.i("ii") << tEpsilon_i.i("i")
@@ -166,8 +163,8 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
         tX_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
 
 
-    tEx_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
-    tEx_baji = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1)
+    tEx_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
+    tEx_baji = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
 
     tEx_abij.i("abij") << tX_ac.i("ac") * tT_abij.i("cbij") \
                           - tX_ki.i("ki") * tT_abij.i("abkj") \

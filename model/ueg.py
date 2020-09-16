@@ -1,6 +1,7 @@
 
 import numpy as np
 from pymes.basis_set import planewave
+import ctf
 
 class UEG:
 
@@ -20,9 +21,11 @@ class UEG:
         #: of rs
         self.Omega = self.L**3
 
+        self.basis_fns = None
+
 
     #--- Basis set ---
-    def init_single_basis(self, nMax, cutoff, sym):
+    def init_single_basis(self, cutoff):
         '''Create single-particle basis.
     
     :type self: :class:`UEG`
@@ -44,7 +47,7 @@ class UEG:
     
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
-        imax = nMax #int(np.ceil(np.sqrt(cutoff*2)))
+        imax = int(np.ceil(np.sqrt(cutoff*2)))
         basis_fns = []
         for i in range(-imax, imax+1):
             for j in range(-imax, imax+1):
@@ -57,5 +60,61 @@ class UEG:
         # (since 2.3) is guaranteed to be stable.
         basis_fns.sort()
         basis_fns = tuple(basis_fns)
+        self.basis_fns = basis_fns
     
         return basis_fns
+
+    def evalCoulIntegrals(self):
+        world = ctf.comm()
+        algoName = "UEG.evalCoulIntegrals"
+
+        if self.basis_fns == None:
+            raise BasisSetNotInitialized(algoName)
+    
+        nP = int(len(self.basis_fns)/2)
+        tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=complex, sp=1)
+        indices = []
+        values = []
+        
+        basisKp = [ self.basis_fns[2*i].kp.tolist() for i in range(nP)]
+        
+    
+        rank = world.rank()
+        for p in range(nP):
+              for r in range(nP):
+                  dk = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
+                  for q in range(nP):
+                      if (p+r+q) % world.np() == rank:
+                        s = -1
+                        ks = self.basis_fns[q*2].kp + dk
+                        ks = ks.tolist()
+                        if ks in basisKp:
+                          s = basisKp.index(ks)
+                        dkSquare = dk.dot(dk)
+                        if np.abs(dkSquare) > 0. and s >= 0:
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(4.*np.pi/dkSquare/self.Omega)
+                            #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
+        tV_pqrs.write(indices,values)
+        return tV_pqrs
+
+    def calcGamma(self, overlap_basis, nP):
+        '''
+        FTOD : Fourier Transformed Overlap Density
+        C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}} 
+        '''
+        algoName = "UEG.calcGamma"
+        if self.basis_fns == None:
+            raise BasisSetNotInitialized(algoName)
+
+        nG = int(len(overlap_basis)/2)
+        gamma_pqG = np.zeros((nP,nP,nG))
+    
+        for p in range(0,nP,1):
+            for q in range(0,nP,1):
+                for g in range(0,nG,1):
+                    if ((basis[2*p].k-basis[2*q].k) == overlap_basis[2*g].k).all():
+                        GSquare = overlap_basis[2*g].kp.dot(overlap_basis[2*g].kp)
+                        if np.abs(GSquare) > 1e-12 :
+                            gamma_pqG[p,q,g] = np.sqrt(4.*np.pi/GSquare/self.Omega)
+        return gamma_pqG
