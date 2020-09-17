@@ -1,3 +1,4 @@
+import time
 
 import numpy as np
 from pymes.basis_set import planewave
@@ -23,6 +24,27 @@ class UEG:
 
         self.basis_fns = None
 
+        self.imax = 0
+
+        self.cutoff = 0.
+
+        self.basis_indices_map = None
+
+
+    def is_k_in_basis(self,k):
+        if k.dot(k) <= self.cutoff:
+            return True
+        return False
+
+    def init_basis_indices_map(self):
+        numKInEachDir = self.imax*2+1
+        self.basis_indices_map = -1 * np.ones(numKInEachDir**3).astype(int)
+        for i in range(int(len(self.basis_fns)/2)):
+            s = numKInEachDir**2 * (self.basis_fns[i*2].k[0] + self.imax) + \
+                    numKInEachDir * (self.basis_fns[i*2].k[1] + self.imax) +\
+                    self.basis_fns[i*2].k[2] + self.imax
+            self.basis_indices_map[s] = i
+            
 
     #--- Basis set ---
     def init_single_basis(self, cutoff):
@@ -48,12 +70,14 @@ class UEG:
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
         imax = int(np.ceil(np.sqrt(cutoff*2)))
+        self.cutoff = cutoff
+        self.imax = imax
         basis_fns = []
         for i in range(-imax, imax+1):
             for j in range(-imax, imax+1):
                 for k in range(-imax, imax+1):
                     bfn = planewave.BasisFunc(i, j, k, self.L, 1)
-                    if bfn.k.dot(bfn.k) <= cutoff:
+                    if self.is_k_in_basis(bfn.k):
                         basis_fns.append(planewave.BasisFunc(i, j, k, self.L, 1))
                         basis_fns.append(planewave.BasisFunc(i, j, k, self.L, -1))
         # Sort in ascending order of kinetic energy.  Note that python's .sort()
@@ -61,6 +85,8 @@ class UEG:
         basis_fns.sort()
         basis_fns = tuple(basis_fns)
         self.basis_fns = basis_fns
+
+        self.init_basis_indices_map()
     
         return basis_fns
 
@@ -76,22 +102,36 @@ class UEG:
         indices = []
         values = []
         
-        basisKp = [ self.basis_fns[2*i].kp.tolist() for i in range(nP)]
+        #basisKp = [ self.basis_fns[2*i].kp.tolist() for i in range(nP)]
         
     
         rank = world.rank()
+        numKInEachDir = self.imax*2+1
+        if rank == 0:
+            print(algoName)
+
+        startTime = time.time()
         for p in range(nP):
-              for r in range(nP):
-                  dk = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
-                  for q in range(nP):
-                      if (p+r+q) % world.np() == rank:
-                        s = -1
-                        ks = self.basis_fns[q*2].kp + dk
-                        ks = ks.tolist()
-                        if ks in basisKp:
-                          s = basisKp.index(ks)
-                        dkSquare = dk.dot(dk)
-                        if np.abs(dkSquare) > 0. and s >= 0:
+            if (p) % world.np() == rank:
+                if rank == 0:
+                    print("\tElapsed time=%d s: %i in %i finished" % (time.time()-startTime, p, nP))
+                for r in range(nP):
+                    dIntK = self.basis_fns[p*2].k-self.basis_fns[r*2].k
+                    dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
+                    for q in range(nP):
+                        intKS = self.basis_fns[q*2].k + dIntK
+                        #if self.is_k_in_basis(intKS):
+                        locS = numKInEachDir**2 * (intKS[0] + self.imax) + \
+                                numKInEachDir * (intKS[1] + self.imax) +\
+                                intKS[2] + self.imax
+                        if locS < len(self.basis_indices_map):
+                            s = int(self.basis_indices_map[locS])
+                            if s < 0:
+                                continue
+                        else:
+                            continue
+                        dkSquare = dKVec.dot(dKVec)
+                        if np.abs(dkSquare) > 0.:
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(4.*np.pi/dkSquare/self.Omega)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
