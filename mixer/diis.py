@@ -9,8 +9,6 @@ def mix(errors, amplitudes):
     '''
     algoName="diis.mix"
 
-    if ctf.comm().rank() == 0:
-        print("\t\tUsing "+algoName)
 
     # construct the Lagrangian
     assert(len(errors) == len(amplitudes))
@@ -28,7 +26,7 @@ def mix(errors, amplitudes):
     unitVec[-1] = 1.
     c = np.linalg.inv(L).dot(unitVec)
 
-    optAmp = ctf.tensor(amplitudes[0].shape, dtype=complex)
+    optAmp = ctf.tensor(amplitudes[0].shape, dtype=amplitudes[0].dtype, sp=amplitudes[0].sp)
 
 
     for a in range(0,len(errors)):

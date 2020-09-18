@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False, fDiis=True):
+def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0, fDcd=False, fDiis=True):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -48,9 +48,9 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False, fDiis=True):
     tV_abij = tV_pqrs[no:,no:,:no,:no]
     tV_abcd = tV_pqrs[no:,no:,no:,no:]
     
-    eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a)
+    eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a, sp=sp)
 
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=0) 
+    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp) 
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
             -tEpsilon_a.i("a")-tEpsilon_a.i("b")
@@ -65,7 +65,11 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, fDcd=False, fDiis=True):
     eDirCcd = 0.
     eExCcd = 0.
     if world.rank() == 0:
-        print(algoName, ": Solving doubles amplitude equation")
+        print(algoName)
+        print("\tUsing DCD: " , fDcd)
+        print("\tSolving doubles amplitude equation")
+        print("\tUsing data type %s" % tV_pqrs.dtype)
+        print("\tUsing DIIS mixer: ", fDiis)
     residules = []
     amps = []
     mixSize = 4
@@ -116,16 +120,16 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     algoName = "ccd.getResidual"
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
-    tR_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0) 
+    tR_abij = ctf.tensor([nv,nv,no,no],dtype=tV_klij.dtype,sp=tT_abij.sp) 
 
     # tV_ijkl and tV_klij are not the same in transcorrelated Hamiltonian!
-    tI_klij = ctf.tensor([no,no,no,no], dtype=complex,sp=0)
+    tI_klij = ctf.tensor([no,no,no,no], dtype=tV_klij.dtype,sp=tT_abij.sp)
 
     # = operatore pass the reference instead of making a copy.
     # if we want a copy, we need to specify that.
-    tI_klij = tV_klij.copy()
+    #tI_klij = ctf.tensor([nv,nv,no,no], dtype=tV_klij.dtype,sp=tV_klij.sp)
+    tI_klij += tV_klij
     if not fDcd:
-        #tI_klij += ctf.tensor([nv,nv,no,no], dtype=complex,sp=1)
         tI_klij += ctf.einsum("klcd, cdij -> klij", tV_ijab, tT_abij)
 
     tR_abij.i("abij") << tV_abij.i("abij") + tV_abcd.i("abcd") * tT_abij.i("cdij")\
@@ -140,7 +144,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     # intermediates 
     # tTildeT_abij
     # tested using MP2 energy, the below tensor op is correct
-    tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
+    tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=tT_abij.dtype,sp=tT_abij.sp)
     tTildeT_abij.set_zero()
     tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
 
@@ -150,9 +154,9 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     tR_abij += ctf.einsum("acik, cbkj -> abij", tTildeT_abij, tXai_cbkj)
 
     # intermediate for exchange of ia and jb indices
-    tFock_ab = ctf.tensor([nv,nv], dtype=complex, sp=0)
+    tFock_ab = ctf.tensor([nv,nv], dtype=tEpsilon_a.dtype, sp=0)
     tFock_ab.set_zero()
-    tFock_ij = ctf.tensor([no,no], dtype=complex, sp=0)
+    tFock_ij = ctf.tensor([no,no], dtype=tEpsilon_i.dtype, sp=0)
     tFock_ij.set_zero()
     tFock_ab.i("aa") << tEpsilon_a.i("a")
     tFock_ij.i("ii") << tEpsilon_i.i("i")
@@ -163,8 +167,8 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
         tX_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
 
 
-    tEx_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
-    tEx_baji = ctf.tensor([nv,nv,no,no],dtype=complex,sp=0)
+    tEx_abij = ctf.tensor([nv,nv,no,no],dtype=tR_abij.dtype,sp=tR_abij.sp)
+    tEx_baji = ctf.tensor([nv,nv,no,no],dtype=tR_abij.dtype,sp=tR_abij.sp)
 
     tEx_abij.i("abij") << tX_ac.i("ac") * tT_abij.i("cbij") \
                           - tX_ki.i("ki") * tT_abij.i("abkj") \

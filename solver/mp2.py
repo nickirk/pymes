@@ -3,7 +3,7 @@ import numpy as np
 import ctf
 from ctf.core import *
 
-def solve(tV_abij, tEpsilon_i, tEpsilon_a):
+def solve(tV_abij, tEpsilon_i, tEpsilon_a, sp=0):
     '''
     mp2 algorithm
     '''
@@ -16,9 +16,10 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a):
     if world.rank() == 0:
         print(algoName, 'no=%i, nv=%i' % (no,nv))
     
-    tT_abij = ctf.tensor([nv,nv,no,no],dtype=complex,sp=1) 
-    tT_abij += tV_abij
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=complex, sp=1) 
+    tT_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype,sp=sp) 
+    print("Sparsity of T", tT_abij.sp)
+    #tT_abij += tV_abij
+    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype, sp=sp) 
     
     # the following ctf.einsum gives wrong result, with nan
     # the eisum gives the outer product of the input tensors
@@ -28,11 +29,16 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a):
     
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
+    print("Sparsity of D", tT_abij.sp)
     #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1) 
-    tD_abij = 1./tD_abij
+    tD_abij = (1./tD_abij)
+    print("Sparsity of D", tT_abij.sp)
+    print("Sparsity of V", tV_abij.sp)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
-    tT_abij = ctf.einsum('abij,abij->abij', tT_abij, tD_abij)
+    #tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)
+    tT_abij.i("abij") << tV_abij.i("abij") * tD_abij.i("abij")
+    print("Sparsity of T", tT_abij.sp)
     
     # the following expression evaluate the sum of the two tensors on the right
     # to form an intermediate tensor
@@ -42,10 +48,11 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a):
     # tT2_abij.i("abij") << tT2_abij.i('abij') +  tD_abij.i("abij")
     
     #write2Cc4sTensor(tT_abij.to_nparray(),[4,nv,nv,no,no],"Doubles")
-    #edir = ctf.tensor([1],dtype=complex)
+    #edir = ctf.tensor([1],dtype=tV_abij.dtype,sp=1)
     #exc = ctf.tensor([1],dtype=complex)
     
     #edir.i("") << 2*tT_abij.i("abij") * tV_abij.i("abij")
+    #print(edir)
     eDir  = 2.0*ctf.einsum('abij,abij->',tT_abij, tV_abij)
     
     # There is a bug with this contraction involving 

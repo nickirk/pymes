@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python3 -u
 
 import time
 import numpy as np
@@ -42,7 +42,8 @@ def print_title(title, under='='):
 
 
 def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
-    e = ctf.astensor(kinetic_G[0:no], dtype = complex)
+    dtype = tV_ijkl.dtype
+    e = ctf.astensor(kinetic_G[0:no], dtype = dtype)
     #tConjGamma_jiG = ctf.einsum("ijG->jiG", ctf.conj(tGamma_ijG))
     #coul = ctf.einsum('ikG,jlG->ijkl', tConjGamma_jiG, tGamma_ijG)
     #exCoul = ctf.einsum('ikG,ljG->ilkj', tConjGamma_jiG, tGamma_ijG)
@@ -54,13 +55,13 @@ def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
 
 def calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv):
     algoName = "calcVirtualOrbE"
-    e = ctf.astensor(kinetic_G[no:], dtype = complex)
+    e = ctf.astensor(kinetic_G[no:], dtype = tV_aijb.dtype)
     #tConjGamma_aiG = ctf.einsum("iaG -> aiG", ctf.conj(tGamma_iaG))
     #dirCoul_aibj =  ctf.einsum('aiG,bjG->aibj',tConjGamma_aiG, tGamma_aiG)
     #exCoul_aijb = ctf.einsum('ajG,ibG->aijb',tConjGamma_aiG, tGamma_iaG)
-    dirE = ctf.tensor([nv], dtype=complex, sp=1)
+    dirE = ctf.tensor([nv], dtype=tV_aijb.dtype, sp=0)
     dirE.i("a") << 2. * tV_aibj.i("aiai")
-    exE = ctf.tensor([nv], dtype=complex, sp=1)
+    exE = ctf.tensor([nv], dtype=tV_aibj.dtype, sp=0)
     exE.i("a") << -1. * tV_aijb.i("aiia")
 
     e = e + dirE
@@ -74,15 +75,6 @@ def genGCoeff(nG, nP):
 
 
 
-#def evalTransCorr2BodyIntegrals(tV_pqrs, basis_fns, correlator):
-#
-#
-#    return tTC_pqrs
-#
-#def evalTransCorrThreeBodyIntegrals(tV_pqrs, basis_fns, correlator):
-#
-#
-#    return tTC_opqrst
 
 
 def main():
@@ -94,7 +86,7 @@ def main():
     rs = 0.5
 
     # Cutoff for the single-particle basis set.
-    cutoff = 2.
+    cutoff = 3.
 
     # correspond to cell parameter in neci
     nMax = 2
@@ -114,12 +106,13 @@ def main():
     sys.init_single_basis(cutoff)
     if world.rank() == 0:
         print_title('Basis set', '-')
-        print('# %i spin-orbitals\n' % (len(sys.basis_fns)))
+        print('# %i Spatial Orbitals\n' % (len(sys.basis_fns)))
         print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
 
 
     timeCoulInt = time.time()
-    tV_pqrs = sys.evalCoulIntegrals()
+    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa)
+    #tV_pqrs = sys.eval2BodyIntegrals()
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
     
@@ -178,7 +171,7 @@ def main():
 
     #mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
     ##mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
-    ccdE, dcdAmp = ccd.solve(tV_pqrs, tEpsilon_i, tEpsilon_a)
+    ccdE, dcdAmp = ccd.solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0)
 
 
 if __name__ == '__main__':
