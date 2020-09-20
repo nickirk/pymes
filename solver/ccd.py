@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0, fDcd=False, fDiis=True):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDiis=True):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -21,7 +21,7 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0, fDcd=False, fDiis=True):
     nv = tEpsilon_a.size
     
     # parameters
-    levelShift = 0.
+    levelShift = levelShift
     maxIter = 1000
     epsilonE = 1e-10
     delta = 1.
@@ -48,7 +48,7 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0, fDcd=False, fDiis=True):
     tV_abij = tV_pqrs[no:,no:,:no,:no]
     tV_abcd = tV_pqrs[no:,no:,no:,no:]
     
-    eMp2, tT_abij = mp2.solve(tV_abij,tEpsilon_i,tEpsilon_a, sp=sp)
+    eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, sp=sp)
 
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp) 
     # the following ctf expression calcs the outer sum, as wanted.
@@ -88,7 +88,7 @@ def solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0, fDcd=False, fDiis=True):
             amps.append(tT_abij.copy())
             tT_abij = diis.mix(residules,amps)
         # update energy and norm of amplitudes
-        eDirCcd, eExCcd = getEnergy(tV_abij, tT_abij)
+        eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
         eCcd = np.real(eDirCcd + eExCcd)
         dE = eCcd - eLastIterCcd
         eLastIterCcd = eCcd
@@ -198,10 +198,10 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
 
     return tR_abij
 
-def getEnergy(tV_abij, tT_abij):
+def getEnergy(tT_abij, tV_ijab):
     '''
     calculate the CCD energy, using the converged amplitudes
     '''
-    tDirCcdE = 2. * ctf.einsum("abij, abij ->", tT_abij, tV_abij) 
-    tExCcdE  = -1. * ctf.einsum("abij, baij ->", tT_abij, tV_abij)
+    tDirCcdE = 2. * ctf.einsum("abij, ijab ->", tT_abij, tV_ijab) 
+    tExCcdE  = -1. * ctf.einsum("abij, ijba ->", tT_abij, tV_ijab)
     return [tDirCcdE, tExCcdE]

@@ -3,7 +3,7 @@ import numpy as np
 import ctf
 from ctf.core import *
 
-def solve(tV_abij, tEpsilon_i, tEpsilon_a, sp=0):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, sp=0):
     '''
     mp2 algorithm
     '''
@@ -13,11 +13,14 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a, sp=0):
 
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
+
+    tV_ijab = tV_pqrs[:no,:no,no:,no:]
+    tV_abij = tV_pqrs[no:,no:,:no,:no]
+
     if world.rank() == 0:
         print(algoName, 'no=%i, nv=%i' % (no,nv))
     
     tT_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype,sp=sp) 
-    print("Sparsity of T", tT_abij.sp)
     #tT_abij += tV_abij
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype, sp=sp) 
     
@@ -29,16 +32,12 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a, sp=0):
     
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
-    print("Sparsity of D", tT_abij.sp)
     #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1) 
     tD_abij = (1./tD_abij)
-    print("Sparsity of D", tT_abij.sp)
-    print("Sparsity of V", tV_abij.sp)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
     #tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)
     tT_abij.i("abij") << tV_abij.i("abij") * tD_abij.i("abij")
-    print("Sparsity of T", tT_abij.sp)
     
     # the following expression evaluate the sum of the two tensors on the right
     # to form an intermediate tensor
@@ -53,13 +52,13 @@ def solve(tV_abij, tEpsilon_i, tEpsilon_a, sp=0):
     
     #edir.i("") << 2*tT_abij.i("abij") * tV_abij.i("abij")
     #print(edir)
-    eDir  = 2.0*ctf.einsum('abij,abij->',tT_abij, tV_abij)
+    eDir  = 2.0*ctf.einsum('abij,ijab->',tT_abij, tV_ijab)
+    eExc = -1.0*ctf.einsum('abij,ijba->',tT_abij, tV_ijab)
     
     # There is a bug with this contraction involving 
     # exchange integals, using einsum instead
     # tested against cc4s.
     #exc.i("") << -1.*tT_abij.i("abij") * tV_abij.i("baij")
-    eExc = -1.0*ctf.einsum('abij,baij->',tT_abij, tV_abij)
     
     if world.rank() == 0:
         print("\tDirect contribution =",np.real(eDir))

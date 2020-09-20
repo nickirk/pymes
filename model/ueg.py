@@ -94,7 +94,7 @@ class UEG:
     
         return basis_fns
 
-    def eval2BodyIntegrals(self, correlator = None, dtype=np.float64,sp=1):
+    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.evalCoulIntegrals"
 
@@ -128,7 +128,6 @@ class UEG:
                     uMat  = 0.
                     if correlator is not None:
                         uMat = self.sumNablaUSquare(dKVec) 
-                        print("dK=", dIntK, uMat)
 
                     for q in range(nP):
                         intKS = self.basis_fns[q*2].k + dIntK
@@ -148,18 +147,20 @@ class UEG:
                                 w = 4.*np.pi/dkSquare/self.Omega
                                 indices.append(nP**3*p + nP**2*q + nP*r + s)
                                 values.append(w)
-                        else:
+                        elif rpaApprox:
                             # tc
                             if np.abs(dkSquare) > 0.:
                                 rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
+                                        +  uMat\
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
-                                        +  uMat
+                                        - (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                w = correlator(dkSquare, multKSquare=True)- uMat
-                                w = w / self.Omega
+                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                w =  uMat / self.Omega
+                                
                                 # \sum_k' (k-k')k'u(k-k')u(k')
 
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
@@ -209,8 +210,19 @@ class UEG:
         return result
 
 
+    def trunc(self, kSquare, multKSquare=False):
+        '''
+        The G=0 terms need more consideration
+        '''
+        ktc_cutoffSquare = self.cutoff * (2*np.pi/self.L)**2
+        if (kSquare <= ktc_cutoffSquare):
+            result = 0.
+        else:
+            result = - 12.566370614359173 / kSquare/kSquare
 
-    def evalTransCorr2BodyIntegrals(correlator):
+        return result
+
+    def evalTransCorr2BodyIntegrals(correlator,sp=1):
     
         world = ctf.comm()
         algoName = "UEG.evalTransCorr2BodyIntegrals"

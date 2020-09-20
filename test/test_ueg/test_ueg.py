@@ -77,19 +77,19 @@ def genGCoeff(nG, nP):
 
 
 
-def main():
+def main(nel, cutoff,rs):
     world=ctf.comm()
-    nel = 14
+    nel = nel
     no = int(nel/2)
-    nalpha = 7
-    nbeta = 7
-    rs = 0.5
+    nalpha = int(nel/2)
+    nbeta = int(nel/2)
+    rs = rs
 
     # Cutoff for the single-particle basis set.
-    cutoff = 3.
+    cutoff = cutoff
 
     # correspond to cell parameter in neci
-    nMax = 2
+    nMax = 4
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     timeSys = time.time()
@@ -104,23 +104,26 @@ def main():
 
     timeBasis = time.time()
     sys.init_single_basis(cutoff)
-    if world.rank() == 0:
-        print_title('Basis set', '-')
-        print('# %i Spatial Orbitals\n' % (len(sys.basis_fns)))
-        print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
 
-
-    timeCoulInt = time.time()
-    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa)
-    #tV_pqrs = sys.eval2BodyIntegrals()
-    if world.rank() == 0:
-        print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
-    
     nSpatialOrb = int(len(sys.basis_fns)/2)
     nP = nSpatialOrb
     nGOrb = nSpatialOrb
 
     nv = nP - no
+    if world.rank() == 0:
+        print_title('Basis set', '-')
+        print('# %i Spin Orbitals\n' % int(len(sys.basis_fns)))
+        print('# %i Spatial Orbitals\n' % nSpatialOrb)
+        print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
+
+
+    timeCoulInt = time.time()
+    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(sp=1)
+
+    if world.rank() == 0:
+        print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
+    
     G = []
     kinetic_G = []
     for i in range(nSpatialOrb):
@@ -159,6 +162,7 @@ def main():
 
     tEHF = tEHF-(dirHFE + excHFE)
     if world.rank() == 0:
+        print("Gap = ", tEpsilon_a[0]-tEpsilon_i[-1])
         print("Direct =", dirHFE)
         print("Exchange =", excHFE)
         print("HF energy=", tEHF)
@@ -167,13 +171,17 @@ def main():
 
 
 
-    #tV_abij = tV_pqrs[no:,no:,:no,:no]
+    tV_abij = tV_pqrs[no:,no:,:no,:no]
+    tV_ijab = tV_pqrs[:no,:no,no:,no:]
 
-    #mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
+    #mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
     ##mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
-    ccdE, dcdAmp = ccd.solve(tV_pqrs, tEpsilon_i, tEpsilon_a, sp=0)
+    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=2, sp=0)
+    dcdE, dcdAmp = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
 
+    print("rs={},ccd E={}, dcd E={}".format(rs, ccdE,dcdE))
 
 if __name__ == '__main__':
-    main()
+    for rs in [10.]:
+        main(14,6,rs)
     ctf.MPI_Stop()
