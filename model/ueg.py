@@ -33,6 +33,8 @@ class UEG:
         self.kPrime = None
 
         self.correlator = None
+        
+        self.gamma = None
 
 
     def is_k_in_basis(self,k):
@@ -51,7 +53,7 @@ class UEG:
             
 
     #--- Basis set ---
-    def init_single_basis(self, cutoff):
+    def init_single_basis(self, cutoff, nMax):
         '''Create single-particle basis.
     
     :type self: :class:`UEG`
@@ -73,7 +75,7 @@ class UEG:
     
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
-        imax = int(np.ceil(np.sqrt(cutoff*2)))
+        imax = nMax #int(np.ceil(np.sqrt(cutoff*2)))
         self.cutoff = cutoff
         self.imax = imax
         basis_fns = []
@@ -141,6 +143,7 @@ class UEG:
                                 continue
                         else:
                             continue
+
                         dkSquare = dKVec.dot(dKVec)
                         if correlator is None:
                             if np.abs(dkSquare) > 0.:
@@ -180,17 +183,10 @@ class UEG:
         k1Square = np.einsum("ni,ni->n", k1,k1)
         k2Square = np.einsum("ni,ni->n", k2,k2)
         k1DotK2 = np.einsum("ni,ni->n", k1,k2)
-        #print(self.correlator(k1Square))
-        #print(self.correlator(k2Square))
         result = k1DotK2 * self.correlator(k1Square) * self.correlator(k2Square)
         result = np.einsum("n->", result) / self.Omega
 
         return result
-
-    #def calcNablaUMat(self):
-    #    nablaUMat = np.zeros((2*self.imax))
-
-
 
 
 
@@ -198,14 +194,17 @@ class UEG:
         '''
         The G=0 terms need more consideration
         '''
-        rho = self.nel / self.Omega 
-        muSquare = np.sqrt(4.*np.pi*rho)
+        if self.gamma is None:
+            rho = self.nel / self.Omega 
+            gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+        else:
+            gamma = self.gamma
         a = -4.*np.pi
         if not multKSquare:
-            b = kSquare*(kSquare+muSquare*2)
+            b = kSquare*(kSquare+gamma**2)
             result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>1e-12)
         else:
-            result = a/(kSquare+muSquare*2)
+            result = a/(kSquare+kFermiSquare)
 
         return result
 
@@ -215,67 +214,33 @@ class UEG:
         The G=0 terms need more consideration
         '''
         ktc_cutoffSquare = self.cutoff * (2*np.pi/self.L)**2
-        if (kSquare <= ktc_cutoffSquare):
-            result = 0.
+        #if (kSquare <= ktc_cutoffSquare):
+        #    result = 0.
+        #else:
+        #    result = - 12.566370614359173 / kSquare/kSquare
+        
+        if type(kSquare) is not np.ndarray:
+            if kSquare <= ktc_cutoffSquare:
+                kSquare = 0.
         else:
-            result = - 12.566370614359173 / kSquare/kSquare
-
+            kSquare[kSquare <= ktc_cutoffSquare] = 0.
+        result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
+                where=kSquare>1e-12)
         return result
 
-    def evalTransCorr2BodyIntegrals(correlator,sp=1):
-    
-        world = ctf.comm()
-        algoName = "UEG.evalTransCorr2BodyIntegrals"
+    def coulomb(self, kSquare, multKSquare=False):
+        '''
+        The G=0 terms need more consideration
+        '''
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+        result = np.divide(-4.*np.pi*gamma, kSquare, out = np.zeros_like(kSquare),\
+                where=kSquare>1e-12)
+        return result
 
-        if self.basis_fns == None:
-            raise BasisSetNotInitialized(algoName)
-    
-        nP = int(len(self.basis_fns)/2)
-        tTC_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
-        indices = []
-        values = []
-        
-        #basisKp = [ self.basis_fns[2*i].kp.tolist() for i in range(nP)]
-        
-    
-        rank = world.rank()
-        numKInEachDir = self.imax*2+1
-        if rank == 0:
-            print(algoName)
 
-        startTime = time.time()
-        for p in range(nP):
-            if p % world.np() == rank:
-                if rank == 0:
-                    print("\tElapsed time=%d s: %i in %i finished" % (time.time()-startTime, p, nP))
-                for r in range(nP):
-                    dIntK = self.basis_fns[p*2].k-self.basis_fns[r*2].k
-                    dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
-                    for q in range(nP):
-                        intKS = self.basis_fns[q*2].k + dIntK
-                        #if self.is_k_in_basis(intKS):
-                        locS = numKInEachDir**2 * (intKS[0] + self.imax) + \
-                                numKInEachDir * (intKS[1] + self.imax) +\
-                                intKS[2] + self.imax
-                        if locS < len(self.basis_indices_map):
-                            s = int(self.basis_indices_map[locS])
-                            if s < 0:
-                                continue
-                        else:
-                            continue
-                        dkSquare = dKVec.dot(dKVec)
-                        if np.abs(dkSquare) > 0.:
-                            indices.append(nP**3*p + nP**2*q + nP*r + s)
-                            values.append(4.*np.pi/dkSquare/self.Omega)
-                            #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
-        tV_pqrs.write(indices,values)
-    
-        return tTC_pqrs
-    
-    def evalTransCorrThreeBodyIntegrals(tV_pqrs, basis_fns, correlator):
-    
-    
-        return tTC_opqrst
 
     def calcGamma(self, overlap_basis, nP):
         '''

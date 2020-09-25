@@ -3,7 +3,7 @@ import numpy as np
 import ctf
 from ctf.core import *
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, sp=0):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     '''
     mp2 algorithm
     '''
@@ -33,7 +33,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, sp=0):
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
     #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1) 
-    tD_abij = (1./tD_abij)
+    tD_abij = (1./tD_abij+levelShift)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
     #tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)

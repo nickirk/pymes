@@ -89,7 +89,7 @@ def main(nel, cutoff,rs):
     cutoff = cutoff
 
     # correspond to cell parameter in neci
-    nMax = 4
+    nMax = 5
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     timeSys = time.time()
@@ -103,7 +103,7 @@ def main(nel, cutoff,rs):
 
 
     timeBasis = time.time()
-    sys.init_single_basis(cutoff)
+    sys.init_single_basis(cutoff, nMax)
 
     nSpatialOrb = int(len(sys.basis_fns)/2)
     nP = nSpatialOrb
@@ -118,12 +118,15 @@ def main(nel, cutoff,rs):
 
 
     timeCoulInt = time.time()
-    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,sp=1)
-    #tV_pqrs = sys.eval2BodyIntegrals(sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,sp=1)
+    tV_pqrs = sys.eval2BodyIntegrals(sp=1)
 
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
     
+    if world.rank() == 0:
+        print("Kinetic energy")
     G = []
     kinetic_G = []
     for i in range(nSpatialOrb):
@@ -136,17 +139,26 @@ def main(nel, cutoff,rs):
 
     tKinetic_G = ctf.astensor(kinetic_G)
 
+    if world.rank() == 0:
+        print("Partitioning V_pqrs")
     tV_ijkl = tV_pqrs[:no,:no,:no,:no]
+
+    if world.rank() == 0:
+        print("Calculating hole energies")
     tEpsilon_i = calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
     holeEnergy = np.real(tEpsilon_i.to_nparray())
 
     tV_aibj = tV_pqrs[no:,:no,no:,:no]
     tV_aijb = tV_pqrs[no:,:no,:no,no:]
+    if world.rank() == 0:
+        print("Calculating particle energies")
     tEpsilon_a = calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
     particleEnergy = np.real(tEpsilon_a.to_nparray())
 
 
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
+    if world.rank() == 0:
+        print("Calculating HF energy")
     tEHF = 2*ctf.einsum('i->',tEpsilon_i)
     tV_klij = tV_pqrs[:no,:no,:no,:no]
     ## !!!!! The following code is buggy when more than 1 cores are used!!!!
@@ -157,12 +169,15 @@ def main(nel, cutoff,rs):
     #excHFE = ctf.einsum('i->', excHFE_i)
 
     ### for now I will use einsum from numpy
+    if world.rank() == 0:
+        print("Calculating dir and exc HF energy")
     dirHFE = 2. * ctf.einsum('jiji->',tV_klij.to_nparray())
     excHFE = -1. * ctf.einsum('ijji->',tV_klij.to_nparray())
 
+    if world.rank() == 0:
+        print("Summing dir and exc HF energy")
     tEHF = tEHF-(dirHFE + excHFE)
     if world.rank() == 0:
-        print("Gap = ", tEpsilon_a[0]-tEpsilon_i[-1])
         print("Direct =", dirHFE)
         print("Exchange =", excHFE)
         print("HF energy=", tEHF)
@@ -171,17 +186,22 @@ def main(nel, cutoff,rs):
 
 
 
-    tV_abij = tV_pqrs[no:,no:,:no,:no]
-    tV_ijab = tV_pqrs[:no,:no,no:,no:]
+    if world.rank() == 0:
+        print("Starting MP2")
 
     #mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
-    ##mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
-    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=2, sp=0)
-    dcdE, dcdAmp = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
+    ###mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
+    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
+    #dcdE, dcdAmp = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
 
-    print("rs={},ccd E={}, dcd E={}".format(rs, ccdE,dcdE))
+    if world.rank() == 0:
+        #f = open("tcE_numOrb_rs"+str(rs)+"trunc.dat", "a")
+        #print("#spin orb={}, rs={}, HF E={}, mp2 E={}, ccd E={}, dcd E={}".format(len(sys.basis_fns),rs, tEHF, mp2E, ccdE,dcdE))
+        #f.write(str(len(sys.basis_fns))+"  "+str(tEHF)+"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
+        print("#spin orb={}, rs={}, HF E={}".format(len(sys.basis_fns),rs, tEHF))
 
 if __name__ == '__main__':
-    for rs in [10.]:
-        main(14,6,rs)
+    for rs in [0.5,1.,2.,5.]:
+        for cutoff in [2]:
+            main(14,cutoff,rs)
     ctf.MPI_Stop()

@@ -23,7 +23,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
     # parameters
     levelShift = levelShift
     maxIter = 1000
-    epsilonE = 1e-10
+    epsilonE = 1e-7
     delta = 1.
 
     # construct the needed integrals here on spot.
@@ -48,7 +48,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
     tV_abij = tV_pqrs[no:,no:,:no,:no]
     tV_abcd = tV_pqrs[no:,no:,no:,no:]
     
-    eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, sp=sp)
+    eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, levelShift, sp=sp)
 
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp) 
     # the following ctf expression calcs the outer sum, as wanted.
@@ -74,7 +74,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
     amps = []
     mixSize = 4
     #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
-    while np.abs(dE) > epsilonE and iteration < maxIter:
+    while np.abs(dE) > epsilonE and iteration <= maxIter:
         iteration += 1
         tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
                 tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd)
@@ -95,10 +95,11 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
 
         l1NormT2 = ctf.norm(tT_abij)
 
-        if iteration <= maxIter:
+        if iteration < maxIter:
             if world.rank() == 0:
                 print("\tIteration =", iteration)
                 print("\t\tCorrelation Energy =", eCcd)
+                print("\t\tdE =", dE)
                 print("\t\tL1 Norm of T2 =", l1NormT2)
         else:
             if world.rank() == 0:
