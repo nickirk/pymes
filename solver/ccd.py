@@ -23,7 +23,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
     # parameters
     levelShift = levelShift
     maxIter = 1000
-    epsilonE = 1e-7
+    epsilonE = 1e-8
     delta = 1.
 
     # construct the needed integrals here on spot.

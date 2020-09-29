@@ -99,31 +99,36 @@ class UEG:
     def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.evalCoulIntegrals"
+        startTime = time.time()
+
+        rank = world.rank()
+        if rank == 0:
+            print(algoName)
 
         if self.basis_fns == None:
             raise BasisSetNotInitialized(algoName)
 
         if correlator is not None:
             self.correlator = correlator
+            if rank == 0:
+                print("\tUsing TC method")
+                print("\tUsing correlator:",correlator.__name__)
+                print("\tUsing RPA approximation for 3-body:",rpaApprox)
     
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
         indices = []
         values = []
         
-        #basisKp = [ self.basis_fns[2*i].kp.tolist() for i in range(nP)]
-        
     
-        rank = world.rank()
         numKInEachDir = self.imax*2+1
-        if rank == 0:
-            print(algoName)
 
-        startTime = time.time()
         for p in range(nP):
             if (p) % world.np() == rank:
                 if rank == 0:
-                    print("\tElapsed time=%d s: %i in %i finished" % (time.time()-startTime, p, nP))
+                    print("\tElapsed time={:.3f} s: calculating the {}-{} out of {} orbitals"\
+                            .format(time.time()-startTime, p, \
+                            p+world.np() if p+world.np() < nP else nP, nP))
                 for r in range(nP):
                     dIntK = self.basis_fns[p*2].k-self.basis_fns[r*2].k
                     dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
@@ -137,7 +142,7 @@ class UEG:
                         locS = numKInEachDir**2 * (intKS[0] + self.imax) + \
                                 numKInEachDir * (intKS[1] + self.imax) +\
                                 intKS[2] + self.imax
-                        if locS < len(self.basis_indices_map):
+                        if locS < len(self.basis_indices_map) and locS >= 0:
                             s = int(self.basis_indices_map[locS])
                             if s < 0:
                                 continue
@@ -163,6 +168,20 @@ class UEG:
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
                                 w =  uMat / self.Omega
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif not rpaApprox:
+                            if np.abs(dkSquare) > 0.:
+                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                w = 4.*np.pi/dkSquare \
+                                        +  uMat\
+                                        + dkSquare * correlator(dkSquare)\
+                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare)
+                                        #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                w =  uMat / self.Omega
                                 
                                 # \sum_k' (k-k')k'u(k-k')u(k')
 
@@ -172,7 +191,7 @@ class UEG:
         tV_pqrs.write(indices,values)
         return tV_pqrs
 
-    def sumNablaUSquare(self, k, cutoff=20):
+    def sumNablaUSquare(self, k, cutoff=30):
         # need to test convergence of this cutoff
         if self.kPrime is None:
             self.kPrime = np.array([[i,j,k] for i in range(-cutoff,cutoff+1) \
@@ -196,15 +215,16 @@ class UEG:
         '''
         if self.gamma is None:
             rho = self.nel / self.Omega 
-            gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+            gamma = np.sqrt(4.* np.pi * rho)
+            #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
         else:
             gamma = self.gamma
         a = -4.*np.pi
         if not multKSquare:
-            b = kSquare*(kSquare+gamma**2)
+            b = kSquare*(kSquare+gamma*2)
             result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>1e-12)
         else:
-            result = a/(kSquare+kFermiSquare)
+            result = a/(kSquare+gamma*2)
 
         return result
 
@@ -213,7 +233,7 @@ class UEG:
         '''
         The G=0 terms need more consideration
         '''
-        ktc_cutoffSquare = self.cutoff * (2*np.pi/self.L)**2
+        ktc_cutoffSquare = self.cutoff * (2*np.pi/self.L)**2+1e-10
         #if (kSquare <= ktc_cutoffSquare):
         #    result = 0.
         #else:
