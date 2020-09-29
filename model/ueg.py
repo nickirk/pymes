@@ -96,7 +96,8 @@ class UEG:
     
         return basis_fns
 
-    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, dtype=np.float64,sp=1):
+    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, \
+            only2Body=False, effetive2Body= False, dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.evalCoulIntegrals"
         startTime = time.time()
@@ -113,7 +114,9 @@ class UEG:
             if rank == 0:
                 print("\tUsing TC method")
                 print("\tUsing correlator:",correlator.__name__)
-                print("\tUsing RPA approximation for 3-body:",rpaApprox)
+                print("\tIncluding only 2-body terms:", only2Body)
+                print("\tIncluding only RPA approximation for 3-body:",rpaApprox)
+                print("\tIncluding approximate 2-body terms from 3-body:", effetive2Body)
     
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
@@ -163,14 +166,14 @@ class UEG:
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
-                                        - (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                        - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
-                        elif not rpaApprox:
+                        elif only2Body:
                             if np.abs(dkSquare) > 0.:
                                 rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
@@ -185,6 +188,22 @@ class UEG:
                                 
                                 # \sum_k' (k-k')k'u(k-k')u(k')
 
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif all2Body:
+                            if np.abs(dkSquare) > 0.:
+                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                w = 4.*np.pi/dkSquare \
+                                        +  uMat\
+                                        + dkSquare * correlator(dkSquare)\
+                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
+                                        - (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega\
+                                        +0.
+
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
