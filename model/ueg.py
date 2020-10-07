@@ -33,6 +33,8 @@ class UEG:
         self.kPrime = None
 
         self.correlator = None
+
+        self.kCutoff = None
         
         self.gamma = None
 
@@ -96,10 +98,100 @@ class UEG:
     
         return basis_fns
 
-    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, \
-            only2Body=False, effetive2Body= False, dtype=np.float64,sp=1):
+
+    def eval3BodyIntegrals(self, correlator = None,dtype=np.float64, sp=1):
+        '''
+            full 3-body integrals.
+        '''
+        algoName = "UEG.eval3BodyIntegrals"
+        startTime = time.time()
+
         world = ctf.comm()
-        algoName = "UEG.evalCoulIntegrals"
+        rank = world.rank()
+
+        if self.basis_fns == None:
+            raise BasisSetNotInitialized(algoName)
+        if correlator is None:
+            self.correlator = self.trunc
+            if rank == 0:
+                print("\tNo correlator given.")
+                print("\tUsing the default correlator: "+self.correlator.__name__)
+        else:
+            self.correlator = correlator
+        if self.basis_indices_map is None:
+            raise BasisFuncIndicesMapNotInitialised(algoName)
+
+        if rank == 0:
+            print(algoName)
+            print("\tUsing TC method")
+            print("\tUsing correlator:",correlator.__name__)
+            print("\tkCutoff in correlator:",self.kCutoff)
+    
+        nP = int(len(self.basis_fns)/2)
+        tV_opqrst = ctf.tensor([nP,nP,nP,nP,nP,nP], dtype=dtype, sp=sp)
+        indices = []
+        values = []
+
+        # due to the momentum conservation, only 5 indices are free.
+        # implementation follow closely the get_lmat_ueg in NECI
+        numKInEachDir = self.imax*2+1
+
+        for i in range(nP):
+            if (i) % world.np() == rank:
+                if rank == 0:
+                    print("\tElapsed time={:.3f} s: calculating the {}-{} out of {} orbitals"\
+                            .format(time.time()-startTime, i, \
+                            i+world.np() if i+world.np() < nP else nP, nP))
+            for j in range(nP):
+                for k in range(nP):
+                    for a in range(nP):
+                        kIntVec1 = self.basis_fns[2*i].k - self.basis_fns[2*a].k
+                        for b in range(nP):
+                            kIntVec2 = self.basis_fns[2*j].k - self.basis_fns[2*b].k
+                            cIntVec = kIntVec1 + kIntVec2 + self.basis_fns[2*k].k
+                            locC = numKInEachDir**2 * (cIntVec[0] + self.imax) + \
+                                    numKInEachDir * (cIntVec[1] + self.imax) +\
+                                    cIntVec[2] + self.imax
+                            if locC < len(self.basis_indices_map) and locC >= 0:
+                                c = int(self.basis_indices_map[locC])
+                                if c < 0:
+                                    continue
+                            else:
+                                continue
+
+                            kVec1 = -2.0*np.pi/self.L*kIntVec1 
+                            kVec2 = -2.0*np.pi/self.L*kIntVec2
+                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*k].k-self.basis_fns[2*c].k) 
+
+
+                            w12 = self.correlator(kVec1.dot(kVec1)) \
+                                    * self.correlator(kVec2.dot(kVec2))\
+                                    * kVec1.dot(kVec2)
+                            w13 = self.correlator(kVec1.dot(kVec1))\
+                                    * self.correlator(kVec3.dot(kVec3))\
+                                    * kVec1.dot(kVec3)
+                            w23 = self.correlator(kVec2.dot(kVec2))\
+                                    * self.correlator(kVec3.dot(kVec3))\
+                                    * kVec2.dot(kVec3)
+                            w = (w12+w13+w23) / self.Omega**2
+                            index = i*nP**5+a*nP**4+j*nP**3+b*nP**2+k*nP+c
+
+                            values.append(w)
+                            indices.append(index)
+                            if index >= nP**6:
+                                print("Index exceeds size of the tensor")
+
+        tV_opqrst.write(indices,values)
+
+
+        return tV_opqrst
+
+
+
+    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, \
+            only2Body=False, effective2Body= False, dtype=np.float64,sp=1):
+        world = ctf.comm()
+        algoName = "UEG.eval2BodyIntegrals"
         startTime = time.time()
 
         rank = world.rank()
@@ -114,9 +206,10 @@ class UEG:
             if rank == 0:
                 print("\tUsing TC method")
                 print("\tUsing correlator:",correlator.__name__)
+                print("\tkCutoff in correlator:",self.kCutoff)
                 print("\tIncluding only 2-body terms:", only2Body)
                 print("\tIncluding only RPA approximation for 3-body:",rpaApprox)
-                print("\tIncluding approximate 2-body terms from 3-body:", effetive2Body)
+                print("\tIncluding approximate 2-body terms from 3-body:", effective2Body)
     
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
@@ -166,7 +259,7 @@ class UEG:
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
-                                        - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                        - (self.nel-2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
@@ -190,7 +283,7 @@ class UEG:
 
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
-                        elif all2Body:
+                        elif effective2Body:
                             if np.abs(dkSquare) > 0.:
                                 rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
@@ -198,8 +291,9 @@ class UEG:
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
                                         - (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega\
-                                        +0.
-
+                                        + 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
+                                        - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp - dKVec, dKVec)\
+                                        + 2.*self.contractP_KWithQ(self.basis_fns[2*p].kp, dKVec)
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
@@ -210,7 +304,45 @@ class UEG:
         tV_pqrs.write(indices,values)
         return tV_pqrs
 
-    def sumNablaUSquare(self, k, cutoff=30):
+
+    def contractExchange3Body(self, pVec, kVec):
+        '''
+        pVec and kVec should be a single vector
+        kVec is the momentum transfer
+        '''
+        pPrim = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
+        pVec = pVec-pPrim
+        kVecSquare = np.einsum("i,i->", kVec, kVec)
+        pVecSquare = np.einsum("ni,ni->n", pVec, pVec)
+        pVecDotKVec = np.einsum("ni,i->n", pVec, kVec)
+        result = pVecDotKVec * self.correlator(kVecSquare) \
+                * self.correlator(pVecSquare)
+        result = np.einsum("n->", result) / self.Omega
+
+
+        return result
+
+
+    def contractP_KWithQ(self, pVec, kVec):
+
+        pPrim = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
+        vec1 = pVec - kVec - pPrim
+        vec2 = pVec-pPrim
+
+        dotProduct = np.einsum("ni,ni->n", vec1, vec2)
+        vec1Square = np.einsum("ni,ni->n", vec1, vec1)
+        vec2Square = np.einsum("ni,ni->n", vec2, vec2)
+        result = dotProduct * self.correlator(vec1Square) * self.correlator(vec2Square)
+
+        result = np.einsum("n->",result) / self.Omega
+
+        return result
+
+
+    def contractThreeBody2TwoBody(self, integrals):
+        return
+
+    def sumNablaUSquare(self, k, cutoff=20):
         # need to test convergence of this cutoff
         if self.kPrime is None:
             self.kPrime = np.array([[i,j,k] for i in range(-cutoff,cutoff+1) \
@@ -239,11 +371,19 @@ class UEG:
         else:
             gamma = self.gamma
         a = -4.*np.pi
+        if self.kCutoff is not None:
+            kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
+            kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma*2)
+        else:
+            kCutoffDenom = 1e-12
         if not multKSquare:
             b = kSquare*(kSquare+gamma*2)
-            result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>1e-12)
+            result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>kCutoffDenom)
         else:
-            result = a/(kSquare+gamma*2)
+            if kSquare > kCutoffSquare:
+                result = a/(kSquare+gamma*2)
+            else:
+                result = 0.
 
         return result
 
@@ -252,17 +392,21 @@ class UEG:
         '''
         The G=0 terms need more consideration
         '''
-        ktc_cutoffSquare = self.cutoff * (2*np.pi/self.L)**2+1e-10
+        if self.kCutoff is None:
+            self.kCutoff = self.cutoff
+        
+        kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
+        #kCutoffSquare = self.kCutoff**2
         #if (kSquare <= ktc_cutoffSquare):
         #    result = 0.
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
         
         if type(kSquare) is not np.ndarray:
-            if kSquare <= ktc_cutoffSquare:
+            if kSquare <= kCutoffSquare:
                 kSquare = 0.
         else:
-            kSquare[kSquare <= ktc_cutoffSquare] = 0.
+            kSquare[kSquare <= kCutoffSquare] = 0.
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
                 where=kSquare>1e-12)
         return result

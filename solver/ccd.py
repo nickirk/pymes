@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDiis=True):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -22,7 +22,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=False, fDi
     
     # parameters
     levelShift = levelShift
-    maxIter = 1000
+    maxIter = maxIter
     epsilonE = 1e-8
     delta = 1.
 
