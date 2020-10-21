@@ -11,6 +11,9 @@ def mix(errors, amplitudes):
 
 
     # construct the Lagrangian
+    # TODO
+    # no need to construct the whole matrix in every iteration,
+    # only need to update one row and one column.
     assert(len(errors) == len(amplitudes))
 
     L = np.zeros((len(errors)+1, len(errors)+1))

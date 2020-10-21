@@ -136,32 +136,32 @@ class UEG:
         # implementation follow closely the get_lmat_ueg in NECI
         numKInEachDir = self.imax*2+1
 
-        for i in range(nP):
-            if (i) % world.np() == rank:
+        for o in range(nP):
+            if (o) % world.np() == rank:
                 if rank == 0:
                     print("\tElapsed time={:.3f} s: calculating the {}-{} out of {} orbitals"\
-                            .format(time.time()-startTime, i, \
-                            i+world.np() if i+world.np() < nP else nP, nP))
-            for j in range(nP):
-                for k in range(nP):
-                    for a in range(nP):
-                        kIntVec1 = self.basis_fns[2*i].k - self.basis_fns[2*a].k
-                        for b in range(nP):
-                            kIntVec2 = self.basis_fns[2*j].k - self.basis_fns[2*b].k
-                            cIntVec = kIntVec1 + kIntVec2 + self.basis_fns[2*k].k
-                            locC = numKInEachDir**2 * (cIntVec[0] + self.imax) + \
-                                    numKInEachDir * (cIntVec[1] + self.imax) +\
-                                    cIntVec[2] + self.imax
-                            if locC < len(self.basis_indices_map) and locC >= 0:
-                                c = int(self.basis_indices_map[locC])
-                                if c < 0:
+                            .format(time.time()-startTime, o, \
+                            o+world.np() if o+world.np() < nP else nP, nP))
+            for r in range(nP):
+                kIntVec1 = self.basis_fns[2*o].k - self.basis_fns[2*r].k
+                for p in range(nP):
+                    for s in range(nP):
+                        kIntVec2 = self.basis_fns[2*p].k - self.basis_fns[2*s].k
+                        for q in range(nP):
+                            tIntVec = kIntVec1 + kIntVec2 + self.basis_fns[2*q].k
+                            locT = numKInEachDir**2 * (tIntVec[0] + self.imax) + \
+                                    numKInEachDir * (tIntVec[1] + self.imax) +\
+                                    tIntVec[2] + self.imax
+                            if locT < len(self.basis_indices_map) and locT >= 0:
+                                t = int(self.basis_indices_map[locT])
+                                if t < 0:
                                     continue
                             else:
                                 continue
 
                             kVec1 = -2.0*np.pi/self.L*kIntVec1 
                             kVec2 = -2.0*np.pi/self.L*kIntVec2
-                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*k].k-self.basis_fns[2*c].k) 
+                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k) 
 
 
                             w12 = self.correlator(kVec1.dot(kVec1)) \
@@ -174,7 +174,8 @@ class UEG:
                                     * self.correlator(kVec3.dot(kVec3))\
                                     * kVec2.dot(kVec3)
                             w = (w12+w13+w23) / self.Omega**2
-                            index = i*nP**5+a*nP**4+j*nP**3+b*nP**2+k*nP+c
+                            #w = (w12) / self.Omega**2
+                            index = o*nP**5+p*nP**4+q*nP**3+r*nP**2+s*nP+t
 
                             values.append(w)
                             indices.append(index)
@@ -264,6 +265,7 @@ class UEG:
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
                                 w =  uMat / self.Omega
+                                #w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif only2Body:
@@ -339,10 +341,14 @@ class UEG:
         return result
 
 
-    def contractThreeBody2TwoBody(self, integrals):
-        return
+    def contract3BodyIntegralsTo2Body(self, integrals):
+        # factor 2 for the spin degeneracy
+        # factor (self.nel-2)/self.nel 
+        fac = 2.*(self.nel-2.)/self.nel
+        RPA2Body = fac*ctf.einsum("opqrsq->oprs", integrals)
+        return RPA2Body
 
-    def sumNablaUSquare(self, k, cutoff=20):
+    def sumNablaUSquare(self, k, cutoff=30):
         # need to test convergence of this cutoff
         if self.kPrime is None:
             self.kPrime = np.array([[i,j,k] for i in range(-cutoff,cutoff+1) \
@@ -370,18 +376,18 @@ class UEG:
             #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
         else:
             gamma = self.gamma
-        a = -4.*np.pi
+        a = -4.*np.pi/gamma
         if self.kCutoff is not None:
             kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
-            kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma*2)
+            kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma**2)
         else:
             kCutoffDenom = 1e-12
         if not multKSquare:
-            b = kSquare*(kSquare+gamma*2)
+            b = kSquare*(kSquare+gamma**2)
             result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>kCutoffDenom)
         else:
             if kSquare > kCutoffSquare:
-                result = a/(kSquare+gamma*2)
+                result = a/(kSquare+gamma**2)
             else:
                 result = 0.
 
@@ -393,9 +399,12 @@ class UEG:
         The G=0 terms need more consideration
         '''
         if self.kCutoff is None:
-            self.kCutoff = self.cutoff
+            self.kCutoff = int(ceil(np.sqrt(self.cutoff)))
+
+        if self.gamma is None:
+            self.gamma = 1.0
         
-        kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
+        kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
         #kCutoffSquare = self.kCutoff**2
         #if (kSquare <= ktc_cutoffSquare):
         #    result = 0.
@@ -409,7 +418,7 @@ class UEG:
             kSquare[kSquare <= kCutoffSquare] = 0.
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
                 where=kSquare>1e-12)
-        return result
+        return result*self.gamma
 
     def coulomb(self, kSquare, multKSquare=False):
         '''
@@ -421,6 +430,25 @@ class UEG:
             gamma = self.gamma
         result = np.divide(-4.*np.pi*gamma, kSquare, out = np.zeros_like(kSquare),\
                 where=kSquare>1e-12)
+        return result
+
+    def stg(self,kSquare,multKSquare=False):
+        if self.gamma is None:
+            rho = self.nel / self.Omega 
+            gamma = np.sqrt(4.* np.pi * rho)
+            #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+        else:
+            gamma = self.gamma
+        a = -4.*np.pi/gamma
+        if self.kCutoff is not None:
+            kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
+            kCutoffDenom = (kCutoffSquare + gamma**2)**2
+        else:
+            kCutoffDenom = 1e-12
+        if not multKSquare:
+            b = (kSquare+gamma**2)**2
+            result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>kCutoffDenom)
+
         return result
 
 

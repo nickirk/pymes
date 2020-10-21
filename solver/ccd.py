@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, amps=None, bruekner=False):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -19,12 +19,16 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
 
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
+
+    # if use Bruekner method, backup the hole and particle energies
+    tEpsilonOriginal_i = tEpsilon_i.copy()
+    tEpsilonOriginal_a = tEpsilon_a.copy()
     
     # parameters
     levelShift = levelShift
     maxIter = maxIter
     epsilonE = 1e-8
-    delta = 1.
+    delta = 1.0
 
     # construct the needed integrals here on spot.
 
@@ -48,7 +52,10 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     tV_abij = tV_pqrs[no:,no:,:no,:no]
     tV_abcd = tV_pqrs[no:,no:,no:,no:]
     
+    
     eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, levelShift, sp=sp)
+    if amps is not None:
+        tT_abij = amps
 
     tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp) 
     # the following ctf expression calcs the outer sum, as wanted.
@@ -70,6 +77,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
         print("\tSolving doubles amplitude equation")
         print("\tUsing data type %s" % tV_pqrs.dtype)
         print("\tUsing DIIS mixer: ", fDiis)
+        print("\tUsing Bruekner quasi-particle energy: ", bruekner)
     residules = []
     amps = []
     mixSize = 4
@@ -77,11 +85,25 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     while np.abs(dE) > epsilonE and iteration <= maxIter:
         iteration += 1
         tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
-                tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd)
+                tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd, bruekner)
+
+        if bruekner:
+            # construct amp dependent quasi-particle energies
+            tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=tT_abij.dtype,sp=tT_abij.sp)
+            tTildeT_abij.set_zero()
+            tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
+            tEpsilon_i = tEpsilonOriginal_i + 1./2 * ctf.einsum("ilcd,cdil->i", tV_ijab, tTildeT_abij)
+            tEpsilon_a = tEpsilonOriginal_a - 1./2 * ctf.einsum("klad,adkl->a", tV_ijab, tTildeT_abij)
+
+            # update the denominator accordingly
+            tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
+                -tEpsilon_a.i("a")-tEpsilon_a.i("b")
+            tD_abij = 1./(tD_abij+levelShift)
+
         tDeltaT_abij = ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
         tT_abij += delta * tDeltaT_abij
         if fDiis:
-            if len(residules) == 4:
+            if len(residules) == 6:
                 residules.pop(0)
                 amps.pop(0)
             residules.append(tDeltaT_abij.copy())
@@ -113,10 +135,10 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
         print("\tCCD correlation energy =",eCcd)
         print("\t%f.3 seconds spent on CCD" % (time.time()-timeCcd))
 
-    return [eCcd, tT_abij]
+    return [eCcd, tT_abij, tEpsilon_i, tEpsilon_a]
 
 def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_iajb, \
-        tV_iabj, tV_abcd, fDcd):
+        tV_iabj, tV_abcd, fDcd, bruekner):
 
     algoName = "ccd.getResidual"
     no = tEpsilon_i.size
@@ -161,8 +183,14 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     tFock_ij.set_zero()
     tFock_ab.i("aa") << tEpsilon_a.i("a")
     tFock_ij.i("ii") << tEpsilon_i.i("i")
-    tX_ac = tFock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
-    tX_ki = tFock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+
+    if bruekner:
+        tX_ac = tFock_ab 
+        tX_ki = tFock_ij 
+    else:
+        tX_ac = tFock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
+        tX_ki = tFock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+
     if not fDcd:
         tX_ac -= 1./2. * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
         tX_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
