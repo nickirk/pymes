@@ -4,12 +4,11 @@ import numpy as np
 
 
 
-def write2Tcdump(integrals, ms2=0, orbsym=1, isym=1, dtype='r'):
+def write2Tcdump(integrals, dtype='r'):
     world = ctf.comm()
 
     nOrb = integrals.shape[0]
 
-    print("shape of tensor=", nOrb)
     # (ia|jb|kc)
     if world.rank() == 0:
         f = open("TCDUMP", "w")
