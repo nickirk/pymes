@@ -376,7 +376,7 @@ class UEG:
             #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
         else:
             gamma = self.gamma
-        a = -4.*np.pi/gamma
+        a = -4.*np.pi
         if self.kCutoff is not None:
             kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
             kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma**2)
