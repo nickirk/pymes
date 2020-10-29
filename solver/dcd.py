@@ -4,7 +4,7 @@ import ctf
 from ctf.core import *
 from pymes.solver import ccd
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=True, maxIter=100, fDiis=True, amps=None, bruekner=False):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=True, maxIter=100, fDiis=True, amps=None, bruekner=False, epsilonE=1e-8):
     '''
     dcd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -14,5 +14,5 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=True, maxI
     '''
     algoName = "dcd.solve"
     timeDcd = time.time()
-    return ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=levelShift, sp=sp,  fDcd=True, maxIter=maxIter, fDiis=fDiis,amps=amps, bruekner=bruekner)
+    return ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=levelShift, sp=sp,  fDcd=True, maxIter=maxIter, fDiis=fDiis,amps=amps, bruekner=bruekner, epsilonE=epsilonE)
 

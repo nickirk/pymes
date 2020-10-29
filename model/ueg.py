@@ -320,6 +320,7 @@ class UEG:
         result = pVecDotKVec * self.correlator(kVecSquare) \
                 * self.correlator(pVecSquare)
         result = np.einsum("n->", result) / self.Omega
+        result = result * (self.nel-2.)/self.nel
 
 
         return result
@@ -337,6 +338,7 @@ class UEG:
         result = dotProduct * self.correlator(vec1Square) * self.correlator(vec2Square)
 
         result = np.einsum("n->",result) / self.Omega
+        result = result * (self.nel-2.)/self.nel
 
         return result
 
@@ -412,10 +414,10 @@ class UEG:
         #    result = - 12.566370614359173 / kSquare/kSquare
         
         if type(kSquare) is not np.ndarray:
-            if kSquare <= kCutoffSquare:
+            if kSquare <= kCutoffSquare*(1+0.001):
                 kSquare = 0.
         else:
-            kSquare[kSquare <= kCutoffSquare] = 0.
+            kSquare[kSquare <= kCutoffSquare*(1+0.001)] = 0.
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
                 where=kSquare>1e-12)
         return result*self.gamma

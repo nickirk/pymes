@@ -5,7 +5,7 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, amps=None, bruekner=False):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, amps=None, bruekner=False, epsilonE=1e-8):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -27,7 +27,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     # parameters
     levelShift = levelShift
     maxIter = maxIter
-    epsilonE = 1e-8
+    #epsilonE = 1e-8
     delta = 1.0
 
     # construct the needed integrals here on spot.
