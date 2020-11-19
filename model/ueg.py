@@ -55,7 +55,7 @@ class UEG:
             
 
     #--- Basis set ---
-    def init_single_basis(self, cutoff, nMax):
+    def init_single_basis(self, cutoff):
         '''Create single-particle basis.
     
     :type self: :class:`UEG`
@@ -77,7 +77,7 @@ class UEG:
     
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
-        imax = nMax #int(np.ceil(np.sqrt(cutoff*2)))
+        imax = int(np.ceil(np.sqrt(cutoff)))+1
         self.cutoff = cutoff
         self.imax = imax
         basis_fns = []
@@ -320,8 +320,7 @@ class UEG:
         result = pVecDotKVec * self.correlator(kVecSquare) \
                 * self.correlator(pVecSquare)
         result = np.einsum("n->", result) / self.Omega
-        result = result * (self.nel-2.)/self.nel
-
+        #result = result * (self.nel-2.)/self.nel
 
         return result
 

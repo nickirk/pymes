@@ -9,6 +9,7 @@ def mix(errors, amplitudes):
     '''
     algoName="diis.mix"
 
+    world = ctf.comm()
 
     # construct the Lagrangian
     # TODO
@@ -17,8 +18,8 @@ def mix(errors, amplitudes):
     assert(len(errors) == len(amplitudes))
 
     L = np.zeros((len(errors)+1, len(errors)+1))
-    L[-1, :-1] = 1.
-    L[:-1, -1] = 1.
+    L[-1, :-1] = -1.
+    L[:-1, -1] = -1.
     
     for i in range(len(errors)):
         for j in range(i,len(errors)):
@@ -26,12 +27,17 @@ def mix(errors, amplitudes):
             L[j,i] = L[i,j]
 
     unitVec = np.zeros(len(errors)+1)
-    unitVec[-1] = 1.
+    unitVec[-1] = -1.
     c = np.linalg.inv(L).dot(unitVec)
 
     optAmp = ctf.tensor(amplitudes[0].shape, dtype=amplitudes[0].dtype, sp=amplitudes[0].sp)
 
 
+    if world.rank() == 0:
+        print("\t\t\t"+algoName+": coefficients for combining amplitudes=")
+        print("\t\t\t",c[:-1])
+        print("\t\t\tSum of coefficients=",np.sum(c[:-1]))
+        print("\t\t\tLangrangian multiplier = ",c[-1])
     for a in range(0,len(errors)):
         optAmp += amplitudes[a]*c[a]
 

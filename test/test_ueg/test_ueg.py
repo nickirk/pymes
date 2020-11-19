@@ -77,7 +77,7 @@ def genGCoeff(nG, nP):
 
 
 
-def main(nel, cutoff,rs):
+def main(nel, cutoff,rs, gamma, kc,ampsOld,maxIter=100):
     world=ctf.comm()
     nel = nel
     no = int(nel/2)
@@ -89,7 +89,7 @@ def main(nel, cutoff,rs):
     cutoff = cutoff
 
     # correspond to cell parameter in neci
-    nMax = 5
+    #nMax = 5
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     timeSys = time.time()
@@ -103,7 +103,7 @@ def main(nel, cutoff,rs):
 
 
     timeBasis = time.time()
-    sys.init_single_basis(cutoff, nMax)
+    sys.init_single_basis(cutoff)
 
     nSpatialOrb = int(len(sys.basis_fns)/2)
     nP = nSpatialOrb
@@ -112,15 +112,27 @@ def main(nel, cutoff,rs):
     nv = nP - no
     if world.rank() == 0:
         print_title('Basis set', '-')
+        print('# cell size %i \n' % (int(np.ceil(np.sqrt(cutoff)))+1))
         print('# %i Spin Orbitals\n' % int(len(sys.basis_fns)))
         print('# %i Spatial Orbitals\n' % nSpatialOrb)
         print("%f.3 seconds spent on generating basis." % (time.time()-timeBasis))
 
 
     timeCoulInt = time.time()
-    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,sp=1)
-    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,sp=1)
-    tV_pqrs = sys.eval2BodyIntegrals(sp=1)
+    sys.gamma = gamma
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.coulomb,sp=1)
+    #sys.kCutoff = (sys.L/2/rs)
+    sys.kCutoff = sys.L/(2*np.pi)*2.3225029893472993/rs
+    #sys.kCutoff = kCutoffFraction
+    #sys.gamma = 0.641 + 1.110/rs
+    if world.rank() == 0:
+        print("kCutoff=",sys.kCutoff)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,rpaApprox=True, sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=True,only2Body=False, sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,rpaApprox=False,only2Body=True, sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=True, sp=1)
+    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=False, effective2Body=True,sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals()
 
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
@@ -187,21 +199,41 @@ def main(nel, cutoff,rs):
 
 
     if world.rank() == 0:
-        print("Starting MP2")
+        print("Hole energy:\n",holeEnergy)
+        print("Particle energy:\n",particleEnergy)
 
-    #mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
-    ###mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
-    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
-    #dcdE, dcdAmp = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=4., sp=0)
+    mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
+    ccdE = 0.
+    dcdE = 0.
+    ##mp2E, mp2Amp = mp2.solve(tV_abij, tEpsilon_i, tEpsilon_a)
+    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0, fDiis=True)
+    #ccdE, ccdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-2., sp=0, maxIter=200, fDiis=True)
+    ls = -rs/10.
+    ccdE, ccdAmp, hole, particle = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls, sp=0, maxIter=100, fDiis=True,amps=ampsOld, epsilonE=1e-6)
+    dcdE, dcdAmp, hole, particle = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls, sp=0, maxIter=100, fDiis=True, epsilonE=1e-6,amps=ccdAmp)
+    #ccdE, dcdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=1, fDiis=False, stoch=True, thresh=thresh)
+    #ccdEApprox, ccdAmp = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0, fDiis=False, stoch=True)
 
     if world.rank() == 0:
-        #f = open("tcE_numOrb_rs"+str(rs)+"trunc.dat", "a")
-        #print("#spin orb={}, rs={}, HF E={}, mp2 E={}, ccd E={}, dcd E={}".format(len(sys.basis_fns),rs, tEHF, mp2E, ccdE,dcdE))
-        #f.write(str(len(sys.basis_fns))+"  "+str(tEHF)+"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
-        print("#spin orb={}, rs={}, HF E={}".format(len(sys.basis_fns),rs, tEHF))
+        #f = open("tcE_numOrb_rs"+str(rs)+"_"+str(sys.correlator.__name__)+".kCutoff."+str(sys.kCutoff)+\
+        f = open("tcE_54e_rs"+str(rs)+"_"+str(sys.correlator.__name__)+".optKc.dat", "a")
+        print("#spin orb={}, rs={}, kCutoff={}, HF E={}, ccd E={}, dcd E={}".format(len(sys.basis_fns),rs,sys.kCutoff, tEHF, ccdE, dcdE))
+        print("Total ccd E={}, Total dcd E={}".format(tEHF+ccdE,tEHF+dcdE))
+        f.write(str(len(sys.basis_fns))+"  "+str(sys.kCutoff)+"  "+str(tEHF)+"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
+
+    return dcdAmp
 
 if __name__ == '__main__':
-    for rs in [0.5,1.,2.,5.]:
-        for cutoff in [2]:
-            main(14,cutoff,rs)
-    ctf.MPI_Stop()
+  #for gamma in None:
+  gamma = None
+  #for rs in [5.0,10.0,20.0]:
+  for cutoff in [38,42]:
+    #for rs in [0.5,1.0,2.0,5.0,10.0]:
+    ampsOld = None
+    for rs in [0.5,1.0,2.0,5.0,10.0,20.0]:
+      #upper = int(ceil(np.sqrt(cutoff)))
+      #print("upper=",upper)
+      #for kCutoffFraction in range(0,upper+1):
+      kCutoffFraction = None
+      ampsOld=main(54,cutoff,rs, gamma, kCutoffFraction,ampsOld)
+  ctf.MPI_Stop()

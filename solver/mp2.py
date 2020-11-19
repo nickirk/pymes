@@ -33,11 +33,11 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
     #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1) 
-    tD_abij = (1./tD_abij+levelShift)
+    tD_abij = 1./(tD_abij+levelShift)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
-    #tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)
-    tT_abij.i("abij") << tV_abij.i("abij") * tD_abij.i("abij")
+    tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)
+    #tT_abij.i("abij") << tV_abij.i("abij") * tD_abij.i("abij")
     
     # the following expression evaluate the sum of the two tensors on the right
     # to form an intermediate tensor
@@ -47,18 +47,13 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     # tT2_abij.i("abij") << tT2_abij.i('abij') +  tD_abij.i("abij")
     
     #write2Cc4sTensor(tT_abij.to_nparray(),[4,nv,nv,no,no],"Doubles")
-    #edir = ctf.tensor([1],dtype=tV_abij.dtype,sp=1)
-    #exc = ctf.tensor([1],dtype=complex)
     
-    #edir.i("") << 2*tT_abij.i("abij") * tV_abij.i("abij")
-    #print(edir)
     eDir  = 2.0*ctf.einsum('abij,ijab->',tT_abij, tV_ijab)
     eExc = -1.0*ctf.einsum('abij,ijba->',tT_abij, tV_ijab)
-    
     # There is a bug with this contraction involving 
     # exchange integals, using einsum instead
     # tested against cc4s.
-    #exc.i("") << -1.*tT_abij.i("abij") * tV_abij.i("baij")
+    #print(edir)
     
     if world.rank() == 0:
         print("\tDirect contribution =",np.real(eDir))

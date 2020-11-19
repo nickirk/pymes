@@ -103,7 +103,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
         tDeltaT_abij = ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
         tT_abij += delta * tDeltaT_abij
         if fDiis:
-            if len(residules) == 6:
+            if len(residules) == mixSize:
                 residules.pop(0)
                 amps.pop(0)
             residules.append(tDeltaT_abij.copy())
