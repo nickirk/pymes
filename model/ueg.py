@@ -3,6 +3,30 @@ import time
 import numpy as np
 from pymes.basis_set import planewave
 import ctf
+from scipy import special
+
+
+#def uErf(k,kc,sigma):
+    #if k < kc*sigma:
+        #return 0.0
+    #return (1.+special.erf((k-kc)/(kc*sigma)))/2.
+#
+#def applyErf(k,kc,sigma=0.01):
+    #if type(k) is not np.ndarray:
+        #return uErf(k,kc,sigma)
+    #else:
+        #return np.array([uErf(el,kc,sigma) for el in np.nditer(k)])
+#test
+def uErf(k,kc,sigma):
+    if k < kc:
+        return 0.0
+    return k
+
+def applyErf(k,kc,sigma=0.01):
+    if type(k) is not np.ndarray:
+        return uErf(k,kc,sigma)
+    else:
+        return np.array([uErf(el,kc,sigma) for el in np.nditer(k)])
 
 class UEG:
 
@@ -421,6 +445,27 @@ class UEG:
                 where=kSquare>1e-12)
         return result*self.gamma
 
+    def smooth(self, kSquare, multKSquare=False):
+        '''
+        The G=0 terms need more consideration
+        '''
+        if self.kCutoff is None:
+            self.kCutoff = int(ceil(np.sqrt(self.cutoff)))
+
+        if self.gamma is None:
+            self.gamma = 1.0
+        
+        kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
+        #kCutoffSquare = self.kCutoff**2
+        #if (kSquare <= ktc_cutoffSquare):
+        #    result = 0.
+        #else:
+        #    result = - 12.566370614359173 / kSquare/kSquare
+        
+        result = np.divide(-4.*np.pi*applyErf(kSquare,kCutoffSquare), kSquare**2, \
+                out = np.zeros_like(kSquare), where=kSquare>1e-12)
+        return result*self.gamma
+
     def coulomb(self, kSquare, multKSquare=False):
         '''
         The G=0 terms need more consideration
@@ -474,3 +519,4 @@ class UEG:
                         if np.abs(GSquare) > 1e-12 :
                             gamma_pqG[p,q,g] = np.sqrt(4.*np.pi/GSquare/self.Omega)
         return gamma_pqG
+

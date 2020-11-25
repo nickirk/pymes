@@ -4,7 +4,7 @@ import time
 import numpy as np
 import sys
 
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
+sys.path.append("/home/kats/projects/")
 
 import ctf
 from ctf.core import *
@@ -131,8 +131,16 @@ def main(nel, cutoff,rs, gamma, kc,ampsOld,maxIter=100):
     #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=True,only2Body=False, sp=1)
     #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.yukawa,rpaApprox=False,only2Body=True, sp=1)
     #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=True, sp=1)
-    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=False, effective2Body=True,sp=1)
+    #tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=False, effective2Body=True,sp=1)
     #tV_pqrs = sys.eval2BodyIntegrals()
+    #print("trunc:")
+    #for k in range(400):
+        #print("t",k/10.0,sys.trunc(k/10.0))
+    #print("smooth:")
+    #for k in range(400):
+        #print("s",k/10.0,sys.smooth(k/10.0))
+    tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.smooth,rpaApprox=False, effective2Body=True,sp=1)
+
 
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
@@ -227,13 +235,16 @@ if __name__ == '__main__':
   #for gamma in None:
   gamma = None
   #for rs in [5.0,10.0,20.0]:
-  for cutoff in [38,42]:
+  for cutoff in [14]:
+    #[38,42]:
     #for rs in [0.5,1.0,2.0,5.0,10.0]:
     ampsOld = None
-    for rs in [0.5,1.0,2.0,5.0,10.0,20.0]:
+    #for rs in [0.5,1.0,2.0,5.0,10.0,20.0]:
+    for rs in [1.0,2.0,5.0,10.0,20.0]:
       #upper = int(ceil(np.sqrt(cutoff)))
       #print("upper=",upper)
       #for kCutoffFraction in range(0,upper+1):
       kCutoffFraction = None
-      ampsOld=main(54,cutoff,rs, gamma, kCutoffFraction,ampsOld)
+      #ampsOld=main(54,cutoff,rs, gamma, kCutoffFraction,ampsOld)
+      ampsOld=main(14,cutoff,rs, gamma, kCutoffFraction,ampsOld)
   ctf.MPI_Stop()
