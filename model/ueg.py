@@ -7,9 +7,9 @@ from scipy import special
 
 
 #def uErf(k,kc,sigma):
-    #if k < kc*sigma:
-        #return 0.0
-    #return (1.+special.erf((k-kc)/(kc*sigma)))/2.
+#    if k < kc*sigma:
+#        return 0.0
+#    return (1.+special.erf((k-kc)/(kc*sigma)))/2.
 #
 #def applyErf(k,kc,sigma=0.01):
     #if type(k) is not np.ndarray:
@@ -17,10 +17,6 @@ from scipy import special
     #else:
         #return np.array([uErf(el,kc,sigma) for el in np.nditer(k)])
 #test
-def uErf(k,kc,sigma):
-    if k < kc:
-        return 0.0
-    return k
 
 def applyErf(k,kc,sigma=0.01):
     if type(k) is not np.ndarray:
@@ -232,6 +228,7 @@ class UEG:
                 print("\tUsing TC method")
                 print("\tUsing correlator:",correlator.__name__)
                 print("\tkCutoff in correlator:",self.kCutoff)
+                print("\tGamma in correlator:",self.gamma)
                 print("\tIncluding only 2-body terms:", only2Body)
                 print("\tIncluding only RPA approximation for 3-body:",rpaApprox)
                 print("\tIncluding approximate 2-body terms from 3-body:", effective2Body)
@@ -316,7 +313,7 @@ class UEG:
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
-                                        - (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega\
+                                        - (self.nel )*dkSquare*correlator(dkSquare)**2/self.Omega\
                                         + 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
                                         - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp - dKVec, dKVec)\
                                         + 2.*self.contractP_KWithQ(self.basis_fns[2*p].kp, dKVec)
@@ -437,10 +434,10 @@ class UEG:
         #    result = - 12.566370614359173 / kSquare/kSquare
         
         if type(kSquare) is not np.ndarray:
-            if kSquare <= kCutoffSquare*(1+0.001):
+            if kSquare <= kCutoffSquare*(1+0.00001):
                 kSquare = 0.
         else:
-            kSquare[kSquare <= kCutoffSquare*(1+0.001)] = 0.
+            kSquare[kSquare <= kCutoffSquare*(1+0.00001)] = 0.
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
                 where=kSquare>1e-12)
         return result*self.gamma
@@ -453,7 +450,7 @@ class UEG:
             self.kCutoff = int(ceil(np.sqrt(self.cutoff)))
 
         if self.gamma is None:
-            self.gamma = 1.0
+            self.gamma = 0.01
         
         kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
         #kCutoffSquare = self.kCutoff**2
@@ -462,9 +459,13 @@ class UEG:
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
         
-        result = np.divide(-4.*np.pi*applyErf(kSquare,kCutoffSquare), kSquare**2, \
-                out = np.zeros_like(kSquare), where=kSquare>1e-12)
-        return result*self.gamma
+        #result = np.divide(-4.*np.pi*applyErf(kSquare,kCutoffSquare), kSquare**2, \
+        #        out = np.zeros_like(kSquare), where=kSquare>1e-12)
+        kc = np.sqrt(kCutoffSquare)
+        k = np.sqrt(kSquare)
+        result = np.divide(-4.*np.pi*(1.+special.erf((k-kc)/(kc*self.gamma)))/2., kSquare**2, \
+                out = np.zeros_like(kSquare), where=kSquare>(kc*self.gamma)**2)
+        return result
 
     def coulomb(self, kSquare, multKSquare=False):
         '''
