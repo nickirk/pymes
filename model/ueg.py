@@ -210,7 +210,8 @@ class UEG:
 
 
     def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, \
-            only2Body=False, effective2Body= False, dtype=np.float64,sp=1):
+            only2Body=False,onlyNonHermitian2Body=False,onlyHermitian2Body=False,\
+            effective2Body= False, dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.eval2BodyIntegrals"
         startTime = time.time()
@@ -301,6 +302,32 @@ class UEG:
                             else:
                                 #w = correlator(dkSquare, multKSquare=True) + uMat
                                 w =  uMat / self.Omega
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif onlyHermitian2Body:
+                            if np.abs(dkSquare) > 0.:
+                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                w = 4.*np.pi/dkSquare \
+                                        +  uMat\
+                                        + dkSquare * correlator(dkSquare)
+                                        #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                w =  uMat / self.Omega
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif onlyNonHermitian2Body:
+                            w = 0.
+                            if np.abs(dkSquare) > 0.:
+                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                w = 4.*np.pi/dkSquare \
+                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare)
+                                        #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                w = w / self.Omega
+                            #else:
+                            #    #w = correlator(dkSquare, multKSquare=True) + uMat
+                            #    w =  uMat / self.Omega
                                 
                                 # \sum_k' (k-k')k'u(k-k')u(k')
 
@@ -385,6 +412,40 @@ class UEG:
         result = np.einsum("n->", result) / self.Omega
 
         return result
+
+
+    def threeBodyIntContr2Diag(self, cutoff=30):
+        p = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
+        q = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
+        print(p)
+        tp_pi = ctf.astensor(p)
+        tq_qi = ctf.astensor(q)
+        tp_q_pqi = ctf.tensor([len(p),len(q),3])
+        tp_q_pqi.i("pqi") << tp_pi.i("pi")-tq_qi.i("qi")
+        tp_qSquare_pq = ctf.einsum("pqi,pqi->pq", tp_q_pqi, tp_q_pqi)
+
+        p_qSquare = tp_qSquare_pq.to_nparray().reshape(len(q)**2)
+        up_q = self.correlator(p_qSquare)
+        tUp_q_pq = ctf.astensor(up_q.reshape((len(q),len(q))))
+        dirE = up_q**2*p_qSquare
+        dirE = sum(dirE) * self.nel/2/self.Omega**2
+        # factor 2 comes from sum over spins
+        dirE = dirE*2
+
+        # exchange type
+        tp_o_poi = ctf.tensor([len(p),len(q),3])
+        tp_o_poi.i("poi") << tp_pi.i("pi")-tq_qi.i("oi")
+        tp_oDotp_q = ctf.einsum("poi,pqi->pqo", tp_o_poi, tp_q_pqi)
+        #p_oDotp_q = tp_oDotp_q.to_nparray().reshape(len(q)**3)
+
+        UpqUpo = ctf.einsum("pq,po->pqo",tUp_q_pq,tUp_q_pq)
+        # factor 2 from sum over spin
+        excE = -2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/self.Omega**2 
+        result = dirE+excE
+        print("dirE,excE=",dirE,excE)
+
+        return result
+
 
 
 
