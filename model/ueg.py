@@ -6,17 +6,6 @@ import ctf
 from scipy import special
 
 
-#def uErf(k,kc,sigma):
-#    if k < kc*sigma:
-#        return 0.0
-#    return (1.+special.erf((k-kc)/(kc*sigma)))/2.
-#
-#def applyErf(k,kc,sigma=0.01):
-    #if type(k) is not np.ndarray:
-        #return uErf(k,kc,sigma)
-    #else:
-        #return np.array([uErf(el,kc,sigma) for el in np.nditer(k)])
-#test
 
 def applyErf(k,kc,sigma=0.01):
     if type(k) is not np.ndarray:
@@ -49,13 +38,13 @@ class UEG:
         self.cutoff = 0.
 
         self.basis_indices_map = None
-        
+
         self.kPrime = None
 
         self.correlator = None
 
         self.kCutoff = None
-        
+
         self.gamma = None
 
 
@@ -72,29 +61,29 @@ class UEG:
                     numKInEachDir * (self.basis_fns[i*2].k[1] + self.imax) +\
                     self.basis_fns[i*2].k[2] + self.imax
             self.basis_indices_map[s] = i
-            
+
 
     #--- Basis set ---
     def init_single_basis(self, cutoff):
         '''Create single-particle basis.
-    
+
     :type self: :class:`UEG`
     :param sys: UEG system to be studied.
-    
+
     :param nMax: the number of G vectors in each direction to loop over. eg. 1 gives -1, 0, 1
-    
+
     :param float cutoff: energy cutoff, in units of `2*(2\pi/L)^2`, defining the single-particle basis.  Only single-particle basis functions with a kinetic energy equal to or less than the cutoff are considered.
-    
+
     :type sym: np.array
     :param sym: integer vector defining the wavevector, in units of `2\pi/L`, representing the desired symmetry.  Only Hartree products and determinants of this symmetry are returned.
-    
+
     :returns: basis_fns where:
-    
+
         basis_fns
             tuple of relevant :class:`PlaneWaveFn` objects, ie the single-particle basis set.
-    
+
     '''
-    
+
         # Single particle basis within the desired energy cutoff.
         #cutoff = cutoff*(2*np.pi/self.L)**2
         imax = int(np.ceil(np.sqrt(cutoff)))+1
@@ -115,7 +104,7 @@ class UEG:
         self.basis_fns = basis_fns
 
         self.init_basis_indices_map()
-    
+
         return basis_fns
 
 
@@ -146,7 +135,7 @@ class UEG:
             print("\tUsing TC method")
             print("\tUsing correlator:",correlator.__name__)
             print("\tkCutoff in correlator:",self.kCutoff)
-    
+
         nP = int(len(self.basis_fns)/2)
         tV_opqrst = ctf.tensor([nP,nP,nP,nP,nP,nP], dtype=dtype, sp=sp)
         indices = []
@@ -179,9 +168,9 @@ class UEG:
                             else:
                                 continue
 
-                            kVec1 = -2.0*np.pi/self.L*kIntVec1 
+                            kVec1 = -2.0*np.pi/self.L*kIntVec1
                             kVec2 = -2.0*np.pi/self.L*kIntVec2
-                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k) 
+                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
 
 
                             w12 = self.correlator(kVec1.dot(kVec1)) \
@@ -233,13 +222,13 @@ class UEG:
                 print("\tIncluding only 2-body terms:", only2Body)
                 print("\tIncluding only RPA approximation for 3-body:",rpaApprox)
                 print("\tIncluding approximate 2-body terms from 3-body:", effective2Body)
-    
+
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
         indices = []
         values = []
-        
-    
+
+
         numKInEachDir = self.imax*2+1
 
         for p in range(nP):
@@ -253,7 +242,7 @@ class UEG:
                     dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
                     uMat  = 0.
                     if correlator is not None:
-                        uMat = self.sumNablaUSquare(dKVec) 
+                        uMat = self.sumNablaUSquare(dKVec)
 
                     for q in range(nP):
                         intKS = self.basis_fns[q*2].k + dIntK
@@ -285,7 +274,7 @@ class UEG:
                                         - (self.nel-2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                                 #w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
@@ -300,7 +289,7 @@ class UEG:
                                         #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
@@ -313,7 +302,7 @@ class UEG:
                                         #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
@@ -326,9 +315,9 @@ class UEG:
                                         #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             #else:
-                            #    #w = correlator(dkSquare, multKSquare=True) + uMat
+                            #    #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                             #    w =  uMat / self.Omega
-                                
+
                                 # \sum_k' (k-k')k'u(k-k')u(k')
 
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
@@ -346,7 +335,7 @@ class UEG:
                                         + 2.*self.contractP_KWithQ(self.basis_fns[2*p].kp, dKVec)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multKSquare=True) + uMat
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
@@ -392,8 +381,8 @@ class UEG:
 
     def contract3BodyIntegralsTo2Body(self, integrals):
         # factor 2 for the spin degeneracy
-        # factor (self.nel-2)/self.nel 
-        fac = 2.*(self.nel-2.)/self.nel
+        # factor (self.nel-2)/self.nel
+        fac = 2
         RPA2Body = fac*ctf.einsum("opqrsq->oprs", integrals)
         return RPA2Body
 
@@ -417,7 +406,6 @@ class UEG:
     def threeBodyIntContr2Diag(self, cutoff=30):
         p = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         q = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
-        print(p)
         tp_pi = ctf.astensor(p)
         tq_qi = ctf.astensor(q)
         tp_q_pqi = ctf.tensor([len(p),len(q),3])
@@ -440,21 +428,111 @@ class UEG:
 
         UpqUpo = ctf.einsum("pq,po->pqo",tUp_q_pq,tUp_q_pq)
         # factor 2 from sum over spin
-        excE = -2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/self.Omega**2 
+        excE = -2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/self.Omega**2
         result = dirE+excE
         print("dirE,excE=",dirE,excE)
 
         return result
 
+    def threeBodyIntContr2OneBody(self):
+        """
+            This function make two contractions in the 3-body integrals,
+            resulting in one body energies, which should be added to the
+            original one-particle energies from the HF theory
+
+            return: a numpy array of size equal to the number of plane waves
+        """
+        # some constants
+        num_o = self.nel/2
+        num_v = len(self.basis_fns)/2-num_o
+        num_p = num_o + num_p
+
+        # initial the one_particle_energies
+        one_particle_energies = np.zeros(num_p)
+        e_perl = np.zeros(num_p)
+
+        # generate p vectors
+        k_vec_p = np.array([self.basis_fns[i*2].kp for i in range(int(len(self.basis_fns)/2))])
+        k_vec_i = np.array([self.basis_fns[i*2].kp for i in range(int(len(self.nel)/2))])
+
+        # the perl shape diagram
+        for orb_p in range(num_p):
+            k_vec_p_minus_i = k_vec_p[orb_p] - k_vec_i
+            k_vec_p_minus_i_square = np.einsum("ij, ij-> i", k_vec_p_minus_i, k_vec_p_minus_i)
+            e_perl[orb_p] = np.sum(self.correlator(k_vec_p_minus_i_square)**2\
+                                   *k_vec_p_minus_i_square)
+
+        e_perl = -2.0*self.nel/self.Omega**2 * e_perl
+
+        one_particle_energies += e_perl
+
+        # wave diagram
+        e_wave = np.zeros(num_p)
+        t_diff_vec_pi_pij = ctf.tensor([num_p, num_i, 3])
+        t_diff_vec_pi_pij.i("pij") << ctf.astensor(k_vec_p).i("pj")-ctf.astensor(k_vec_i).i("ij")
+        t_diff_vec_pi_square_pi = ctf.einsum("pij,pij -> pi", t_diff_vec_pi_pij, \
+                                             t_diff_vec_pi_pij)
+        t_diff_pi_dot_diff_pj_pij = ctf.einsum("pik, pjk -> pij", t_diff_vec_pi_pij, \
+                                               t_diff_vec_pi_pij)
+        diff_pi_square = t_diff_vec_pi_square_pi.to_nparray().reshape(num_p*num_o)
+        u_diff_pi = self.correlator(diff_pi_square).reshape(num_p, num_o)
+        t_u_diff_pi_multiply_u_diff_pj_pij = ctf.einsum("pi,pj->pij", u_diff_pi, u_diff_pi)
+        e_wave = ctf.einsum("pij,pij->p", t_diff_pi_dot_diff_pj_pij, \
+                            t_u_diff_pi_multiply_u_diff_pj_pij)
+
+        e_wave = e_wave * 2 / self.Omega**2
+
+        one_particle_energies += e_wave
 
 
 
-    def yukawa(self, kSquare, multKSquare=False):
+        # shield diagram, which is independent of vector p. So initialize as
+        # ones
+
+        e_shield = np.ones(num_p)
+        t_diff_vec_ij_ijk = ctf.tensor([num_i, num_i, 3])
+        t_diff_vec_ij_ijk.i("ijk") << ctf.astensor(k_vec_i).i("ik")-ctf.astensor(k_vec_i).i("jk")
+        t_diff_vec_ij_square_ij = ctf.einsum("ijk,ijk -> ij", t_diff_vec_ij_ijk, t_diff_vec_ij_ijk)
+        diff_ij_square = t_diff_vec_ij_square_ij.to_nparray().reshape(num_i*num_i)
+        u_diff_ij = self.correlator(diff_ij_square).reshape(num_i,num_i)
+        u_diff_ij_square = u_diff_ij**2
+        e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
+        e_shield = e_shield / self.Omega**2
+
+        one_particle_energies += e_shield
+
+        # frog diagram (there are two types which turn out to be the same, so
+        # a factor of 4 will be multiplied in the end)
+        e_frog = np.zeros(num_p)
+        # Using -(p-i) as vector (i-p), pay attention to the exchange of p and
+        # i indices
+        t_diff_ij_dot_diff_ip_ijp = ctf.einsum("ijk, pik -> ijp", t_diff_vec_ij_ijk, -t_diff_vec_pi_pij)
+
+        t_u_diff_ij_multiply_u_diff_ip_ijp = ctf.einsum("ij,pi->ijp", u_diff_ij, u_diff_pi)
+        e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, t_u_diff_ij_multiply_u_diff_ip_ijp)
+
+        e_frog = e_frog * 4 / self.Omega**2
+
+        one_particle_energies += e_frog
+
+
+
+        return one_particle_energies
+
+    # collection of correlators, should them be collected into a class?
+    # each correlator has some default parameters that are dependent on
+    # the system and they are specific to UEG, so they should be part of
+    # the UEG class.
+
+    def gaskell(self, kSquare, mu):
+        return
+
+    def yukawa(self, kSquare, multiply_by_k_square=False):
         '''
         The G=0 terms need more consideration
         '''
         if self.gamma is None:
-            rho = self.nel / self.Omega 
+            rho = self.nel / self.Omega
             gamma = np.sqrt(4.* np.pi * rho)
             #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
         else:
@@ -465,7 +543,7 @@ class UEG:
             kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma**2)
         else:
             kCutoffDenom = 1e-12
-        if not multKSquare:
+        if not multiply_by_k_square:
             b = kSquare*(kSquare+gamma**2)
             result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>kCutoffDenom)
         else:
@@ -477,49 +555,49 @@ class UEG:
         return result
 
 
-    def trunc(self, kSquare, multKSquare=False):
+    def trunc(self, kSquare, multiply_by_k_square=False):
         '''
         The G=0 terms need more consideration
         '''
         if self.kCutoff is None:
-            self.kCutoff = int(ceil(np.sqrt(self.cutoff)))
+            self.kCutoff = int(np.ceil(np.sqrt(self.cutoff)))
 
         if self.gamma is None:
             self.gamma = 1.0
-        
+
         kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
         #kCutoffSquare = self.kCutoff**2
         #if (kSquare <= ktc_cutoffSquare):
         #    result = 0.
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
-        
-        if type(kSquare) is not np.ndarray:
+
+        if isinstance(kSquare, np.ndarray):
             if kSquare <= kCutoffSquare*(1+0.00001):
                 kSquare = 0.
         else:
             kSquare[kSquare <= kCutoffSquare*(1+0.00001)] = 0.
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
-                where=kSquare>1e-12)
+                where=(kSquare > 1e-12))
         return result*self.gamma
 
-    def smooth(self, kSquare, multKSquare=False):
+    def smooth(self, kSquare, multiply_by_k_square=False):
         '''
         The G=0 terms need more consideration
         '''
         if self.kCutoff is None:
-            self.kCutoff = int(ceil(np.sqrt(self.cutoff)))
+            self.kCutoff = int(np.ceil(np.sqrt(self.cutoff)))
 
         if self.gamma is None:
             self.gamma = 0.01
-        
+
         kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
         #kCutoffSquare = self.kCutoff**2
         #if (kSquare <= ktc_cutoffSquare):
         #    result = 0.
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
-        
+
         #result = np.divide(-4.*np.pi*applyErf(kSquare,kCutoffSquare), kSquare**2, \
         #        out = np.zeros_like(kSquare), where=kSquare>1e-12)
         kc = np.sqrt(kCutoffSquare)
@@ -528,7 +606,7 @@ class UEG:
                 out = np.zeros_like(kSquare), where=kSquare>(kc*self.gamma)**2)
         return result
 
-    def coulomb(self, kSquare, multKSquare=False):
+    def coulomb(self, kSquare, multiply_by_k_square=False):
         '''
         The G=0 terms need more consideration
         '''
@@ -536,13 +614,12 @@ class UEG:
             gamma = 1.
         else:
             gamma = self.gamma
-        result = np.divide(-4.*np.pi*gamma, kSquare, out = np.zeros_like(kSquare),\
-                where=kSquare>1e-12)
+        result = np.divide(-4.*np.pi*gamma, kSquare, out = np.zeros_like(kSquare), where=kSquare>1e-12)
         return result
 
-    def stg(self,kSquare,multKSquare=False):
+    def stg(self,kSquare,multiply_by_k_square=False):
         if self.gamma is None:
-            rho = self.nel / self.Omega 
+            rho = self.nel / self.Omega
             gamma = np.sqrt(4.* np.pi * rho)
             #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
         else:
@@ -553,18 +630,19 @@ class UEG:
             kCutoffDenom = (kCutoffSquare + gamma**2)**2
         else:
             kCutoffDenom = 1e-12
-        if not multKSquare:
+        if not multiply_by_k_square:
             b = (kSquare+gamma**2)**2
             result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>kCutoffDenom)
 
         return result
 
 
+    # interface to CC4S, for test purpose only, not essential
 
     def calcGamma(self, overlap_basis, nP):
         '''
         FTOD : Fourier Transformed Overlap Density
-        C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}} 
+        C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}
         '''
         algoName = "UEG.calcGamma"
         if self.basis_fns == None:
@@ -572,7 +650,7 @@ class UEG:
 
         nG = int(len(overlap_basis)/2)
         gamma_pqG = np.zeros((nP,nP,nG))
-    
+
         for p in range(0,nP,1):
             for q in range(0,nP,1):
                 for g in range(0,nG,1):
