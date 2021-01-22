@@ -572,7 +572,7 @@ class UEG:
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
 
-        if isinstance(kSquare, np.ndarray):
+        if not isinstance(kSquare, np.ndarray):
             if kSquare <= kCutoffSquare*(1+0.00001):
                 kSquare = 0.
         else:
