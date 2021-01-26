@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import numpy as np
 from pymes.basis_set import planewave
@@ -7,21 +8,21 @@ from scipy import special
 
 
 
-def applyErf(k,kc,sigma=0.01):
-    if type(k) is not np.ndarray:
-        return uErf(k,kc,sigma)
-    else:
-        return np.array([uErf(el,kc,sigma) for el in np.nditer(k)])
-
 class UEG:
 
     def __init__(self, nel, nalpha, nbeta, rs):
         #: number of electrons
-        self.nel = nel
+        if (nel) % 2 != 0:
+            warnings.warn("The number of electrons is not even, currently only\
+                          closed shell systems are supported!")
+        self.nel = int(nel)
         #: number of alpha (spin-up) electrons
-        self.nalpha = nalpha
+        self.nalpha = int(nalpha)
         #: number of beta (spin-down) electrons
-        self.nbeta = nbeta
+        self.nbeta = int(nbeta)
+        if self.nalpha != self.nbeta:
+            warnings.warn("The number of electrons is not even, currently only\
+                          closed shell systems are supported!")
         #: electronic density
         self.rs = rs
         #: length of the cubic simulation cell containing nel electrons
@@ -329,7 +330,7 @@ class UEG:
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
                                         - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
-                                        - (self.nel )*dkSquare*correlator(dkSquare)**2/self.Omega\
+                                        - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega\
                                         + 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
                                         - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp - dKVec, dKVec)\
                                         + 2.*self.contractP_KWithQ(self.basis_fns[2*p].kp, dKVec)
@@ -403,7 +404,11 @@ class UEG:
         return result
 
 
-    def threeBodyIntContr2Diag(self, cutoff=30):
+    def triple_contractions_in_3_body(self):
+        """
+        This function computes the doubly contracted 3-body interactions.
+        Return: a scalar (float) which should be added to the total energy
+        """
         p = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         q = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         tp_pi = ctf.astensor(p)
@@ -412,19 +417,19 @@ class UEG:
         tp_q_pqi.i("pqi") << tp_pi.i("pi")-tq_qi.i("qi")
         tp_qSquare_pq = ctf.einsum("pqi,pqi->pq", tp_q_pqi, tp_q_pqi)
 
-        p_qSquare = tp_qSquare_pq.to_nparray().reshape(len(q)**2)
+        p_qSquare = tp_qSquare_pq.to_nparray()
         up_q = self.correlator(p_qSquare)
-        tUp_q_pq = ctf.astensor(up_q.reshape((len(q),len(q))))
+
         dirE = up_q**2*p_qSquare
-        dirE = sum(dirE) * self.nel/2/self.Omega**2
+        dirE = sum(sum(dirE)) * self.nel/2/self.Omega**2
         # factor 2 comes from sum over spins
         dirE = dirE*2
 
         # exchange type
+        tUp_q_pq = ctf.astensor(up_q)
         tp_o_poi = ctf.tensor([len(p),len(q),3])
         tp_o_poi.i("poi") << tp_pi.i("pi")-tq_qi.i("oi")
         tp_oDotp_q = ctf.einsum("poi,pqi->pqo", tp_o_poi, tp_q_pqi)
-        #p_oDotp_q = tp_oDotp_q.to_nparray().reshape(len(q)**3)
 
         UpqUpo = ctf.einsum("pq,po->pqo",tUp_q_pq,tUp_q_pq)
         # factor 2 from sum over spin
@@ -434,7 +439,7 @@ class UEG:
 
         return result
 
-    def threeBodyIntContr2OneBody(self):
+    def double_contractions_in_3_body(self):
         """
             This function make two contractions in the 3-body integrals,
             resulting in one body energies, which should be added to the
@@ -443,9 +448,10 @@ class UEG:
             return: a numpy array of size equal to the number of plane waves
         """
         # some constants
-        num_o = self.nel/2
-        num_v = len(self.basis_fns)/2-num_o
-        num_p = num_o + num_p
+
+        num_o = int(self.nel/2)
+        num_v = int(len(self.basis_fns)/2)-num_o
+        num_p = num_o + num_v
 
         # initial the one_particle_energies
         one_particle_energies = np.zeros(num_p)
@@ -453,7 +459,7 @@ class UEG:
 
         # generate p vectors
         k_vec_p = np.array([self.basis_fns[i*2].kp for i in range(int(len(self.basis_fns)/2))])
-        k_vec_i = np.array([self.basis_fns[i*2].kp for i in range(int(len(self.nel)/2))])
+        k_vec_i = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
 
         # the perl shape diagram
         for orb_p in range(num_p):
@@ -468,21 +474,21 @@ class UEG:
 
         # wave diagram
         e_wave = np.zeros(num_p)
-        t_diff_vec_pi_pij = ctf.tensor([num_p, num_i, 3])
+        t_diff_vec_pi_pij = ctf.tensor([num_p, num_o, 3])
         t_diff_vec_pi_pij.i("pij") << ctf.astensor(k_vec_p).i("pj")-ctf.astensor(k_vec_i).i("ij")
         t_diff_vec_pi_square_pi = ctf.einsum("pij,pij -> pi", t_diff_vec_pi_pij, \
                                              t_diff_vec_pi_pij)
         t_diff_pi_dot_diff_pj_pij = ctf.einsum("pik, pjk -> pij", t_diff_vec_pi_pij, \
                                                t_diff_vec_pi_pij)
-        diff_pi_square = t_diff_vec_pi_square_pi.to_nparray().reshape(num_p*num_o)
-        u_diff_pi = self.correlator(diff_pi_square).reshape(num_p, num_o)
+        diff_pi_square = t_diff_vec_pi_square_pi.to_nparray()
+        u_diff_pi = self.correlator(diff_pi_square)
         t_u_diff_pi_multiply_u_diff_pj_pij = ctf.einsum("pi,pj->pij", u_diff_pi, u_diff_pi)
         e_wave = ctf.einsum("pij,pij->p", t_diff_pi_dot_diff_pj_pij, \
                             t_u_diff_pi_multiply_u_diff_pj_pij)
 
         e_wave = e_wave * 2 / self.Omega**2
 
-        one_particle_energies += e_wave
+        one_particle_energies += e_wave.to_nparray()
 
 
 
@@ -490,11 +496,11 @@ class UEG:
         # ones
 
         e_shield = np.ones(num_p)
-        t_diff_vec_ij_ijk = ctf.tensor([num_i, num_i, 3])
+        t_diff_vec_ij_ijk = ctf.tensor([num_o, num_o, 3])
         t_diff_vec_ij_ijk.i("ijk") << ctf.astensor(k_vec_i).i("ik")-ctf.astensor(k_vec_i).i("jk")
         t_diff_vec_ij_square_ij = ctf.einsum("ijk,ijk -> ij", t_diff_vec_ij_ijk, t_diff_vec_ij_ijk)
-        diff_ij_square = t_diff_vec_ij_square_ij.to_nparray().reshape(num_i*num_i)
-        u_diff_ij = self.correlator(diff_ij_square).reshape(num_i,num_i)
+        diff_ij_square = t_diff_vec_ij_square_ij.to_nparray()
+        u_diff_ij = self.correlator(diff_ij_square)
         u_diff_ij_square = u_diff_ij**2
         e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
         e_shield = e_shield / self.Omega**2
@@ -506,14 +512,18 @@ class UEG:
         e_frog = np.zeros(num_p)
         # Using -(p-i) as vector (i-p), pay attention to the exchange of p and
         # i indices
-        t_diff_ij_dot_diff_ip_ijp = ctf.einsum("ijk, pik -> ijp", t_diff_vec_ij_ijk, -t_diff_vec_pi_pij)
+        t_diff_ij_dot_diff_ip_ijp = ctf.einsum("ijk, pik -> ijp", \
+                                               t_diff_vec_ij_ijk, \
+                                               -t_diff_vec_pi_pij)
 
-        t_u_diff_ij_multiply_u_diff_ip_ijp = ctf.einsum("ij,pi->ijp", u_diff_ij, u_diff_pi)
-        e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, t_u_diff_ij_multiply_u_diff_ip_ijp)
+        t_u_diff_ij_multiply_u_diff_ip_ijp = ctf.einsum("ij,pi->ijp", u_diff_ij,\
+                                                        u_diff_pi)
+        e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, \
+                            t_u_diff_ij_multiply_u_diff_ip_ijp)
 
         e_frog = e_frog * 4 / self.Omega**2
 
-        one_particle_energies += e_frog
+        one_particle_energies += e_frog.to_nparray()
 
 
 
@@ -642,7 +652,7 @@ class UEG:
     def calcGamma(self, overlap_basis, nP):
         '''
         FTOD : Fourier Transformed Overlap Density
-        C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}
+        return: C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}
         '''
         algoName = "UEG.calcGamma"
         if self.basis_fns == None:
