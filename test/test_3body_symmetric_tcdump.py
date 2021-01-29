@@ -78,8 +78,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
                                 nSpatialOrb,nSpatialOrb], sp=tV_opqrst.sp)
     print("symmetrizing 3-body integral")
     print("size of 3-body integral=", tV_sym_opqrst.size)
-    tV_sym_opqrst.i("opqrst") <<  tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
-                                     +tV_opqrst.i("qpotsr")
+    tV_sym_opqrst.i("opqrst") <<  1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
+                                     +tV_opqrst.i("qpotsr"))
 
     print("Writing 3-body integrals into TCDUMP")
     tcdump.write2Tcdump(tV_sym_opqrst)
