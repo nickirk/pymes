@@ -27,5 +27,4 @@ def write2Tcdump(integrals, dtype='r'):
                         str(j+1)+" "+str(k+1)+" "+str(a+1)+" "+str(b+1)+" "\
                         +str(c+1)+"\n")
         f.close()
-    
     return

@@ -153,12 +153,12 @@ class UEG:
                             .format(time.time()-startTime, o, \
                             o+world.np() if o+world.np() < nP else nP, nP))
             for r in range(nP):
-                kIntVec1 = self.basis_fns[2*o].k - self.basis_fns[2*r].k
+                kIntVec1 = self.basis_fns[2*r].k - self.basis_fns[2*o].k
                 for p in range(nP):
                     for s in range(nP):
                         kIntVec2 = self.basis_fns[2*p].k - self.basis_fns[2*s].k
                         for q in range(nP):
-                            tIntVec = kIntVec1 + kIntVec2 + self.basis_fns[2*q].k
+                            tIntVec = -kIntVec1 + kIntVec2 + self.basis_fns[2*q].k
                             locT = numKInEachDir**2 * (tIntVec[0] + self.imax) + \
                                     numKInEachDir * (tIntVec[1] + self.imax) +\
                                     tIntVec[2] + self.imax
@@ -169,22 +169,21 @@ class UEG:
                             else:
                                 continue
 
-                            kVec1 = -2.0*np.pi/self.L*kIntVec1
-                            kVec2 = -2.0*np.pi/self.L*kIntVec2
-                            kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
-
+                            kVec1 = 2.0*np.pi/self.L*kIntVec1
+                            kVec2 = 2.0*np.pi/self.L*kIntVec2
+                            #kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
 
                             w12 = self.correlator(kVec1.dot(kVec1)) \
                                     * self.correlator(kVec2.dot(kVec2))\
                                     * kVec1.dot(kVec2)
-                            w13 = self.correlator(kVec1.dot(kVec1))\
-                                    * self.correlator(kVec3.dot(kVec3))\
-                                    * kVec1.dot(kVec3)
-                            w23 = self.correlator(kVec2.dot(kVec2))\
-                                    * self.correlator(kVec3.dot(kVec3))\
-                                    * kVec2.dot(kVec3)
-                            w = (w12+w13+w23) / self.Omega**2
-                            #w = (w12) / self.Omega**2
+                            #w13 = self.correlator(kVec1.dot(kVec1))\
+                            #        * self.correlator(kVec3.dot(kVec3))\
+                            #        * kVec1.dot(kVec3)
+                            #w23 = self.correlator(kVec2.dot(kVec2))\
+                            #        * self.correlator(kVec3.dot(kVec3))\
+                            #        * kVec2.dot(kVec3)
+                            #w = (w12+w13+w23) / self.Omega**2
+                            w = -(w12) / 2./ self.Omega**2
                             index = o*nP**5+p*nP**4+q*nP**3+r*nP**2+s*nP+t
 
                             values.append(w)
@@ -199,7 +198,7 @@ class UEG:
 
 
 
-    def eval2BodyIntegrals(self, correlator = None, rpaApprox= True, \
+    def eval2BodyIntegrals(self, correlator = None, rpaApprox= False, \
             only2Body=False,onlyNonHermitian2Body=False,onlyHermitian2Body=False,\
             effective2Body= False, dtype=np.float64,sp=1):
         world = ctf.comm()
@@ -423,17 +422,14 @@ class UEG:
         dirE = up_q**2*p_qSquare
         dirE = sum(sum(dirE)) * self.nel/2/self.Omega**2
         # factor 2 comes from sum over spins
-        dirE = dirE*2
 
         # exchange type
         tUp_q_pq = ctf.astensor(up_q)
-        tp_o_poi = ctf.tensor([len(p),len(q),3])
-        tp_o_poi.i("poi") << tp_pi.i("pi")-tq_qi.i("oi")
-        tp_oDotp_q = ctf.einsum("poi,pqi->pqo", tp_o_poi, tp_q_pqi)
+        tp_oDotp_q = ctf.einsum("poi,pqi->pqo", tp_q_pqi, tp_q_pqi)
 
         UpqUpo = ctf.einsum("pq,po->pqo",tUp_q_pq,tUp_q_pq)
-        # factor 2 from sum over spin
-        excE = -2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/self.Omega**2
+        # factor 2 from sum over spin, another factor of 2 from mirror symmetry
+        excE = -2*2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/2./self.Omega**2
         result = dirE+excE
         print("dirE,excE=",dirE,excE)
 
@@ -453,7 +449,7 @@ class UEG:
         num_v = int(len(self.basis_fns)/2)-num_o
         num_p = num_o + num_v
 
-        # initial the one_particle_energies
+        # initialize the one_particle_energies
         one_particle_energies = np.zeros(num_p)
         e_perl = np.zeros(num_p)
 
@@ -468,7 +464,7 @@ class UEG:
             e_perl[orb_p] = np.sum(self.correlator(k_vec_p_minus_i_square)**2\
                                    *k_vec_p_minus_i_square)
 
-        e_perl = -2.0*self.nel/self.Omega**2 * e_perl
+        e_perl = 2.0*self.nel/self.Omega**2 * e_perl
 
         one_particle_energies += e_perl
 
@@ -486,7 +482,7 @@ class UEG:
         e_wave = ctf.einsum("pij,pij->p", t_diff_pi_dot_diff_pj_pij, \
                             t_u_diff_pi_multiply_u_diff_pj_pij)
 
-        e_wave = e_wave * 2 / self.Omega**2
+        e_wave = -e_wave * 2 / self.Omega**2
 
         one_particle_energies += e_wave.to_nparray()
 
@@ -521,7 +517,7 @@ class UEG:
         e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, \
                             t_u_diff_ij_multiply_u_diff_ip_ijp)
 
-        e_frog = e_frog * 4 / self.Omega**2
+        e_frog = -e_frog * 4 / self.Omega**2
 
         one_particle_energies += e_frog.to_nparray()
 
