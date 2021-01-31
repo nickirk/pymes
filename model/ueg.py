@@ -3,6 +3,7 @@ import warnings
 
 import numpy as np
 from pymes.basis_set import planewave
+from pymes.logging import print_logging_info
 import ctf
 from scipy import special
 
@@ -123,19 +124,18 @@ class UEG:
             raise BasisSetNotInitialized(algoName)
         if correlator is None:
             self.correlator = self.trunc
-            if rank == 0:
-                print("\tNo correlator given.")
-                print("\tUsing the default correlator: "+self.correlator.__name__)
+            print_logging_info("No correlator given.", level=1)
+            print_logging_info("Using the default correlator: "\
+                               +self.correlator.__name__, level=1)
         else:
             self.correlator = correlator
         if self.basis_indices_map is None:
             raise BasisFuncIndicesMapNotInitialised(algoName)
 
-        if rank == 0:
-            print(algoName)
-            print("\tUsing TC method")
-            print("\tUsing correlator:",correlator.__name__)
-            print("\tkCutoff in correlator:",self.kCutoff)
+        print_logging_info(algoName)
+        print_logging_info("Using TC method", level=1)
+        print_logging_info("Using correlator:",correlator.__name__, level=1)
+        print_logging_info("kCutoff in correlator:",self.kCutoff,level=1)
 
         nP = int(len(self.basis_fns)/2)
         tV_opqrst = ctf.tensor([nP,nP,nP,nP,nP,nP], dtype=dtype, sp=sp)
@@ -148,48 +148,47 @@ class UEG:
 
         for o in range(nP):
             if (o) % world.np() == rank:
-                if rank == 0:
-                    print("\tElapsed time={:.3f} s: calculating the {}-{} out of {} orbitals"\
+                print_logging_info("Elapsed time = {:.3f} s: calculating the {}-{} out of {} orbitals"\
                             .format(time.time()-startTime, o, \
-                            o+world.np() if o+world.np() < nP else nP, nP))
-            for r in range(nP):
-                kIntVec1 = self.basis_fns[2*r].k - self.basis_fns[2*o].k
-                for p in range(nP):
-                    for s in range(nP):
-                        kIntVec2 = self.basis_fns[2*p].k - self.basis_fns[2*s].k
-                        for q in range(nP):
-                            tIntVec = -kIntVec1 + kIntVec2 + self.basis_fns[2*q].k
-                            locT = numKInEachDir**2 * (tIntVec[0] + self.imax) + \
-                                    numKInEachDir * (tIntVec[1] + self.imax) +\
-                                    tIntVec[2] + self.imax
-                            if locT < len(self.basis_indices_map) and locT >= 0:
-                                t = int(self.basis_indices_map[locT])
-                                if t < 0:
+                            o+world.np() if o+world.np() < nP else nP, nP),level=1)
+                for r in range(nP):
+                    kIntVec1 = self.basis_fns[2*r].k - self.basis_fns[2*o].k
+                    for p in range(nP):
+                        for s in range(nP):
+                            kIntVec2 = self.basis_fns[2*p].k - self.basis_fns[2*s].k
+                            for q in range(nP):
+                                tIntVec = -kIntVec1 + kIntVec2 + self.basis_fns[2*q].k
+                                locT = numKInEachDir**2 * (tIntVec[0] + self.imax) + \
+                                        numKInEachDir * (tIntVec[1] + self.imax) +\
+                                        tIntVec[2] + self.imax
+                                if locT < len(self.basis_indices_map) and locT >= 0:
+                                    t = int(self.basis_indices_map[locT])
+                                    if t < 0:
+                                        continue
+                                else:
                                     continue
-                            else:
-                                continue
 
-                            kVec1 = 2.0*np.pi/self.L*kIntVec1
-                            kVec2 = 2.0*np.pi/self.L*kIntVec2
-                            #kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
+                                kVec1 = 2.0*np.pi/self.L*kIntVec1
+                                kVec2 = 2.0*np.pi/self.L*kIntVec2
+                                #kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
 
-                            w12 = self.correlator(kVec1.dot(kVec1)) \
-                                    * self.correlator(kVec2.dot(kVec2))\
-                                    * kVec1.dot(kVec2)
-                            #w13 = self.correlator(kVec1.dot(kVec1))\
-                            #        * self.correlator(kVec3.dot(kVec3))\
-                            #        * kVec1.dot(kVec3)
-                            #w23 = self.correlator(kVec2.dot(kVec2))\
-                            #        * self.correlator(kVec3.dot(kVec3))\
-                            #        * kVec2.dot(kVec3)
-                            #w = (w12+w13+w23) / self.Omega**2
-                            w = -(w12) / 2./ self.Omega**2
-                            index = o*nP**5+p*nP**4+q*nP**3+r*nP**2+s*nP+t
+                                w12 = self.correlator(kVec1.dot(kVec1)) \
+                                        * self.correlator(kVec2.dot(kVec2))\
+                                        * kVec1.dot(kVec2)
+                                #w13 = self.correlator(kVec1.dot(kVec1))\
+                                #        * self.correlator(kVec3.dot(kVec3))\
+                                #        * kVec1.dot(kVec3)
+                                #w23 = self.correlator(kVec2.dot(kVec2))\
+                                #        * self.correlator(kVec3.dot(kVec3))\
+                                #        * kVec2.dot(kVec3)
+                                #w = (w12+w13+w23) / self.Omega**2
+                                w = -(w12) / 2./ self.Omega**2
+                                index = o*nP**5+p*nP**4+q*nP**3+r*nP**2+s*nP+t
 
-                            values.append(w)
-                            indices.append(index)
-                            if index >= nP**6:
-                                print("Index exceeds size of the tensor")
+                                values.append(w)
+                                indices.append(index)
+                                if index >= nP**6:
+                                    raise("Index exceeds size of the tensor")
 
         tV_opqrst.write(indices,values)
 
@@ -206,22 +205,22 @@ class UEG:
         startTime = time.time()
 
         rank = world.rank()
-        if rank == 0:
-            print(algoName)
+        print_logging_info(algoName)
 
         if self.basis_fns == None:
             raise BasisSetNotInitialized(algoName)
 
         if correlator is not None:
             self.correlator = correlator
-            if rank == 0:
-                print("\tUsing TC method")
-                print("\tUsing correlator:",correlator.__name__)
-                print("\tkCutoff in correlator:",self.kCutoff)
-                print("\tGamma in correlator:",self.gamma)
-                print("\tIncluding only 2-body terms:", only2Body)
-                print("\tIncluding only RPA approximation for 3-body:",rpaApprox)
-                print("\tIncluding approximate 2-body terms from 3-body:", effective2Body)
+            print_logging_info("Using TC method", level=1)
+            print_logging_info("Using correlator:", correlator.__name__, level=1)
+            print_logging_info("kCutoff in correlator:", self.kCutoff, level=1)
+            print_logging_info("Gamma in correlator:", self.gamma, level=1)
+            print_logging_info("Including only 2-body terms:", only2Body, level=1)
+            print_logging_info("Including only RPA approximation for 3-body:",\
+                               rpaApprox, level=1)
+            print_logging_info("Including approximate 2-body terms from 3-body:"\
+                               , effective2Body, level=1)
 
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
@@ -233,10 +232,10 @@ class UEG:
 
         for p in range(nP):
             if (p) % world.np() == rank:
-                if rank == 0:
-                    print("\tElapsed time={:.3f} s: calculating the {}-{} out of {} orbitals"\
-                            .format(time.time()-startTime, p, \
-                            p+world.np() if p+world.np() < nP else nP, nP))
+                print_logging_info("Elapsed time = {:.3f} s: calculating the {}-{} out of {} orbitals"\
+                                   .format(time.time()-startTime, p, \
+                                    p+world.np() if p+world.np() < nP else nP, \
+                                    nP), level=1)
                 for r in range(nP):
                     dIntK = self.basis_fns[p*2].k-self.basis_fns[r*2].k
                     dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
@@ -408,6 +407,9 @@ class UEG:
         This function computes the doubly contracted 3-body interactions.
         Return: a scalar (float) which should be added to the total energy
         """
+        algo_name = "triple_contractions_in_3_body"
+        print_logging_info(algo_name)
+
         p = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         q = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         tp_pi = ctf.astensor(p)
@@ -431,7 +433,7 @@ class UEG:
         # factor 2 from sum over spin, another factor of 2 from mirror symmetry
         excE = -2*2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/2./self.Omega**2
         result = dirE+excE
-        print("dirE,excE=",dirE,excE)
+        print_logging_info("dirE,excE=", dirE, excE, level=1)
 
         return result
 
