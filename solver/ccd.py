@@ -4,6 +4,7 @@ import ctf
 from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
+from pymes.logging import print_logging_info
 
 def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, amps=None, bruekner=False, epsilonE=1e-8):
     '''
@@ -23,7 +24,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     # if use Bruekner method, backup the hole and particle energies
     tEpsilonOriginal_i = tEpsilon_i.copy()
     tEpsilonOriginal_a = tEpsilon_a.copy()
-    
+
     # parameters
     levelShift = levelShift
     maxIter = maxIter
@@ -51,17 +52,24 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     tV_iajb = tV_pqrs[:no,no:,:no,no:]
     tV_abij = tV_pqrs[no:,no:,:no,:no]
     tV_abcd = tV_pqrs[no:,no:,no:,no:]
-    
-    
+
+
+    print_logging_info(algoName)
+    print_logging_info("Using DCD: " , fDcd, level=1)
+    print_logging_info("Solving doubles amplitude equation", level=1)
+    print_logging_info("Using data type %s" % tV_pqrs.dtype, level=1)
+    print_logging_info("Using DIIS mixer: ", fDiis, level=1)
+    print_logging_info("Using Bruekner quasi-particle energy: ", bruekner, level=1)
+    print_logging_info("Iteration = 0", level=1)
     eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, levelShift, sp=sp)
     if amps is not None:
         tT_abij = amps
 
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp) 
+    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp)
     # the following ctf expression calcs the outer sum, as wanted.
     tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
             -tEpsilon_a.i("a")-tEpsilon_a.i("b")
-    #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1) 
+    #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
     tD_abij = 1./(tD_abij+levelShift)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
@@ -71,13 +79,6 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     eCcd = 0.
     eDirCcd = 0.
     eExCcd = 0.
-    if world.rank() == 0:
-        print(algoName)
-        print("\tUsing DCD: " , fDcd)
-        print("\tSolving doubles amplitude equation")
-        print("\tUsing data type %s" % tV_pqrs.dtype)
-        print("\tUsing DIIS mixer: ", fDiis)
-        print("\tUsing Bruekner quasi-particle energy: ", bruekner)
     residules = []
     amps = []
     mixSize = 4
@@ -117,33 +118,28 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
 
         l1NormT2 = ctf.norm(tT_abij)
 
-        if iteration < maxIter:
-            if world.rank() == 0:
-                print("\tIteration =", iteration)
-                print("\t\tCorrelation Energy =", eCcd)
-                print("\t\tdE =", dE)
-                print("\t\tL1 Norm of T2 =", l1NormT2)
+        if iteration <= maxIter:
+            print_logging_info("Iteration = ", iteration, level=1)
+            print_logging_info("Correlation Energy = {:.8f}".format(eCcd), level=2)
+            print_logging_info("dE = {:.8e}".format(dE), level=2)
+            print_logging_info("L1 Norm of T2 = {:.8f}".format(l1NormT2), level=2)
         else:
-            if world.rank() == 0:
-                print("A converged solution is not found!")
+            print_logging_info("A converged solution is not found!", level=1)
 
+    print_logging_info("Direct contribution = {:.8f}".format(np.real(eDirCcd)),level=1)
+    print_logging_info("Exchange contribution = {:.8f}".format(np.real(eExCcd)),level=1)
+    print_logging_info("CCD correlation energy = {:.8f}".format(eCcd),level=1)
+    print_logging_info("{:.3f} seconds spent on CCD".format((time.time()-timeCcd)),level=1)
 
-    
-    if world.rank() == 0:
-        print("\tDirect contribution =",np.real(eDirCcd))
-        print("\tExchange contribution =", np.real(eExCcd))
-        print("\tCCD correlation energy =",eCcd)
-        print("\t%f.3 seconds spent on CCD" % (time.time()-timeCcd))
-
-    return [eCcd, tT_abij, tEpsilon_i, tEpsilon_a]
-
+    return {"ccd e": eCcd, "t2 amp": tT_abij, "hole e": tEpsilon_i, "particle e":\
+            tEpsilon_a, "dE": dE}
 def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_iajb, \
         tV_iabj, tV_abcd, fDcd, bruekner):
 
     algoName = "ccd.getResidual"
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
-    tR_abij = ctf.tensor([nv,nv,no,no],dtype=tV_klij.dtype,sp=tT_abij.sp) 
+    tR_abij = ctf.tensor([nv,nv,no,no],dtype=tV_klij.dtype,sp=tT_abij.sp)
 
     # tV_ijkl and tV_klij are not the same in transcorrelated Hamiltonian!
     tI_klij = ctf.tensor([no,no,no,no], dtype=tV_klij.dtype,sp=tT_abij.sp)
@@ -156,7 +152,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
         tI_klij += ctf.einsum("klcd, cdij -> klij", tV_ijab, tT_abij)
 
     tR_abij.i("abij") << tV_abij.i("abij") + tV_abcd.i("abcd") * tT_abij.i("cdij")\
-    + tI_klij.i("klij") * tT_abij.i("abkl") 
+    + tI_klij.i("klij") * tT_abij.i("abkl")
 
     if not fDcd:
         tX_alcj = ctf.einsum("klcd, adkj -> alcj", tV_ijab, tT_abij)
@@ -164,7 +160,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
 
 
 
-    # intermediates 
+    # intermediates
     # tTildeT_abij
     # tested using MP2 energy, the below tensor op is correct
     tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=tT_abij.dtype,sp=tT_abij.sp)
@@ -185,8 +181,8 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     tFock_ij.i("ii") << tEpsilon_i.i("i")
 
     if bruekner:
-        tX_ac = tFock_ab 
-        tX_ki = tFock_ij 
+        tX_ac = tFock_ab
+        tX_ki = tFock_ij
     else:
         tX_ac = tFock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
         tX_ki = tFock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
@@ -209,7 +205,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
         tEx_abij -= ctf.einsum("alci, cblj -> abij", tXai_aibj, tT_abij)
         tEx_abij += ctf.einsum("alci, bclj -> abij", tXai_aibj, tT_abij)
 
-    tEx_baji.i("baji") << tEx_abij.i("abij") 
+    tEx_baji.i("baji") << tEx_abij.i("abij")
     #tEx_baji.i("baji") << tX_ac.i("bc") * tT_abij.i("caji") \
     #                        - tX_ki.i("kj") * tT_abij.i("baki") \
     #                        - tV_iajb.i("kbjc") * tT_abij.i("caki")\
@@ -221,7 +217,7 @@ def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_i
     #tEx_baji.i("baji") << tEx_abij.i("abij")
 
     #tEx_abij.i("abij") << tEx_abij.i("abij") + tEx_abij.i("baji")
-    #print(testEx_abij - tEx_abij)
+    #print_logging_info(testEx_abij - tEx_abij)
     tR_abij += tEx_abij + tEx_baji
     #tR_abij += tEx_baji
 
@@ -231,6 +227,6 @@ def getEnergy(tT_abij, tV_ijab):
     '''
     calculate the CCD energy, using the converged amplitudes
     '''
-    tDirCcdE = 2. * ctf.einsum("abij, ijab ->", tT_abij, tV_ijab) 
+    tDirCcdE = 2. * ctf.einsum("abij, ijab ->", tT_abij, tV_ijab)
     tExCcdE  = -1. * ctf.einsum("abij, ijba ->", tT_abij, tV_ijab)
     return [tDirCcdE, tExCcdE]

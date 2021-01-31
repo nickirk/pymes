@@ -86,10 +86,10 @@ def main(nel, cutoff,rs, gamma, kc):
     time_pure_2_body_int = time.time()
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    ueg_model.kCutoff = kc
 
     print_title('Evaluating pure 2-body integrals','=')
-    print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
@@ -174,36 +174,51 @@ def main(nel, cutoff,rs, gamma, kc):
     print_logging_info("Starting MP2")
 
     mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
-    ccdE = 0.
-    dcdE = 0.
+    ccd_e = 0.
+    dcd_e = 0.
 
     print_logging_info("Starting CCD")
-    ccdE, ccdAmp, hole, particle = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    # unpacking
+    ccd_e = ccd_results["ccd e"]
+    ccd_amp = ccd_results["t2 amp"]
+    ccd_dE = ccd_results["dE"]
+
     print_logging_info("Starting DCD")
-    dcdE, dcdAmp, hole, particle = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True,amps=ccdAmp)
+    dcd_results = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True,amps=ccd_amp)
+    dcd_e = dcd_results["ccd e"]
+    dcd_amp = dcd_results["t2 amp"]
+    dcd_dE = dcd_results["dE"]
+
 
     print_title("Summary of results","=")
     print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
                         ueg_model.kCutoff))
     print_logging_info("HF E = {:.8f}".format(tEHF))
-    print_logging_info("CCD correlation E = {:.8f}".format(ccdE))
-    print_logging_info("DCD correlation E = {:.8f}".format(dcdE))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
     print_logging_info("3-body mean-field E = {:.8f}"\
                        .format(contr_from_triply_contra_3b))
-    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccdE+contr_from_triply_contra_3b))
-    print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcdE+contr_from_triply_contra_3b))
+    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
+    print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
+
+    ccd_t2_norm = ctf.norm(ccd_amp)
+    dcd_t2_norm = ctf.norm(dcd_amp)
 
     if world.rank() == 0:
-        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".tc.optKc.dat", "a")
+        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".scan.kc.dat", "a")
         f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
+                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2E)+"  "\
+                +str(ccd_e)+"  "+str(dcd_e)+" "+str(ccd_t2_norm)+" "+str(dcd_t2_norm)+\
+                " "+str(ccd_dE)+" "+str(dcd_dE)+"\n")
 
 if __name__ == '__main__':
-  #for gamma in None:
-  gamma = None
-  nel = 14
-  for rs in [0.5]:
-    for cutoff in [2]:
-      kCutoffFraction = None
-      main(nel,cutoff,rs, gamma, kCutoffFraction)
-  ctf.MPI_Stop()
+    #for gamma in None:
+    gamma = None
+    nel = 14
+    for rs in [0.5]:
+        for cutoff in [5]:
+            for n in range(1, 25):
+                kCutoffFraction = np.sqrt(n)
+                main(nel, cutoff, rs, gamma, kCutoffFraction)
+    ctf.MPI_Stop()

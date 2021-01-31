@@ -115,6 +115,7 @@ class UEG:
             full 3-body integrals.
         '''
         algoName = "UEG.eval3BodyIntegrals"
+        print_logging_info(algoName,level=0)
         startTime = time.time()
 
         world = ctf.comm()
@@ -192,6 +193,8 @@ class UEG:
 
         tV_opqrst.write(indices,values)
 
+        print_logging_info("{:.3f} s spent on ".format(time.time()-startTime)+algoName,\
+                           level=1)
 
         return tV_opqrst
 
@@ -205,7 +208,7 @@ class UEG:
         startTime = time.time()
 
         rank = world.rank()
-        print_logging_info(algoName)
+        print_logging_info(algoName,level=0)
 
         if self.basis_fns == None:
             raise BasisSetNotInitialized(algoName)
@@ -213,14 +216,28 @@ class UEG:
         if correlator is not None:
             self.correlator = correlator
             print_logging_info("Using TC method", level=1)
-            print_logging_info("Using correlator:", correlator.__name__, level=1)
-            print_logging_info("kCutoff in correlator:", self.kCutoff, level=1)
-            print_logging_info("Gamma in correlator:", self.gamma, level=1)
-            print_logging_info("Including only 2-body terms:", only2Body, level=1)
-            print_logging_info("Including only RPA approximation for 3-body:",\
+            print_logging_info("Using correlator: ", correlator.__name__, level=1)
+            print_logging_info("kCutoff in correlator = {:.8f}".format(self.kCutoff), level=1)
+            if self.gamma is not None:
+                print_logging_info("Gamma in correlator = {:.8f}".format(self.gamma), level=1)
+
+            if only2Body:
+                print_logging_info("Including only pure 2-body terms: ", only2Body, level=1)
+            if rpaApprox:
+                print_logging_info("Including only RPA approximation for 3-body: ",\
                                rpaApprox, level=1)
-            print_logging_info("Including approximate 2-body terms from 3-body:"\
+            if effective2Body:
+                print_logging_info("Including effective 2-body terms from 3-body: "\
                                , effective2Body, level=1)
+            # Just for testing, not used in production
+            if onlyNonHermitian2Body:
+                print_logging_info("Including only non-hermitian 2-body terms: "\
+                               , onlyNonHermitian2Body, level=1)
+
+            if onlyHermitian2Body:
+                print_logging_info("Including only hermitian 2-body terms: "\
+                               , onlyNonHermitian2Body, level=1)
+
 
         nP = int(len(self.basis_fns)/2)
         tV_pqrs = ctf.tensor([nP,nP,nP,nP], dtype=dtype, sp=sp)
@@ -340,6 +357,9 @@ class UEG:
                             values.append(w)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
         tV_pqrs.write(indices,values)
+
+        print_logging_info("{:.3f} s spent on ".format(time.time()-startTime)+algoName,\
+                           level=1)
         return tV_pqrs
 
 
@@ -407,8 +427,8 @@ class UEG:
         This function computes the doubly contracted 3-body interactions.
         Return: a scalar (float) which should be added to the total energy
         """
-        algo_name = "triple_contractions_in_3_body"
-        print_logging_info(algo_name)
+        algo_name = "UEG.triple_contractions_in_3_body"
+        print_logging_info(algo_name, level=1)
 
         p = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
         q = np.array([self.basis_fns[i*2].kp for i in range(int(self.nel/2))])
@@ -433,7 +453,8 @@ class UEG:
         # factor 2 from sum over spin, another factor of 2 from mirror symmetry
         excE = -2*2*ctf.einsum("pqo,pqo->", tp_oDotp_q, UpqUpo)/2./self.Omega**2
         result = dirE+excE
-        print_logging_info("dirE,excE=", dirE, excE, level=1)
+        print_logging_info("Direct E = {:.8f}".format(dirE), level=2)
+        print_logging_info("Exchange E = {:.8f}".format(excE), level=2)
 
         return result
 
@@ -445,6 +466,8 @@ class UEG:
 
             return: a numpy array of size equal to the number of plane waves
         """
+        algo_name = "UEG.double_contractions_in_3_body"
+        print_logging_info(algo_name, level=1)
         # some constants
 
         num_o = int(self.nel/2)
