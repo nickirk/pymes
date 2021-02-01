@@ -74,6 +74,7 @@ def main(nel, cutoff,rs, gamma, kc, tc):
 
     tV_opqrst = ueg_model.eval3BodyIntegrals(correlator=ueg_model.trunc,sp=1)
     # left perl diagram: 2 hole lines, 1 loop, factor 2 from spin
+    # (pj|kk|jp)
     left_perl = (-1)**3*2*ctf.einsum("pjkjpk->p",tV_opqrst[:,:no,:no,:no,:,:no])
     double_contractions = left_perl
     print("Step 1, left perl=", left_perl)
