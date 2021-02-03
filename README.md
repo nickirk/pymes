@@ -25,7 +25,7 @@ Run the configure script to check if all necessary libraries etc. can be found.
 ```
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/install/dir/lib
 ```
-**Tip:** Note the suffixed /lib  
+**Tip:** Note the suffixed /lib.  
 
 Now we can build ctf with
 ```
