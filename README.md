@@ -18,13 +18,15 @@ cd /path/to/your/build/directory/ctf
 ```
 Run the configure script to check if all necessary libraries etc. can be found.
 ```
-./path/to/ctf/source/code/configure --install-dir=/directory/where/lib/files/will/be/installed/if/you/dont/have/sudo
+./path/to/ctf/source/code/configure --install-dir=/path/to/install/dir
 ```
 **Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH and dont worry if the configure script is not finding the static BLAS and LAPACK libraries.  
-**Tip:** If you use the --install-dir option it may be necessary to export the path to the libraries in your bash as
+**Tip:** If you use the --install-dir option (because you dont have sudo) it may be necessary to export the path to the libraries in your bash as
 ```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/directory/where/lib/files/will/be/installed/if/you/dont/have/sudo
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/install/dir/lib
 ```
+**Tip:** Note the suffixed /lib  
+
 Now we can build ctf with
 ```
 make python -j [as many cores as you want to dedicate]
@@ -43,5 +45,5 @@ make python_install
 **Tip:** If you dont have sudo, it may also be necessary to add to the pip install command in the Makefile the ```--user``` flag.  
 **Tip:** It also may be that pip somehow messes the ctf libs up while copying. Then copy and overwrite yourself with
 ```
-cp -f /path/to/your/build/directory/ctf/lib_python/ctf/* /home/$USER/.local/lib/python3.6/site-packages/ctf/.
+cp /path/to/your/build/directory/ctf/lib_python/ctf/*.so /home/$USER/.local/lib/python3.6/site-packages/ctf/.
 ```
