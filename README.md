@@ -31,7 +31,12 @@ make python -j [as many cores as you want to dedicate]
 ```
 **Tip:** It may be necessary to make some changes in the /path/to/ctf/source/code/Makefile. For example changing the python command to python3, if cython is only available in your python3.  
 
-To pip install ctf use
+Test your CTF installation with
+```
+make python_test
+```
+
+If that works, pip install ctf with
 ```
 make python_install
 ```
@@ -39,8 +44,4 @@ make python_install
 **Tip:** It also may be that pip somehow messes the ctf libs up while copying. Then copy and overwrite yourself with
 ```
 cp -f /path/to/your/build/directory/ctf/lib_python/ctf/* /home/$USER/.local/lib/python3.6/site-packages/ctf/.
-```
-Test your CTF installation with
-```
-make python_test
 ```
