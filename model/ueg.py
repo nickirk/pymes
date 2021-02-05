@@ -555,8 +555,6 @@ class UEG:
     # the system and they are specific to UEG, so they should be part of
     # the UEG class.
 
-    def gaskell(self, kSquare, mu):
-        return
 
     def yukawa(self, kSquare, multiply_by_k_square=False):
         '''
@@ -597,11 +595,6 @@ class UEG:
             self.gamma = 1.0
 
         kCutoffSquare = (self.kCutoff * 2*np.pi/self.L)**2
-        #kCutoffSquare = self.kCutoff**2
-        #if (kSquare <= ktc_cutoffSquare):
-        #    result = 0.
-        #else:
-        #    result = - 12.566370614359173 / kSquare/kSquare
 
         if not isinstance(kSquare, np.ndarray):
             if kSquare <= kCutoffSquare*(1+0.00001):
@@ -611,6 +604,31 @@ class UEG:
         result = np.divide(-4.*np.pi, kSquare**2, out = np.zeros_like(kSquare),\
                 where=(kSquare > 1e-12))
         return result*self.gamma
+
+    def gaskall(self, kSquare, multiply_by_k_square=False):
+        '''
+        The G=0 terms need more consideration
+        '''
+        if self.kCutoff is None:
+            self.kCutoff = int(np.ceil(np.sqrt(self.cutoff)))
+
+        if self.gamma is None:
+            self.gamma = 1.0
+
+        k_fermi = self.basis_fns[int(self.nel/2)].kp
+
+        kCutoffSquare =  k_fermi.dot(k_fermi)
+
+        if not isinstance(kSquare, np.ndarray):
+            result = 0.
+            if kSquare <= kCutoffSquare and kSquare > 1e-12:
+                result = self.gamma/kSquare
+            else:
+                result = self.gamma/kSquare**2
+        else:
+            result = np.divide(self.gamma, kSquare, out = self.gamma/kSquare**2,\
+                where=(kSquare > 1e-12 and kSquare <= kCutoffSquare))
+        return result
 
     def smooth(self, kSquare, multiply_by_k_square=False):
         '''
