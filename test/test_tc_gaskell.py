@@ -44,7 +44,7 @@ def compute_kinetic_energy(ueg):
     return kinetic_G
 
 
-def main(nel, cutoff,rs, gamma, kc, amps):
+def main(nel, cutoff,rs,amps):
     world=ctf.comm()
     no = int(nel/2)
     nalpha = int(nel/2)
@@ -84,16 +84,13 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
 
     time_pure_2_body_int = time.time()
-    ueg_model.gamma = gamma
-    # specify the k_c in the correlator
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
 
     print_title('Evaluating pure 2-body integrals','=')
     print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.gaskell,\
                                      only2Body=True,sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
@@ -149,7 +146,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
     del tV_pqrs
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.gaskell,\
                                      effective2Body=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
@@ -194,8 +191,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     dcd_dE = dcd_results["dE"]
 
     print_title("Summary of results","=")
-    print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
-                        ueg_model.kCutoff))
+    print_logging_info("Num spin orb={}, rs={}"\
+                       .format(len(ueg_model.basis_fns),rs))
     print_logging_info("HF E = {:.8f}".format(tEHF))
     print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
     print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
@@ -205,17 +202,15 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
 
     if world.rank() == 0:
-        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".tc.optKc.dat", "a")
-        f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
+        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"\
+                 +str(ueg_model.correlator.__name__)+".dat", "a")
+        f.write(str(len(ueg_model.basis_fns))+"  "+str(tEHF)\
                 +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
 
 if __name__ == '__main__':
-  #for gamma in None:
-  gamma = None
-  amps = None
   nel = 14
+  amps = None
   for rs in [5]:
     for cutoff in [2]:
-      kCutoffFraction = None
-      main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
+      main(nel,cutoff,rs,amps)
   ctf.MPI_Stop()

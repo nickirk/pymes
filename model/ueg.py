@@ -217,7 +217,8 @@ class UEG:
             self.correlator = correlator
             print_logging_info("Using TC method", level=1)
             print_logging_info("Using correlator: ", correlator.__name__, level=1)
-            print_logging_info("kCutoff in correlator = {:.8f}".format(self.kCutoff), level=1)
+            if self.kCutoff is not None:
+                print_logging_info("kCutoff in correlator = {:.8f}".format(self.kCutoff), level=1)
             if self.gamma is not None:
                 print_logging_info("Gamma in correlator = {:.8f}".format(self.gamma), level=1)
 
@@ -605,29 +606,37 @@ class UEG:
                 where=(kSquare > 1e-12))
         return result*self.gamma
 
-    def gaskall(self, kSquare, multiply_by_k_square=False):
+    def gaskell(self, kSquare, multiply_by_k_square=False):
         '''
-        The G=0 terms need more consideration
+        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
+        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
         '''
-        if self.kCutoff is None:
-            self.kCutoff = int(np.ceil(np.sqrt(self.cutoff)))
-
-        if self.gamma is None:
-            self.gamma = 1.0
-
+        # define the parameter mu in gaskell correlator
+        # this calculation will be done multipule times, it is not optimal to
+        # recalculate it everytime. After refactoring all the correlators into
+        # classes, this problem can be solved by using it as parameter of the
+        # gaskall correlator class and only initialize it once. For now I will
+        # keep it here.
+        mu = (1/(3*np.pi)*(4./(9*np.pi))**(1./3)*self.rs)**(1./2)
         k_fermi = self.basis_fns[int(self.nel/2)].kp
+        beta_square= kSquare / (k_fermi.dot(k_fermi))
 
-        kCutoffSquare =  k_fermi.dot(k_fermi)
+        kCutoffSquare =  2**2
+        #k_fermi.dot(k_fermi)
 
         if not isinstance(kSquare, np.ndarray):
             result = 0.
-            if kSquare <= kCutoffSquare and kSquare > 1e-12:
-                result = self.gamma/kSquare
+            if beta_square <= kCutoffSquare and beta_square > 1e-12:
+                result = mu/beta_square
             else:
-                result = self.gamma/kSquare**2
+                result = 4*mu/beta_square**2
         else:
-            result = np.divide(self.gamma, kSquare, out = self.gamma/kSquare**2,\
-                where=(kSquare > 1e-12 and kSquare <= kCutoffSquare))
+            result = np.divide(mu, beta_square, out = np.zeros_like(kSquare),\
+                where=(beta_square > 1e-12))
+            result[beta_square>kCutoffSquare] = 0.
+            result += np.divide(4*mu, beta_square**2, out = np.zeros_like(kSquare),\
+                where=(beta_square >= kCutoffSquare))
+                #where=(beta_square > 1e-12 and beta_square <= kCutoffSquare))
         return result
 
     def smooth(self, kSquare, multiply_by_k_square=False):

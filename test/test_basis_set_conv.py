@@ -173,7 +173,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     print_logging_info("Starting MP2")
 
-    mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
+    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
     ccd_e = 0.
     dcd_e = 0.
 
@@ -211,7 +211,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     if world.rank() == 0:
         f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".scan.kc.dat", "a")
         f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2E)+"  "\
+                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "\
                 +str(ccd_e)+"  "+str(dcd_e)+" "+str(ccd_t2_norm)+" "+str(dcd_t2_norm)+\
                 " "+str(ccd_dE)+" "+str(dcd_dE)+"\n")
     return dcd_amp

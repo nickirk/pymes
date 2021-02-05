@@ -4,7 +4,15 @@ import time
 import numpy as np
 import sys
 
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
+# the following way of adding pymes to PYTHONPATH is recommended
+# echo "export PYTHONPATH=$PYTHONPATH:/path/to/the/parent/directory/to/pymes"
+# for example if /home/liao/Work/Research/TCSolids/scripts/pymes is where my
+# pymes is, then I should
+# echo "export
+# PYTHONPATH=$PYTHONPATH:/home/liao/Work/Research/TCSolids/scripts/" >>
+# ~/.bashrc
+# source ~/.bashrc
+#sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
 
 import ctf
 from ctf.core import *
@@ -44,7 +52,7 @@ def compute_kinetic_energy(ueg):
     return kinetic_G
 
 
-def main(nel, cutoff,rs, gamma, kc, amps):
+def main(nel, cutoff,rs, gamma, kc):
     world=ctf.comm()
     no = int(nel/2)
     nalpha = int(nel/2)
@@ -93,8 +101,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     only2Body=True,sp=1)
+    tV_pqrs = ueg_model.eval2BodyIntegrals(sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -142,80 +149,37 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("{:.3f} seconds spent on evaluating HF energy"\
                        .format((time.time()-time_hf)))
 
-    # Now add the contributions from the 3-body integrals into the diagonal and
-    # two body operators, also to the total energy, corresponding to 3 orders
-    # of contractions
-    print_title('Evaluating effective 2-body integrals','=')
-    time_eff_2_body = time.time()
-    # before calculating new integrals, delete the old one to release memory
-    del tV_pqrs
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     effective2Body=True,sp=1)
-    print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
-                       .format((time.time()-time_eff_2_body)))
+    mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
+    ccdE = 0.
+    dcdE = 0.
 
-
-    orbital_energy_correction = True
-    # the correction to the one particle energies from doubly contracted 3-body
-    # integrals
-    contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
-    contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()
-    print_logging_info("Mean field contributions from 3 body to total energy:")
-    print_logging_info(contr_from_triply_contra_3b)
-    print_logging_info("Contributions from 3 body to 1 particle energies:")
-    print_logging_info(contr_from_doubly_contra_3b)
-
-    if orbital_energy_correction:
-        tEpsilon_i += contr_from_doubly_contra_3b[:no]
-        tEpsilon_a += contr_from_doubly_contra_3b[no:]
-
-
-
-    print_logging_info("Starting MP2")
-
-    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
-    ccd_e = 0.
-    dcd_e = 0.
-
-    ls = -(np.log(rs)*0.8+1.0)
     print_logging_info("Starting CCD")
-    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls, \
-                            sp=0, maxIter=70, fDiis=True, amps=amps)
-    # unpacking
-    ccd_e = ccd_results["ccd e"]
-    ccd_amp = ccd_results["t2 amp"]
-    ccd_dE = ccd_results["dE"]
-
+    ccdE, ccdAmp, hole, particle = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
     print_logging_info("Starting DCD")
-    dcd_results = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls,\
-                            sp=0, maxIter=70, fDiis=True,amps=ccd_amp)
-    dcd_e = dcd_results["ccd e"]
-    dcd_amp = dcd_results["t2 amp"]
-    dcd_dE = dcd_results["dE"]
+    dcdE, dcdAmp, hole, particle = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True,amps=ccdAmp)
 
     print_title("Summary of results","=")
     print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
                         ueg_model.kCutoff))
     print_logging_info("HF E = {:.8f}".format(tEHF))
-    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
-    print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccdE))
+    print_logging_info("DCD correlation E = {:.8f}".format(dcdE))
     print_logging_info("3-body mean-field E = {:.8f}"\
                        .format(contr_from_triply_contra_3b))
-    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
-    print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
+    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccdE+contr_from_triply_contra_3b))
+    print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcdE+contr_from_triply_contra_3b))
 
     if world.rank() == 0:
-        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".tc.optKc.dat", "a")
-        f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
+        f = open("E_"+str(nel)+"e_rs"+str(rs)+".dat", "a")
+        f.write(str(len(ueg_model.basis_fns))+"  "+str(tEHF)\
+                +"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
 
 if __name__ == '__main__':
   #for gamma in None:
   gamma = None
-  amps = None
   nel = 14
-  for rs in [5]:
+  for rs in [0.5]:
     for cutoff in [2]:
       kCutoffFraction = None
-      main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
+      main(nel,cutoff,rs, gamma, kCutoffFraction)
   ctf.MPI_Stop()
