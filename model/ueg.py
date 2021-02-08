@@ -561,13 +561,15 @@ class UEG:
         '''
         The G=0 terms need more consideration
         '''
+        rho = self.nel / self.Omega
+        gamma_0 = np.sqrt(4.* np.pi * rho)
         if self.gamma is None:
-            rho = self.nel / self.Omega
-            gamma = np.sqrt(4.* np.pi * rho)
             #gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+            gamma = gamma_0
         else:
-            gamma = self.gamma
-        a = -4.*np.pi
+            gamma = self.gamma * gamma_0
+        # has to be - and divided by gamm to satisfy the cusp condition
+        a = -4.*np.pi*2
         if self.kCutoff is not None:
             kCutoffSquare = self.kCutoff * ((2*np.pi/self.L)**2)
             kCutoffDenom = kCutoffSquare*(kCutoffSquare + gamma**2)
@@ -606,6 +608,40 @@ class UEG:
                 where=(kSquare > 1e-12))
         return result*self.gamma
 
+    def gaskell_modified(self, kSquare, multiply_by_k_square=False):
+        '''
+        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
+        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
+        '''
+        # define the parameter mu in gaskell correlator
+        # this calculation will be done multipule times, it is not optimal to
+        # recalculate it everytime. After refactoring all the correlators into
+        # classes, this problem can be solved by using it as parameter of the
+        # gaskall correlator class and only initialize it once. For now I will
+        # keep it here.
+        if self.kCutoff is not None:
+            kCutoffSquare =  (self.kCutoff*(2*np.pi/self.L))**2
+        else:
+            kCutoffSquare = 2
+        mu = np.pi
+        #k_fermi.dot(k_fermi)
+
+        if not isinstance(kSquare, np.ndarray):
+            result = 0.
+            if kSquare < kCutoffSquare and kSquare > 1e-12:
+                #result = 4*mu/kSquare
+                result = 0.
+            else:
+                result = 4*mu/kSquare**2
+        else:
+            result = np.divide(0.*mu, kSquare, out = np.zeros_like(kSquare),\
+                where=(kSquare > 1e-12))
+            result[kSquare>=kCutoffSquare] = 0.
+            result += np.divide(4*mu, kSquare**2, out = np.zeros_like(kSquare),\
+                where=(kSquare >= kCutoffSquare))
+        # there should be an overall - sign
+        return -result
+
     def gaskell(self, kSquare, multiply_by_k_square=False):
         '''
         input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
@@ -618,15 +654,20 @@ class UEG:
         # gaskall correlator class and only initialize it once. For now I will
         # keep it here.
         mu = (1/(3*np.pi)*(4./(9*np.pi))**(1./3)*self.rs)**(1./2)
-        k_fermi = self.basis_fns[int(self.nel/2)].kp
+        k_fermi = self.basis_fns[int(self.nel/2)*2].kp
+        int_k_fermi = self.basis_fns[int(self.nel/2)*2].k
         beta_square= kSquare / (k_fermi.dot(k_fermi))
 
-        kCutoffSquare =  2**2
+
+        if self.kCutoff is not None:
+            kCutoffSquare =  self.kCutoff**2/int_k_fermi.dot(int_k_fermi)
+        else:
+            kCutoffSquare = 4
         #k_fermi.dot(k_fermi)
 
         if not isinstance(kSquare, np.ndarray):
             result = 0.
-            if beta_square <= kCutoffSquare and beta_square > 1e-12:
+            if beta_square < kCutoffSquare and beta_square > 1e-12:
                 result = mu/beta_square
             else:
                 result = 4*mu/beta_square**2
@@ -637,7 +678,8 @@ class UEG:
             result += np.divide(4*mu, beta_square**2, out = np.zeros_like(kSquare),\
                 where=(beta_square >= kCutoffSquare))
                 #where=(beta_square > 1e-12 and beta_square <= kCutoffSquare))
-        return result
+        # there should be an overall - sign
+        return -result
 
     def smooth(self, kSquare, multiply_by_k_square=False):
         '''
