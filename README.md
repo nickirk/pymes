@@ -1,11 +1,27 @@
-# pymes
+# PyMeS
 
-python package for many-electron simulations
+**Py**thon package for **M**any-**e**lectron **S**imulations (PyMeS)
 
 # Building
 
-Pymes does not need any kind of installation as of now. But you have to change the hard-coded ```sys.path.append()``` path in the input files.  
-But Pymes depends on the Cyclops Tensor Framework (CTF). Therefore you need to build the CTF before using pymes.
+PyMeS does not need to be build, just add the following line to your .bashrc or .zshrc file
+
+```bash
+export PYTHONPATH=/the/directory/containing/pymes:$PYTHONPATH
+```
+For example, if your pymes is stored at "~/scripts/pymes", then you do the following:
+```bash
+export PYTHONPATH=~/scripts:$PYTHONPATH
+```
+
+and source your ~/.bashrc or ~/.zshrc file.
+
+```bash
+source ~/.bashrc
+```
+
+
+But PyMeS depends on the Cyclops Tensor Framework (CTF). Therefore you need to build the CTF before using pymes.
 
 ## Building CTF
 Building instructions can be found at https://github.com/cyclops-community/ctf.  
@@ -47,3 +63,24 @@ make python_install
 ```
 cp /path/to/your/build/directory/ctf/lib_python/ctf/*.so /home/$USER/.local/lib/python3.6/site-packages/ctf/.
 ```
+
+
+
+# For developers
+
+## Test
+
+For each functionality added, a test file or an example file on how to use it should be added under the *test* directory. For now, the test files serve the purpose of showing examples. In the future, they should also serve as unit tests, where standard and correct results should be supplied and be compared to each running results.
+
+## Naming style
+
+We follow the convention explained in wikipedia
+
+> Python and Ruby
+>
+> [Python](https://en.wikipedia.org/wiki/Python_(programming_language)) and [Ruby](https://en.wikipedia.org/wiki/Ruby_(programming_language)) both recommend `UpperCamelCase` for class names, `CAPITALIZED_WITH_UNDERSCORES` for constants, and `lowercase_separated_by_underscores` for other names.
+>
+> In Python, if a name is intended to be "[private](https://en.wikipedia.org/wiki/Private_member)", it is prefixed by an underscore. Private variables are enforced in Python only by convention. Names can also be suffixed with an underscore to prevent conflict with Python keywords. Prefixing with double underscores changes behaviour in classes with regard to [name mangling](https://en.wikipedia.org/wiki/Name_mangling#Python). Prefixing *and* suffixing with double underscores are reserved for "magic names" which fulfill special behaviour in Python objects.[[39\]](https://en.wikipedia.org/wiki/Naming_convention_(programming)#cite_note-pep8-39)
+
+Some old codes need to be refactored to fulfil the naming conventions. But newly added code should follow these conventions. 
+
