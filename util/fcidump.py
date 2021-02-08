@@ -30,9 +30,9 @@ def write2Fcidump(integrals, kinetic, no, ms2=0, orbsym=1, isym=1, dtype='r'):
             q = int((inds[l]-p*nP**3)/nP**2)
             r = int((inds[l]-p*nP**3-q*nP**2)/nP)
             s = int(inds[l]-p*nP**3-q*nP**2-r*nP)
-            #if np.abs(integrals[a,b,i,j]) > 1e-8:
+
             f.write("  " + str(vals[l]) + "  " + str(p+1) \
-                    + "  " + str(q+1) + "  " + str(r+1) + "  " + str(s+1) + "\n")
+                    + "  " + str(r+1) + "  " + str(q+1)+ "  " + str(s+1) + "\n")
 
         for i in range(nP):
             f.write("  " + str(kinetic[i]) + "  " + str(i+1) + "  "\

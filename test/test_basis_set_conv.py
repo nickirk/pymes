@@ -86,10 +86,10 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     time_pure_2_body_int = time.time()
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    ueg_model.kCutoff = kc
 
     print_title('Evaluating pure 2-body integrals','=')
-    print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
@@ -193,6 +193,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]
 
+
     print_title("Summary of results","=")
     print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
                         ueg_model.kCutoff))
@@ -204,18 +205,28 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
     print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
 
+    ccd_t2_norm = ctf.norm(ccd_amp)
+    dcd_t2_norm = ctf.norm(dcd_amp)
+
     if world.rank() == 0:
-        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".tc.optKc.dat", "a")
+        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".scan.kc.dat", "a")
         f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
+                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "\
+                +str(ccd_e)+"  "+str(dcd_e)+" "+str(ccd_t2_norm)+" "+str(dcd_t2_norm)+\
+                " "+str(ccd_dE)+" "+str(dcd_dE)+"\n")
+    return dcd_amp
 
 if __name__ == '__main__':
-  #for gamma in None:
-  gamma = None
-  amps = None
-  nel = 2
-  for rs in [5]:
-    for cutoff in [2]:
-      kCutoffFraction = None
-      main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
-  ctf.MPI_Stop()
+    #for gamma in None:
+    gamma = None
+    nel = 54
+    opt_kc = np.loadtxt("rs_opt_kc.dat")
+    for cutoff in [36]:
+        amps = None
+        n = 0
+        for rs in [0.5,1.0,2.0,5.0,10.0,20.0,50.0]:
+            print_logging_info("rs = ", rs, "rs from file = ", opt_kc[n,0])
+            kCutoffFraction = opt_kc[n,1]
+            amps = main(nel, cutoff, rs, gamma, kCutoffFraction, amps)
+            n = n+1
+    ctf.MPI_Stop()
