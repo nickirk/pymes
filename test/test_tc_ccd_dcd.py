@@ -213,7 +213,7 @@ if __name__ == '__main__':
   #for gamma in None:
   gamma = None
   amps = None
-  nel = 14
+  nel = 2
   for rs in [5]:
     for cutoff in [2]:
       kCutoffFraction = None
