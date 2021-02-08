@@ -210,7 +210,7 @@ def main(nel, cutoff,rs,amps):
 if __name__ == '__main__':
   nel = 14
   amps = None
-  for rs in [5]:
+  for rs in [2]:
     for cutoff in [2]:
       main(nel,cutoff,rs,amps)
   ctf.MPI_Stop()
