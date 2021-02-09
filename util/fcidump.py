@@ -2,7 +2,7 @@
 import ctf
 import numpy as np
 
-def write2Fcidump(integrals, kinetic, no, ms2=0, orbsym=1, isym=1, dtype='r'):
+def write2Fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
     '''
     Input a integral file in ctf format
     np,np,np,np
@@ -10,6 +10,7 @@ def write2Fcidump(integrals, kinetic, no, ms2=0, orbsym=1, isym=1, dtype='r'):
     world = ctf.comm()
 
     nP = integrals.shape[0]
+    inds, vals = integrals.read_all_nnz()
     if world.rank() == 0:
         f = open("FCIDUMP", "w")
         # write header
@@ -23,7 +24,6 @@ def write2Fcidump(integrals, kinetic, no, ms2=0, orbsym=1, isym=1, dtype='r'):
         f.write(" ISYM=%i,\n" % isym)
         f.write("/\n")
 
-        inds, vals = integrals.read_all_nnz()
 
         for l in range(len(inds)):
             p = int(inds[l]/nP**3)
