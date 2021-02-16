@@ -77,7 +77,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     while np.abs(dE) > epsilonE and iteration <= maxIter:
         iteration += 1
         if fDrccd:
-            tR_abij = drccd.getResidual(tT_abij, tV_abij, tV_aijb, tV_iabj, tV_ijab)
+            tR_abij = drccd.getResidual(tEpsilon_i, tEpsilon_a,tT_abij, tV_abij, tV_aijb, tV_iabj, tV_ijab)
         else:
             tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
                 tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd, bruekner)
@@ -105,10 +105,10 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
             amps.append(tT_abij.copy())
             tT_abij = diis.mix(residules,amps)
         # update energy and norm of amplitudes
-        if fDrccd:
-            eDirCcd, eExCcd = drccd.getEnergy(tT_abij, tV_ijab)
-        else:
-            eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
+        #if fDrccd:
+        #    eDirCcd, eExCcd = drccd.getEnergy(tT_abij, tV_ijab)
+        #else:
+        eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
         eCcd = np.real(eDirCcd + eExCcd)
         dE = eCcd - eLastIterCcd
         eLastIterCcd = eCcd

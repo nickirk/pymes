@@ -12,7 +12,7 @@ from ctf.core import *
 import pymes
 from pymes.solver import mp2
 from pymes.model import ueg
-from pymes.solver import drccd
+from pymes.solver import ccd
 from pymes.mean_field import hf
 from pymes.logging import print_title, print_logging_info
 
@@ -141,20 +141,24 @@ def main(nel, cutoff,rs, gamma, kc):
     dcdE = 0.
 
     print_logging_info("Starting CCD")
-    ccdE, ccdAmp, hole, particle = drccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, \
+                                               fDrccd=True,levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    ccd_e = ccd_results["ccd e"]
+    ccd_amp = ccd_results["t2 amp"]
+    ccd_dE = ccd_results["dE"]
 
     print_title("Summary of results","=")
     print_logging_info("HF E = {:.8f}".format(tEHF))
-    print_logging_info("CCD correlation E = {:.8f}".format(ccdE))
-    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccdE+contr_from_triply_contra_3b))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e))
 
 
 if __name__ == '__main__':
   #for gamma in None:
   gamma = None
   nel = 14
-  for rs in [0.5]:
-    for cutoff in [4]:
+  for rs in [5.0]:
+    for cutoff in [14]:
       kCutoffFraction = None
       main(nel,cutoff,rs, gamma, kCutoffFraction)
   ctf.MPI_Stop()
