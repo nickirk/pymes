@@ -5,8 +5,9 @@ from ctf.core import *
 from pymes.solver import mp2
 from pymes.mixer import diis
 from pymes.logging import print_logging_info
+from pymes.solver import drccd
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, amps=None, bruekner=False, epsilonE=1e-8):
+def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, fDrccd=False, amps=None, bruekner=False, epsilonE=1e-8):
     '''
     ccd algorithm
     tV_ijkl = V^{ij}_{kl}
@@ -33,17 +34,6 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
 
     # construct the needed integrals here on spot.
 
-    #tConjGamma_iaG = ctf.einsum("aiG->iaG", ctf.conj(tGamma_pqG[no:,:no,:]))
-    #tV_iabj = ctf.einsum("ibG, ajG -> iabj", tConjGamma_iaG, tGamma_pqG[no:,:no,:])
-    #tConjGamma_aiG = ctf.einsum("iaG->aiG", ctf.conj(tGamma_pqG[:no,no:,:]))
-    #tV_aijb = ctf.einsum("ajG, ibG -> aijb", tConjGamma_aiG, tGamma_pqG[:no,no:,:])
-    #tV_ijab = ctf.einsum("iaG, jbG -> ijab", tConjGamma_iaG, tGamma_pqG[:no,no:,:])
-    #tConjGamma_ji = ctf.einsum("ijG->jiG", ctf.conj(tGamma_pqG[:no,:no,:]))
-    #tV_klij = ctf.einsum("kiG, ljG -> klij", tConjGamma_ji, tGamma_pqG[:no,:no,:])
-    #tV_iajb = ctf.einsum("ijG, abG -> iajb", tConjGamma_ji, tGamma_pqG[no:,no:,:])
-    #tV_abij = ctf.einsum("aiG, bjG -> abij", tConjGamma_aiG, tGamma_pqG[no:,:no,:])
-    #tConjGamma_ba = ctf.einsum("abG->baG", ctf.conj(tGamma_pqG[no:,no:,:]))
-    #tV_abcd = ctf.einsum("acG, bdG -> abcd", tConjGamma_ba, tGamma_pqG[no:,no:,:])
 
     tV_iabj = tV_pqrs[:no,no:,no:,:no]
     tV_aijb = tV_pqrs[no:,:no,:no,no:]
@@ -56,6 +46,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
 
     print_logging_info(algoName)
     print_logging_info("Using DCD: " , fDcd, level=1)
+    print_logging_info("Using dr-CCD: " , fDrccd, level=1)
     print_logging_info("Solving doubles amplitude equation", level=1)
     print_logging_info("Using data type %s" % tV_pqrs.dtype, level=1)
     print_logging_info("Using DIIS mixer: ", fDiis, level=1)
@@ -85,7 +76,10 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
     while np.abs(dE) > epsilonE and iteration <= maxIter:
         iteration += 1
-        tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
+        if fDrccd:
+            tR_abij = drccd.getResidual(tT_abij, tV_abij, tV_aijb, tV_iabj, tV_ijab)
+        else:
+            tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
                 tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd, bruekner)
 
         if bruekner:
@@ -111,7 +105,10 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
             amps.append(tT_abij.copy())
             tT_abij = diis.mix(residules,amps)
         # update energy and norm of amplitudes
-        eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
+        if fDrccd:
+            eDirCcd, eExCcd = drccd.getEnergy(tT_abij, tV_ijab)
+        else:
+            eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
         eCcd = np.real(eDirCcd + eExCcd)
         dE = eCcd - eLastIterCcd
         eLastIterCcd = eCcd
