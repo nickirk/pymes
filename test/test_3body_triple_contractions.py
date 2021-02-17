@@ -12,8 +12,6 @@ from ctf.core import *
 import pymes
 from pymes.model import ueg
 
-## Script for generating plane wave basis
-## hamiltonian integrals for unifrom electron gas
 
 ##############################################################################
 #   1. ctf tensors starts with a lower case t
@@ -75,11 +73,11 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     tV_opqrst = ueg_model.eval3BodyIntegrals(correlator=ueg_model.trunc,sp=1)
     tV_ijklmn = tV_opqrst[:no,:no,:no,:no,:no,:no]
     triple_contractions = 0
-    # 3 hole lines, 3 loops,
-    triple_contractions += 2*ctf.einsum("ijkijk->",tV_ijklmn)
+    # 3 hole lines, 3 loops, factor 8 from 3 spin summations
+    triple_contractions += 8*ctf.einsum("ijkijk->",tV_ijklmn)
     print("Step 1, all direct contraction=", triple_contractions)
-    # 3 hole lines, 2 loops, factor 2 from spin summation
-    pokemon_ball = -2*ctf.einsum("ijkjik->",tV_ijklmn)
+    # 3 hole lines, 2 loops, factor 4 from 2 spin summations
+    pokemon_ball = -2*2*ctf.einsum("ijkjik->",tV_ijklmn)
     triple_contractions +=  pokemon_ball
     print("Step 2, pokemon ball diagram=", pokemon_ball)
     # 3 hole lines, 1 loop, factor 2 from spin summation

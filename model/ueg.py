@@ -443,8 +443,8 @@ class UEG:
         up_q = self.correlator(p_qSquare)
 
         dirE = up_q**2*p_qSquare
-        dirE = sum(sum(dirE)) * self.nel/2/self.Omega**2
         # factor 2 comes from sum over spins
+        dirE = sum(sum(dirE)) * self.nel/2/self.Omega**2 * 2
 
         # exchange type
         tUp_q_pq = ctf.astensor(up_q)
@@ -525,7 +525,8 @@ class UEG:
         u_diff_ij = self.correlator(diff_ij_square)
         u_diff_ij_square = u_diff_ij**2
         e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
-        e_shield = e_shield / self.Omega**2
+        # bug, missing a factor of 2 from spin degree of freedom
+        e_shield = e_shield / self.Omega**2 * 2
 
         one_particle_energies += e_shield
 
