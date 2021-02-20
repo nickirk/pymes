@@ -73,7 +73,7 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     # of contractions
 
     tV_opqrst = ueg_model.eval3BodyIntegrals(correlator=ueg_model.trunc,sp=1)
-    # left perl diagram: 2 hole lines, 1 loop, factor 2 from spin
+    # left perl diagram: 2 hole lines, 1 loop, factor 2 from spin in k index
     # (pj|kk|jp)
     left_perl = (-1)**3*2*ctf.einsum("pjkjpk->p",tV_opqrst[:,:no,:no,:no,:,:no])
     double_contractions = left_perl
@@ -103,8 +103,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     double_contractions += right_frog
     print("Step 6, right frog=", right_frog)
 
-    # shield diagram: 2 hole lines, 1 loops
-    shield = (-1)**3*ctf.einsum("jipijp->p",tV_opqrst[:no,:no,:,:no,:no,:])
+    # shield diagram: 2 hole lines, 1 loops, a factor of 2 from spin in i,j
+    shield = (-1)**3*2*ctf.einsum("jipijp->p",tV_opqrst[:no,:no,:,:no,:no,:])
     double_contractions += shield
     print("Step 7, shield=", shield)
 
@@ -123,7 +123,7 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     double_contractions += right_pan
     print("Step 10, right_pan=", right_pan)
 
-    print("Final doubly contracted contribution=", double_contractions*2)
+    print("Final doubly contracted contribution=", double_contractions)
 
     contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
     contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()

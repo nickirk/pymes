@@ -425,7 +425,7 @@ class UEG:
 
     def triple_contractions_in_3_body(self):
         """
-        This function computes the doubly contracted 3-body interactions.
+        This function computes the triply contracted 3-body interactions.
         Return: a scalar (float) which should be added to the total energy
         """
         algo_name = "UEG.triple_contractions_in_3_body"
@@ -490,7 +490,7 @@ class UEG:
             e_perl[orb_p] = np.sum(self.correlator(k_vec_p_minus_i_square)**2\
                                    *k_vec_p_minus_i_square)
 
-        e_perl = 2.0*self.nel/self.Omega**2 * e_perl
+        e_perl = 2.0*self.nel/self.Omega**2/2 * e_perl
 
         one_particle_energies += e_perl
 
@@ -508,7 +508,7 @@ class UEG:
         e_wave = ctf.einsum("pij,pij->p", t_diff_pi_dot_diff_pj_pij, \
                             t_u_diff_pi_multiply_u_diff_pj_pij)
 
-        e_wave = -e_wave * 2 / self.Omega**2
+        e_wave = -e_wave * 2 / self.Omega**2/2
 
         one_particle_energies += e_wave.to_nparray()
 
@@ -526,7 +526,7 @@ class UEG:
         u_diff_ij_square = u_diff_ij**2
         e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
         # bug, missing a factor of 2 from spin degree of freedom
-        e_shield = e_shield / self.Omega**2 * 2
+        e_shield =  2*e_shield / 2 / self.Omega**2 
 
         one_particle_energies += e_shield
 
@@ -544,7 +544,7 @@ class UEG:
         e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, \
                             t_u_diff_ij_multiply_u_diff_ip_ijp)
 
-        e_frog = -e_frog * 4 / self.Omega**2
+        e_frog = -e_frog * 4 / self.Omega**2/2
 
         one_particle_energies += e_frog.to_nparray()
 
