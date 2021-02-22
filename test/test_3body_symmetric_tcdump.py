@@ -81,6 +81,25 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     tV_sym_opqrst.i("opqrst") <<  1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
                                      +tV_opqrst.i("qpotsr"))
 
+    # check symmetry
+    # first and second pair exchange
+    t_diff_1_2 = ctf.tensor(tV_sym_opqrst.shape)
+    t_diff_1_2.i("opqrst") << tV_sym_opqrst.i("opqrst") - tV_sym_opqrst.i("poqsrt")
+    if ctf.norm(t_diff_1_2)<1e-10:
+        print("Successfully asserted the 1st and 2nd pair of indices are symmetric")
+
+    # first and third pair exchange
+    t_diff_1_3 = ctf.tensor(tV_sym_opqrst.shape)
+    t_diff_1_3.i("opqrst") << tV_sym_opqrst.i("opqrst") - tV_sym_opqrst.i("qpotsr")
+    if ctf.norm(t_diff_1_3)<1e-10:
+        print("Successfully asserted the 1st and 3rd pair of indices are symmetric")
+
+    # second and third pair exchange
+    t_diff_2_3 = ctf.tensor(tV_sym_opqrst.shape)
+    t_diff_2_3.i("opqrst") << tV_sym_opqrst.i("opqrst") - tV_sym_opqrst.i("oqprts")
+    if ctf.norm(t_diff_2_3)<1e-10:
+        print("Successfully asserted the 2nd and 3rd pair of indices are symmetric")
+
     print("Writing 3-body integrals into TCDUMP")
     tcdump.write2Tcdump(tV_sym_opqrst)
 

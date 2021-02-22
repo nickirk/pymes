@@ -99,13 +99,18 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     print("Step 6, left bat diagram=", right_racket)
     print("Final triply contracted contribution=", triple_contractions)
 
-    contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
+    #contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
     contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()
     if world.rank() == 0:
         print("contributions from 3 body to total energy:")
         print(contr_from_triply_contra_3b)
-        print("contributions from 3body to 1 particle energies:")
-        print(contr_from_doubly_contra_3b)
+
+    if np.abs(np.sum(triple_contractions-contr_from_triply_contra_3b))<1e-10:
+        print("3 body triple contractions test: past")
+    else:
+        print("3 body triple contractions test: failed")
+
+    return False
 
 
 if __name__ == '__main__':
