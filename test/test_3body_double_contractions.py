@@ -77,51 +77,51 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     # (pj|kk|jp)
     left_perl = (-1)**3*2*ctf.einsum("pjkjpk->p",tV_opqrst[:,:no,:no,:no,:,:no])
     double_contractions = left_perl
-    print("Step 1, left perl=", left_perl)
+    print("Step 1, left perl (pj|jp|ii)=", left_perl)
     # right perl diagram: 2 hole lines, 1 loop,
     right_perl = (-1)**3*2*ctf.einsum("jpkpjk->p",tV_opqrst[:no,:,:no,:,:no,:no])
     double_contractions += right_perl
-    print("Step 2, right perl=", right_perl)
+    print("Step 2, right perl (jp|pj|ii)=", right_perl)
 
     # left wave diagram: 2 hole lines, 0 loops
     left_wave = (-1)**2*ctf.einsum("pkiipk->p",tV_opqrst[:,:no,:no,:no,:,:no])
     double_contractions += left_wave
-    print("Step 3, left wave=", left_wave)
+    print("Step 3, left wave (pi|jp|ij)=", left_wave)
 
     # right wave diagram: 2 hole lines, 0 loops
     right_wave = (-1)**2*ctf.einsum("ipkpki->p",tV_opqrst[:no,:,:no,:,:no,:no])
     double_contractions += right_wave
-    print("Step 4, right wave=", right_wave)
+    print("Step 4, right wave (ip|pj|ji)=", right_wave)
 
     # left frog diagram: 2 hole lines, 0 loops. Mirror symmetry factor of 2
     left_frog = (-1)**2*2*ctf.einsum("jpiijp->p",tV_opqrst[:no,:,:no,:no,:no,:])
     double_contractions += left_frog
-    print("Step 5, left frog=", left_frog)
+    print("Step 5, left frog (ji|ip|pj)=", left_frog)
 
     # right frog diagram: 2 hole lines, 0 loops. Mirror symmetry factor of 2
     right_frog = (-1)**2*2*ctf.einsum("ijpjpi->p",tV_opqrst[:no,:no,:,:no,:,:no])
     double_contractions += right_frog
-    print("Step 6, right frog=", right_frog)
+    print("Step 6, right frog (ij|pi|jp)=", right_frog)
 
     # shield diagram: 2 hole lines, 1 loops, a factor of 2 from spin in i,j
     shield = (-1)**3*2*ctf.einsum("jipijp->p",tV_opqrst[:no,:no,:,:no,:no,:])
     double_contractions += shield
-    print("Step 7, shield=", shield)
+    print("Step 7, shield (ji|ij|pp)=", shield)
 
     # seesaw diagram: 2 hole lines, 2 loops
     seesaw = (-1)**4*ctf.einsum("ijpijp->p",tV_opqrst[:no,:no,:,:no,:no,:])
     double_contractions += seesaw
-    print("Step 8, seesaw=", seesaw)
+    print("Step 8, seesaw (ii|jj|pp)=", seesaw)
 
     # left pan diagram: 2 hole lines, 1 loops.  Mirrow symm factor 2
     left_pan = (-1)**3*2*ctf.einsum("ijpipj->p",tV_opqrst[:no,:no,:,:no,:,:no])
     double_contractions += left_pan
-    print("Step 9, left_pan=", left_pan)
+    print("Step 9, left_pan (pp|ij|ji)=", left_pan)
 
     # right pan diagram: 2 hole lines, 1 loops.  Mirrow symm factor 2
     right_pan = (-1)**3*2*ctf.einsum("ipjijp->p",tV_opqrst[:no,:,:no,:no,:no,:])
     double_contractions += right_pan
-    print("Step 10, right_pan=", right_pan)
+    print("Step 10, right_pan (ij|pp|ji)=", right_pan)
 
     print("Final doubly contracted contribution=", double_contractions)
 
@@ -132,6 +132,7 @@ def main(nel, cutoff,rs, gamma, kc, tc):
         print(contr_from_triply_contra_3b)
         print("contributions from 3body to 1 particle energies:")
         print(contr_from_doubly_contra_3b)
+    assert(np.abs(np.sum(double_contractions-contr_from_doubly_contra_3b)) < 1e-10)
 
 
 if __name__ == '__main__':
@@ -139,7 +140,7 @@ if __name__ == '__main__':
     gamma = None
     nel = 14
     for rs in [0.5]:
-        for cutoff in [1]:
+        for cutoff in [2]:
             kCutoffFraction = None
             for tc in [True]:
                 main(nel,cutoff,rs, gamma, kCutoffFraction,tc)
