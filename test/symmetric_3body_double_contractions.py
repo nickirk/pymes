@@ -78,8 +78,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     print("symmetrizing 3-body integral")
     print("size of 3-body integral=", tV_sym_opqrst.size)
 
-    # a factor of 2 just to be consistent as in molpro
-    tV_sym_opqrst.i("opqrst") <<  2*1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
+    # a factor of 2 and -3 just to be consistent as in molpro
+    tV_sym_opqrst.i("opqrst") <<  -3*2*1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
                                      +tV_opqrst.i("qpotsr"))
 
     double_contractions = ctf.tensor(nSpatialOrb)
@@ -113,45 +113,14 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     double_contractions += sixth_term
     print("Sixth term=",sixth_term)
 
-    # 2 subsequent single contractions:
-    tV_pkql = ctf.tensor([nSpatialOrb, nSpatialOrb, no,no])
-    # (pq|kl|mm)
-    tV_pkql = -ctf.einsum("pkmqlm->pkql",tV_sym_opqrst[:,:no,:no,:,:no,:no])
-    # (pq|km|ml)
-    tV_pkql += ctf.einsum("pkmqml->pkql",tV_sym_opqrst[:,:no,:no,:,:no,:no])
-    # (kl|pm|mq)
-    tV_pkql += ctf.einsum("kpmlmq->pkql",tV_sym_opqrst[:no,:,:no,:no,:no,:])
-    tV_pkql = 1/2*tV_pkql
-    f_ij = ctf.einsum("ikjk->ij", tV_pkql[:no,:,:no,:])
-    f_ij += -ctf.einsum("ikkj->ij", tV_pkql[:no,:,:no,:])
-    print("Two subsequent single contractions:")
-    print("    Occupied block:")
-    print(f_ij.to_nparray().diagonal())
-
-    # 2 subsequent single contractions:
-    # still buggy
-    #tV_aklb = ctf.tensor([nv, no, no,nv])
-    ## (pq|kl|mm)
-    #tV_aklb = -ctf.einsum("akmlbm->aklb",tV_sym_opqrst[no:,:no,:no,:no,no:,:no])
-    ## (pq|km|ml)
-    #tV_aklb += ctf.einsum("akmlmb->aklb",tV_sym_opqrst[no:,:no,:no,:no,:no,no:])
-    ## (kl|pm|mq)
-    #tV_aklb += ctf.einsum("kambml->aklb",tV_sym_opqrst[:no,no:,:no,no:,:no,:no])
-    #tV_aklb = 1/2*tV_aklb
-    #f_ab = ctf.einsum("akbk->ab", tV_pkql[no:,:no,no:,:no])
-    #print("shape of f_ab")
-    #f_ab += -ctf.einsum("akkb->ab", tV_aklb[no:,:no,:no,no:])
-    #print("Two subsequent single contractions:")
-    #print("    Virtual block:")
-    #print(f_ab.to_nparray().diagonal())
-
     contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
+    assert(np.abs(np.sum(double_contractions-contr_from_doubly_contra_3b)) < 1e-10)
     if world.rank() == 0:
         print("contributions from asymetric 3 body to 1 particle energies:")
         print(contr_from_doubly_contra_3b)
         print("contributions from symetric 3 body to 1 particle energies:")
         print(double_contractions)
-    assert(np.abs(np.sum(double_contractions-contr_from_doubly_contra_3b)) < 1e-10)
+        print("Test on symmetric and asymmetric double contractions on 3-body integrals successful!")
 
 
 if __name__ == '__main__':
