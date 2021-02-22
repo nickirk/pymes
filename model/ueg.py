@@ -394,14 +394,13 @@ class UEG:
         result = dotProduct * self.correlator(vec1Square) * self.correlator(vec2Square)
 
         result = np.einsum("n->",result) / self.Omega
-        result = result * (self.nel-2.)/self.nel
+        #result = result * (self.nel-2.)/self.nel
 
         return result
 
 
     def contract3BodyIntegralsTo2Body(self, integrals):
         # factor 2 for the spin degeneracy
-        # factor (self.nel-2)/self.nel
         fac = 2
         RPA2Body = fac*ctf.einsum("opqrsq->oprs", integrals)
         return RPA2Body
@@ -461,7 +460,7 @@ class UEG:
 
     def double_contractions_in_3_body(self):
         """
-            This function make two contractions in the 3-body integrals,
+            This function makes two contractions in the 3-body integrals,
             resulting in one body energies, which should be added to the
             original one-particle energies from the HF theory
 
