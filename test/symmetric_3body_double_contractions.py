@@ -79,48 +79,71 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     print("size of 3-body integral=", tV_sym_opqrst.size)
 
     # a factor of 2 just to be consistent as in molpro
-    tV_sym_opqrst.i("opqrst") <<  1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
+    tV_sym_opqrst.i("opqrst") <<  2*1./3 * (tV_opqrst.i("opqrst") +tV_opqrst.i("oqprts")\
                                      +tV_opqrst.i("qpotsr"))
 
     double_contractions = ctf.tensor(nSpatialOrb)
-    # factor of 2**2 comes from two spin summations
-    first_term = -2**2*0.5*ctf.einsum("pijpij->p", tV_sym_opqrst)
+    # factor of 2**2 comes from two spin summations, (pp|ii|jj)
+    first_term = -2**2*0.5*ctf.einsum("pijpij->p", tV_sym_opqrst[:,:no,:no,:,:no,:no])
     double_contractions += first_term
     print("First term=",first_term)
 
-    # factor of 2 comes from one spin summation on i,j
-    second_term = 2*0.5*ctf.einsum("pijpji->p", tV_sym_opqrst)
+    # factor of 2 comes from one spin summation on i,j, (pp|ij|ji)
+    second_term = 2*0.5*ctf.einsum("pijpji->p", tV_sym_opqrst[:,:no,:no,:,:no,:no])
     double_contractions += second_term
     print("Second term=",second_term)
 
-    # factor of 2 comes from one spin summation on j
-    third_term = 2*0.5*ctf.einsum("jpijip->p", tV_sym_opqrst)
+    # factor of 2 comes from one spin summation on j, (jj|pi|ip)
+    third_term = 2*0.5*ctf.einsum("jpijip->p", tV_sym_opqrst[:no,:,:no,:no,:no,:])
     double_contractions += third_term
     print("Third term=",third_term)
 
-    # factor of 2 comes from one spin summation on i
-    fourth_term = 2*0.5*ctf.einsum("pjijpi->p", tV_sym_opqrst)
+    # factor of 2 comes from one spin summation on i, (pj|jp|ii)
+    fourth_term = 2*0.5*ctf.einsum("pjijpi->p", tV_sym_opqrst[:,:no,:no,:no,:,:no])
     double_contractions += fourth_term
     print("Fourth term=",fourth_term)
 
-    fifth_term = -0.5*ctf.einsum("pijijp->p", tV_sym_opqrst)
+    # (pi|ij|jp)
+    fifth_term = -0.5*ctf.einsum("pijijp->p", tV_sym_opqrst[:,:no,:no,:no,:no,:])
     double_contractions += fifth_term
     print("Fifth term=",fifth_term)
 
-    sixth_term = -0.5*ctf.einsum("jpipij->p", tV_sym_opqrst)
+    # (jp|pi|ij)
+    sixth_term = -0.5*ctf.einsum("jpipij->p", tV_sym_opqrst[:no,:,:no,:,:no,:no])
     double_contractions += sixth_term
     print("Sixth term=",sixth_term)
 
     # 2 subsequent single contractions:
     tV_pkql = ctf.tensor([nSpatialOrb, nSpatialOrb, no,no])
-    tV_pkql = -ctf.einsum("pkmqlm->pkql",tV_sym_opqrst)
-    tV_pkql += ctf.einsum("pkmqml->pkql",tV_sym_opqrst)
-    tV_pkql += ctf.einsum("kpmlmq->pkql",tV_sym_opqrst)
+    # (pq|kl|mm)
+    tV_pkql = -ctf.einsum("pkmqlm->pkql",tV_sym_opqrst[:,:no,:no,:,:no,:no])
+    # (pq|km|ml)
+    tV_pkql += ctf.einsum("pkmqml->pkql",tV_sym_opqrst[:,:no,:no,:,:no,:no])
+    # (kl|pm|mq)
+    tV_pkql += ctf.einsum("kpmlmq->pkql",tV_sym_opqrst[:no,:,:no,:no,:no,:])
     tV_pkql = 1/2*tV_pkql
-    f_pq = ctf.einsum("pkqk->pq", tV_pkql)
-    f_pq += -ctf.einsum("pkkq->pq", tV_pkql)
+    f_ij = ctf.einsum("ikjk->ij", tV_pkql[:no,:,:no,:])
+    f_ij += -ctf.einsum("ikkj->ij", tV_pkql[:no,:,:no,:])
     print("Two subsequent single contractions:")
-    print(f_pq.to_nparray().diagonal())
+    print("    Occupied block:")
+    print(f_ij.to_nparray().diagonal())
+
+    # 2 subsequent single contractions:
+    # still buggy
+    #tV_aklb = ctf.tensor([nv, no, no,nv])
+    ## (pq|kl|mm)
+    #tV_aklb = -ctf.einsum("akmlbm->aklb",tV_sym_opqrst[no:,:no,:no,:no,no:,:no])
+    ## (pq|km|ml)
+    #tV_aklb += ctf.einsum("akmlmb->aklb",tV_sym_opqrst[no:,:no,:no,:no,:no,no:])
+    ## (kl|pm|mq)
+    #tV_aklb += ctf.einsum("kambml->aklb",tV_sym_opqrst[:no,no:,:no,no:,:no,:no])
+    #tV_aklb = 1/2*tV_aklb
+    #f_ab = ctf.einsum("akbk->ab", tV_pkql[no:,:no,no:,:no])
+    #print("shape of f_ab")
+    #f_ab += -ctf.einsum("akkb->ab", tV_aklb[no:,:no,:no,no:])
+    #print("Two subsequent single contractions:")
+    #print("    Virtual block:")
+    #print(f_ab.to_nparray().diagonal())
 
     contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
     if world.rank() == 0:
