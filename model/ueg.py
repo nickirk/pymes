@@ -202,7 +202,7 @@ class UEG:
 
     def eval2BodyIntegrals(self, correlator = None, rpaApprox= False, \
             only2Body=False,onlyNonHermitian2Body=False,onlyHermitian2Body=False,\
-            effective2Body= False, dtype=np.float64,sp=1):
+            effective2Body= False,exchange1=False, dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.eval2BodyIntegrals"
         startTime = time.time()
@@ -255,14 +255,14 @@ class UEG:
                                     p+world.np() if p+world.np() < nP else nP, \
                                     nP), level=1)
                 for r in range(nP):
-                    dIntK = self.basis_fns[p*2].k-self.basis_fns[r*2].k
-                    dKVec = self.basis_fns[p*2].kp-self.basis_fns[r*2].kp
+                    dIntK = self.basis_fns[r*2].k-self.basis_fns[p*2].k
+                    dKVec = self.basis_fns[r*2].kp-self.basis_fns[p*2].kp
                     uMat  = 0.
                     if correlator is not None:
                         uMat = self.sumNablaUSquare(dKVec)
 
                     for q in range(nP):
-                        intKS = self.basis_fns[q*2].k + dIntK
+                        intKS = self.basis_fns[q*2].k - dIntK
                         #if self.is_k_in_basis(intKS):
                         locS = numKInEachDir**2 * (intKS[0] + self.imax) + \
                                 numKInEachDir * (intKS[1] + self.imax) +\
@@ -287,7 +287,7 @@ class UEG:
                                 w = 4.*np.pi/dkSquare \
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
+                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare) \
                                         - (self.nel-2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
@@ -302,7 +302,7 @@ class UEG:
                                 w = 4.*np.pi/dkSquare \
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare)
+                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare)
                                         #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
@@ -328,7 +328,7 @@ class UEG:
                             if np.abs(dkSquare) > 0.:
                                 rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
-                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare)
+                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare)
                                         #- (self.nel - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             #else:
@@ -345,15 +345,25 @@ class UEG:
                                 w = 4.*np.pi/dkSquare \
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(-dKVec)) * correlator(dkSquare) \
+                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare) \
                                         - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega\
-                                        + 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
-                                        - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp - dKVec, dKVec)\
-                                        + 2.*self.contractP_KWithQ(self.basis_fns[2*p].kp, dKVec)
+                                        + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)\
+                                        - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
+                                        + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif exchange1:
+                            if np.abs(dkSquare) > 0.:
+                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                w = + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
+                                w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
@@ -525,7 +535,7 @@ class UEG:
         u_diff_ij_square = u_diff_ij**2
         e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
         # bug, missing a factor of 2 from spin degree of freedom
-        e_shield =  2*e_shield / 2 / self.Omega**2 
+        e_shield =  2*e_shield / 2 / self.Omega**2
 
         one_particle_energies += e_shield
 
