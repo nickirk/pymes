@@ -64,8 +64,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     timeCoulInt = time.time()
     ueg_model.gamma = gamma
 
-    #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
-    ueg_model.kCutoff = 0.
+    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    #ueg_model.kCutoff = 0.
     if world.rank() == 0:
         print("kCutoff=",ueg_model.kCutoff)
 
