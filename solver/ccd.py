@@ -72,7 +72,7 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
     eExCcd = 0.
     residules = []
     amps = []
-    mixSize = 4
+    mixSize = 5
     #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
     while np.abs(dE) > epsilonE and iteration <= maxIter:
         iteration += 1
