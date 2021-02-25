@@ -202,7 +202,8 @@ class UEG:
 
     def eval2BodyIntegrals(self, correlator = None, rpaApprox= False, \
             only2Body=False,onlyNonHermitian2Body=False,onlyHermitian2Body=False,\
-            effective2Body= False,exchange1=False, dtype=np.float64,sp=1):
+            effective2Body= False,exchange1=False,exchange2=False, exchange3=False,\
+            dtype=np.float64,sp=1):
         world = ctf.comm()
         algoName = "UEG.eval2BodyIntegrals"
         startTime = time.time()
@@ -230,6 +231,16 @@ class UEG:
             if effective2Body:
                 print_logging_info("Including effective 2-body terms from 3-body: "\
                                , effective2Body, level=1)
+            if exchange1:
+                print_logging_info("Using only 1. exchange type 2-body from 3-body: "\
+                               , exchange1, level=1)
+            if exchange2:
+                print_logging_info("Using only 2. exchange type 2-body from 3-body: "\
+                               , exchange2, level=1)
+
+            if exchange3:
+                print_logging_info("Using only 3. exchange type 2-body from 3-body: "\
+                               , exchange3, level=1)
             # Just for testing, not used in production
             if onlyNonHermitian2Body:
                 print_logging_info("Including only non-hermitian 2-body terms: "\
@@ -353,17 +364,37 @@ class UEG:
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
-                                w =  uMat / self.Omega
+                                w =  (uMat + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec))
+                                w = w / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
+                        # exchange 1-3 are for test purpose only.
                         elif exchange1:
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
                                 w = + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  0.
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif exchange2:
+                            if np.abs(dkSquare) > 0.:
+                                w = - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
+                                w =  0.
+                            indices.append(nP**3*p + nP**2*q + nP*r + s)
+                            values.append(w)
+                        elif exchange3:
+                            if np.abs(dkSquare) > 0.:
+                                w = + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = w / self.Omega
+                            else:
+                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
+                                w = + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = w / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
