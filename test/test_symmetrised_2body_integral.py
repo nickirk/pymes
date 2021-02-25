@@ -148,11 +148,16 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_title('Evaluating effective 2-body integrals','=')
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
-    tV_pqrs += ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    tV_asym_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
                                      effective2Body=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
-
+    print_logging_info("Symmetrizing tV_pqrs with respect to electron numbering")
+    
+    #tV_eff_pqrs = tV_asym_pqrs - tV_pqrs
+    tV_sym_pqrs = ctf.tensor(tV_pqrs.shape)
+    tV_sym_pqrs.i("pqrs") << 0.5 *( tV_asym_pqrs.i("pqrs") + tV_asym_pqrs.i("qpsr"))
+    tV_pqrs += tV_sym_pqrs
 
     orbital_energy_correction = True
     # the correction to the one particle energies from doubly contracted 3-body
@@ -214,7 +219,7 @@ if __name__ == '__main__':
   amps = None
   nel = 14
   for rs in [0.5]:
-    for cutoff in [3]:
+    for cutoff in [2]:
       kCutoffFraction = None
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
   ctf.MPI_Stop()

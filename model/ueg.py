@@ -352,19 +352,14 @@ class UEG:
                             values.append(w)
                         elif effective2Body:
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
-                                w = 4.*np.pi/dkSquare \
-                                        +  uMat\
-                                        + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare) \
-                                        - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega\
-                                        + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)\
-                                        - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
-                                        + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = - (self.nel)*dkSquare*correlator(dkSquare)**2/self.Omega\
+                                    + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)\
+                                    - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
+                                    + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
                                 #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
-                                w =  (uMat + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec))
+                                w =  (2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec))
                                 w = w / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
@@ -399,6 +394,13 @@ class UEG:
                             values.append(w)
                             #tV_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
         tV_pqrs.write(indices,values)
+
+        if effective2Body:
+            # symmetrize the integral with respect to electron 1 and 2
+            tV_sym_pqrs = ctf.tensor(tV_pqrs.shape, sp=tV_pqrs.sp)
+            tV_sym_pqrs.i("pqrs") << 0.5*(tV_pqrs.i("pqrs")+tV_pqrs.i("qpsr"))
+            del tV_pqrs
+            tV_pqrs = tV_sym_pqrs
 
         print_logging_info("{:.3f} s spent on ".format(time.time()-startTime)+algoName,\
                            level=1)
