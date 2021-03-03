@@ -86,7 +86,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     time_pure_2_body_int = time.time()
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    ueg_model.kCutoff = kc
 
     print_title('Evaluating pure 2-body integrals','=')
     print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
@@ -185,19 +186,30 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ccd_amp = ccd_results["t2 amp"]
     ccd_dE = ccd_results["dE"]
 
+
     print_logging_info("Starting DCD")
     dcd_results = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls,\
-                            sp=0, maxIter=70, fDiis=True,amps=ccd_amp)
+                            sp=0, maxIter=70, fDiis=True,amps=None)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]
+
+    ccd_t2_norm = 2.*ctf.einsum("abij,abij->", ccd_amp,ccd_amp)
+    ccd_t2_norm -= ctf.einsum("abij,baij->", ccd_amp,ccd_amp)
+    ccd_t2_norm = ccd_t2_norm**(1./2)
+
+    dcd_t2_norm = 2.*ctf.einsum("abij,abij->", dcd_amp,dcd_amp)
+    dcd_t2_norm -= ctf.einsum("abij,baij->", dcd_amp,dcd_amp)
+    dcd_t2_norm = dcd_t2_norm**(1./2)
 
     print_title("Summary of results","=")
     print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
                         ueg_model.kCutoff))
     print_logging_info("HF E = {:.8f}".format(tEHF))
     print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("CCD T2 norm = ",ccd_t2_norm)
     print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
+    print_logging_info("DCD T2 norm = ",dcd_t2_norm)
     print_logging_info("3-body mean-field E = {:.8f}"\
                        .format(contr_from_triply_contra_3b))
     print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
@@ -213,8 +225,8 @@ if __name__ == '__main__':
   gamma = None
   amps = None
   nel = 14
-  for rs in [0.5]:
+  for rs in [50.0]:
     for cutoff in [3]:
-      kCutoffFraction = None
+      kCutoffFraction = 6**(1./2)
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
   ctf.MPI_Stop()
