@@ -4,7 +4,7 @@ import time
 import numpy as np
 import sys
 
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
+#sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
 
 import ctf
 from ctf.core import *
@@ -180,7 +180,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ls = -(np.log(rs)*0.8+1.0)
     print_logging_info("Starting CCD")
     ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls, \
-                            sp=0, maxIter=70, fDiis=True, amps=amps)
+                            sp=0, maxIter=70, fDiis=True, amps=amps, epsilonE=1e-7)
     # unpacking
     ccd_e = ccd_results["ccd e"]
     ccd_amp = ccd_results["t2 amp"]
@@ -189,7 +189,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     print_logging_info("Starting DCD")
     dcd_results = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls,\
-                            sp=0, maxIter=70, fDiis=True,amps=None)
+                            sp=0, maxIter=70, fDiis=True,amps=ccd_amp, epsilonE=1e-7)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]
@@ -225,8 +225,8 @@ if __name__ == '__main__':
   gamma = None
   amps = None
   nel = 14
-  for rs in [50.0]:
-    for cutoff in [3]:
-      kCutoffFraction = 6**(1./2)
+  for rs in [0.5]:
+    for cutoff in [2]:
+      kCutoffFraction = 2**(1./2)
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
   ctf.MPI_Stop()

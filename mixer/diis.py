@@ -32,9 +32,9 @@ def mix(errors, amplitudes):
     unitVec[-1] = -1.
     eigen_values, eigen_vectors = scipy.linalg.eigh(L)
 
-    if np.any(np.abs(eigen_values) <= 1e-13):
+    if np.any(np.abs(eigen_values) <= 1e-10):
         print_logging_info("Linear dependence found in DIIS subspace.",level=2)
-        valid_indices = np.abs(eigen_values) > 1e-13
+        valid_indices = np.abs(eigen_values) > 1e-10
         c = np.dot(eigen_vectors[:,valid_indices]*(1./eigen_values[valid_indices]),\
                 np.dot(eigen_vectors[:,valid_indices].T.conj(), unitVec))
     else:
