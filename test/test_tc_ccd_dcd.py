@@ -225,8 +225,8 @@ if __name__ == '__main__':
   gamma = None
   amps = None
   nel = 14
-  for rs in [0.5]:
-    for cutoff in [2]:
-      kCutoffFraction = 2**(1./2)
+  for rs in [50.0]:
+    for cutoff in [3]:
+      kCutoffFraction = 6**(1./2)
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
   ctf.MPI_Stop()
