@@ -114,12 +114,14 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fD
         eLastIterCcd = eCcd
 
         l1NormT2 = ctf.norm(tT_abij)
+        residual_norm = ctf.norm(tDeltaT_abij)
 
         if iteration <= maxIter:
             print_logging_info("Iteration = ", iteration, level=1)
             print_logging_info("Correlation Energy = {:.8f}".format(eCcd), level=2)
             print_logging_info("dE = {:.8e}".format(dE), level=2)
             print_logging_info("L1 Norm of T2 = {:.8f}".format(l1NormT2), level=2)
+            print_logging_info("Norm Residul = {:.8f}".format(residual_norm), level=2)
         else:
             print_logging_info("A converged solution is not found!", level=1)
 

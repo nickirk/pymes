@@ -95,6 +95,9 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     # 3-body integrals). This integral will be used to compute the HF energy
     tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
                                      only2Body=True,sp=1)
+    tV_sym_pqrs = ctf.tensor(tV_pqrs.shape, sp=tV_pqrs.sp)
+    tV_sym_pqrs.i("pqrs") << 0.5 *( tV_pqrs.i("pqrs") + tV_pqrs.i("qpsr"))
+    tV_pqrs = tV_sym_pqrs
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
