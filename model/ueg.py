@@ -25,6 +25,27 @@ class UEG:
             number of spin down electrons
         rs: float
             density parameter
+
+        Attributes
+        ----------
+        basis_indices_map: nparray of int dtype
+            an array to store indices of basis functions (plane waves) for
+            later lookup. Size Nx*Ny*Nz, Nx, Ny, Nz are the k-vector points
+            in x, y, z directions.
+
+        basis_fns: tuple 
+            of relevant class PlaneWaveFn objects, 
+            i.e. the single-particle basis set.
+
+        correlator: function
+            correlator used in transcorrelation scheme.
+
+        cutoff: float
+            plane wave vector cutoff for determining the plane wave basis 
+            functions.
+
+        k_cutoff: float
+            plane wave vector cutoff inside the correlaor function trunc. 
         """
 
         if (n_ele) % 2 != 0:
@@ -769,10 +790,19 @@ class UEG:
         return result
 
 
-    def trunc(self, kSquare, multiply_by_k_square=False):
-        '''
-        The G=0 terms need more consideration
-        '''
+    def trunc(self, kSquare):
+        """ Member function of class UEG. A correlator function. Defined as
+        -4pi/k^4 (k>kc), 0 (k<=kc).
+
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+
+        Returns
+        -------
+        result: float or nparray of float
+        """
         if self.k_cutoff is None:
             self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
 
@@ -919,13 +949,28 @@ class UEG:
         return result
 
 
-    # interface to CC4S, for test purpose only, not essential
 
     def calcGamma(self, overlap_basis, nP):
-        '''
-        FTOD : Fourier Transformed Overlap Density
-        return: C^p_q({\bf G}) = \int\mathrm d{\bf r} \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}
-        '''
+        """
+        Interface to CC4S, for test purpose only, not essential
+
+        Parameters
+        ----------
+        overlap_basis: tuple
+            of PlaneWaveFn objects. It serves the role of plane waves used for
+            density fitting in real solids.
+        nP: int
+            number of spatial orbitals to consider.
+
+        Returns
+        -------
+        gamma_pqG: nparray of dtype float
+            of size nP*nP*nG, where nG is the length of overlap_basis.
+            Meaning Fourier transformed overlap densities/pair densities (FTOD)
+            $C^p_q({\bf G}) = \int\mathrm d{\bf r} 
+             \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}$
+        """
+
         algoName = "UEG.calcGamma"
         if self.basis_fns == None:
             raise BasisSetNotInitialized(algoName)
