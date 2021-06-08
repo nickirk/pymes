@@ -4,15 +4,27 @@ import ctf
 from ctf.core import *
 from pymes.solver import ccd
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  fDcd=True, maxIter=100, fDiis=True, amps=None, bruekner=False, epsilonE=1e-8):
+def solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
+          is_dcd=True, max_iter=100, is_diis=True, amps=None, is_bruekner=False, \
+          epsilon_e=1e-8):
     '''
     dcd algorithm
-    tV_ijkl = V^{ij}_{kl}
-    tV_abij = V^{ab}_{ij}
+    t_V_ijkl = V^{ij}_{kl}
+    t_V_abij = V^{ab}_{ij}
     tT_abij = T^{ab}_{ij}
     the upper indices refer to conjugation
     '''
-    algoName = "dcd.solve"
-    timeDcd = time.time()
-    return ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=levelShift, sp=sp,  fDcd=True, maxIter=maxIter, fDiis=fDiis,amps=amps, bruekner=bruekner, epsilonE=epsilonE)
+    algo_name = "dcd.solve"
+    time_dcd = time.time()
+    return ccd.solve(t_epsilon_i, \
+                     t_epsilon_a, \
+                     t_V_pqrs, \
+                     level_shift=level_shift,\
+                     sp=sp, \
+                     is_dcd=True, \
+                     max_iter=max_iter, \
+                     is_diis=is_diis, \
+                     amps=amps, \
+                     is_bruekner=is_bruekner, \
+                     epsilon_e=epsilon_e)
 

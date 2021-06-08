@@ -7,223 +7,255 @@ from pymes.mixer import diis
 from pymes.logging import print_logging_info
 from pymes.solver import drccd
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0,  maxIter=100, fDcd=False, fDiis=True, fDrccd=False, amps=None, bruekner=False, epsilonE=1e-8):
+
+def solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
+          max_iter=100, is_dcd=False, is_diis=True, is_dr_ccd=False, amps=None,\
+          is_bruekner=False, epsilon_e=1e-8):
     '''
     ccd algorithm
-    tV_ijkl = V^{ij}_{kl}
-    tV_abij = V^{ab}_{ij}
-    tT_abij = T^{ab}_{ij}
+    t_V_ijkl = V^{ij}_{kl}
+    t_V_abij = V^{ab}_{ij}
+    t_T_abij = T^{ab}_{ij}
     the upper indices refer to conjugation
     '''
-    algoName = "ccd.solve"
-    timeCcd = time.time()
+    algo_name = "ccd.solve"
+    time_ccd = time.time()
     world = ctf.comm()
 
-    no = tEpsilon_i.size
-    nv = tEpsilon_a.size
+    no = t_epsilon_i.size
+    nv = t_epsilon_a.size
 
     # if use Bruekner method, backup the hole and particle energies
-    tEpsilonOriginal_i = tEpsilon_i.copy()
-    tEpsilonOriginal_a = tEpsilon_a.copy()
+    t_epsilon_original_i = t_epsilon_i.copy()
+    t_epsilon_original_a = t_epsilon_a.copy()
 
     # parameters
-    levelShift = levelShift
-    maxIter = maxIter
-    #epsilonE = 1e-8
+    level_shift = level_shift
+    max_iter = max_iter
+    #epsilon_e = 1e-8
     delta = 1.0
 
     # construct the needed integrals here on spot.
 
 
-    tV_iabj = tV_pqrs[:no,no:,no:,:no]
-    tV_aijb = tV_pqrs[no:,:no,:no,no:]
-    tV_ijab = tV_pqrs[:no,:no,no:,no:]
-    tV_klij = tV_pqrs[:no,:no,:no,:no]
-    tV_iajb = tV_pqrs[:no,no:,:no,no:]
-    tV_abij = tV_pqrs[no:,no:,:no,:no]
-    tV_abcd = tV_pqrs[no:,no:,no:,no:]
+    t_V_iabj = t_V_pqrs[:no,no:,no:,:no]
+    t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
+    t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
+    t_V_klij = t_V_pqrs[:no,:no,:no,:no]
+    t_V_iajb = t_V_pqrs[:no,no:,:no,no:]
+    t_V_abij = t_V_pqrs[no:,no:,:no,:no]
+    t_V_abcd = t_V_pqrs[no:,no:,no:,no:]
 
 
-    print_logging_info(algoName)
-    print_logging_info("Using DCD: " , fDcd, level=1)
-    print_logging_info("Using dr-CCD: " , fDrccd, level=1)
+    print_logging_info(algo_name)
+    print_logging_info("Using DCD: " , is_dcd, level=1)
+    print_logging_info("Using dr-CCD: " , is_dr_ccd, level=1)
     print_logging_info("Solving doubles amplitude equation", level=1)
-    print_logging_info("Using data type %s" % tV_pqrs.dtype, level=1)
-    print_logging_info("Using DIIS mixer: ", fDiis, level=1)
-    print_logging_info("Using Bruekner quasi-particle energy: ", bruekner, level=1)
+    print_logging_info("Using data type %s" % t_V_pqrs.dtype, level=1)
+    print_logging_info("Using DIIS mixer: ", is_diis, level=1)
+    print_logging_info("Using Bruekner quasi-particle energy: ", is_bruekner, \
+                       level=1)
     print_logging_info("Iteration = 0", level=1)
-    eMp2, tT_abij = mp2.solve(tEpsilon_i,tEpsilon_a, tV_pqrs, levelShift, sp=sp)
+    e_mp2, t_T_abij = mp2.solve(t_epsilon_i,t_epsilon_a, t_V_pqrs, level_shift,\
+                                sp=sp)
     if amps is not None:
-        tT_abij = amps
+        t_T_abij = amps
 
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_pqrs.dtype, sp=sp)
+    t_D_abij = ctf.tensor([nv,nv,no,no],dtype=t_V_pqrs.dtype, sp=sp)
     # the following ctf expression calcs the outer sum, as wanted.
-    tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
-            -tEpsilon_a.i("a")-tEpsilon_a.i("b")
-    #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
-    tD_abij = 1./(tD_abij+levelShift)
+    t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j")\
+                          -t_epsilon_a.i("a")-t_epsilon_a.i("b")
+    #t_D_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
+    t_D_abij = 1./(t_D_abij+level_shift)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
-    dE = np.abs(np.real(eMp2))
+    dE = np.abs(np.real(e_mp2))
     iteration = 0
-    eLastIterCcd = np.real(eMp2)
-    eCcd = 0.
-    eDirCcd = 0.
-    eExCcd = 0.
+    e_last_iter_ccd = np.real(e_mp2)
+    e_ccd = 0.
+    e_dir_ccd = 0.
+    e_ex_ccd = 0.
     residules = []
     amps = []
     mixSize = 5
-    #tR_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
-    while np.abs(dE) > epsilonE and iteration <= maxIter:
+    #t_R_abij = ctf.tensor([nv,nv,no,no], dtype=complex, sp=1)
+    while np.abs(dE) > epsilon_e and iteration <= max_iter:
         iteration += 1
-        if fDrccd:
-            tR_abij = drccd.getResidual(tEpsilon_i, tEpsilon_a,tT_abij, tV_abij, tV_aijb, tV_iabj, tV_ijab)
+        if is_dr_ccd:
+            t_R_abij = drccd.get_residual(t_epsilon_i, t_epsilon_a,t_T_abij, \
+                                          t_V_abij, t_V_aijb, t_V_iabj, \
+                                          t_V_ijab)
         else:
-            tR_abij = 1.0*getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab,\
-                tV_abij, tV_iajb, tV_iabj, tV_abcd, fDcd, bruekner)
+            t_R_abij = 1.0*get_residual(t_epsilon_i, t_epsilon_a, t_T_abij, \
+                                        t_V_klij, t_V_ijab,\
+                                        t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd,\
+                                        is_dcd, is_bruekner)
 
-        if bruekner:
+        if is_bruekner:
             # construct amp dependent quasi-particle energies
-            tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=tT_abij.dtype,sp=tT_abij.sp)
-            tTildeT_abij.set_zero()
-            tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
-            tEpsilon_i = tEpsilonOriginal_i + 1./2 * ctf.einsum("ilcd,cdil->i", tV_ijab, tTildeT_abij)
-            tEpsilon_a = tEpsilonOriginal_a - 1./2 * ctf.einsum("klad,adkl->a", tV_ijab, tTildeT_abij)
+            t_tilde_T_abij = ctf.tensor([nv,nv,no,no], dtype=t_T_abij.dtype, \
+                                        sp=t_T_abij.sp)
+            t_tilde_T_abij.set_zero()
+            t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") \
+                                        - t_T_abij.i("baij")
+            t_epsilon_i = t_epsilon_original_i \
+                          + 1./2 * ctf.einsum("ilcd,cdil->i", t_V_ijab, \
+                                              t_tilde_T_abij)
+            t_epsilon_a = t_epsilon_original_a \
+                          - 1./2 * ctf.einsum("klad,adkl->a", t_V_ijab, \
+                                              t_tilde_T_abij)
 
             # update the denominator accordingly
-            tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")\
-                -tEpsilon_a.i("a")-tEpsilon_a.i("b")
-            tD_abij = 1./(tD_abij+levelShift)
+            t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j")\
+                -t_epsilon_a.i("a")-t_epsilon_a.i("b")
+            t_D_abij = 1./(t_D_abij+level_shift)
 
-        tDeltaT_abij = ctf.einsum('abij,abij->abij', tR_abij, tD_abij)
-        tT_abij += delta * tDeltaT_abij
-        if fDiis:
+        t_delta_T_abij = ctf.einsum('abij,abij->abij', t_R_abij, t_D_abij)
+        t_T_abij += delta * t_delta_T_abij
+
+        if is_diis:
             if len(residules) == mixSize:
                 residules.pop(0)
                 amps.pop(0)
-            residules.append(tDeltaT_abij.copy())
-            amps.append(tT_abij.copy())
-            tT_abij = diis.mix(residules,amps)
+            residules.append(t_delta_T_abij.copy())
+            amps.append(t_T_abij.copy())
+            t_T_abij = diis.mix(residules,amps)
         # update energy and norm of amplitudes
-        #if fDrccd:
-        #    eDirCcd, eExCcd = drccd.getEnergy(tT_abij, tV_ijab)
+        #if is_dr_ccd:
+        #    e_dir_ccd, e_ex_ccd = drccd.get_energy(t_T_abij, t_V_ijab)
         #else:
-        eDirCcd, eExCcd = getEnergy(tT_abij, tV_ijab)
-        eCcd = np.real(eDirCcd + eExCcd)
-        dE = eCcd - eLastIterCcd
-        eLastIterCcd = eCcd
+        e_dir_ccd, e_ex_ccd = get_energy(t_T_abij, t_V_ijab)
+        e_ccd = np.real(e_dir_ccd + e_ex_ccd)
+        dE = e_ccd - e_last_iter_ccd
+        e_last_iter_ccd = e_ccd
 
-        l1NormT2 = ctf.norm(tT_abij)
+        t2_l1_norm = ctf.norm(t_T_abij)
+        residual_norm = ctf.norm(t_delta_T_abij)
 
-        if iteration <= maxIter:
+        if iteration <= max_iter:
             print_logging_info("Iteration = ", iteration, level=1)
-            print_logging_info("Correlation Energy = {:.8f}".format(eCcd), level=2)
+            print_logging_info("Correlation Energy = {:.8f}".format(e_ccd), \
+                               level=2)
             print_logging_info("dE = {:.8e}".format(dE), level=2)
-            print_logging_info("L1 Norm of T2 = {:.8f}".format(l1NormT2), level=2)
+            print_logging_info("L1 Norm of T2 = {:.8f}".format(t2_l1_norm), \
+                               level=2)
+            print_logging_info("Norm Residul = {:.8f}".format(residual_norm), \
+                               level=2)
         else:
             print_logging_info("A converged solution is not found!", level=1)
 
-    print_logging_info("Direct contribution = {:.8f}".format(np.real(eDirCcd)),level=1)
-    print_logging_info("Exchange contribution = {:.8f}".format(np.real(eExCcd)),level=1)
-    print_logging_info("CCD correlation energy = {:.8f}".format(eCcd),level=1)
-    print_logging_info("{:.3f} seconds spent on CCD".format((time.time()-timeCcd)),level=1)
+    print_logging_info("Direct contribution = {:.8f}".format(\
+                       np.real(e_dir_ccd)), level=1)
+    print_logging_info("Exchange contribution = {:.8f}".format(\
+                       np.real(e_ex_ccd)),level=1)
+    print_logging_info("CCD correlation energy = {:.8f}".format(\
+                       e_ccd), level=1)
+    print_logging_info("{:.3f} seconds spent on CCD".format(\
+                       (time.time()-time_ccd)), level=1)
 
-    return {"ccd e": eCcd, "t2 amp": tT_abij, "hole e": tEpsilon_i, "particle e":\
-            tEpsilon_a, "dE": dE}
-def getResidual(tEpsilon_i, tEpsilon_a, tT_abij, tV_klij, tV_ijab, tV_abij, tV_iajb, \
-        tV_iabj, tV_abcd, fDcd, bruekner):
+    return {"ccd e": e_ccd, "t2 amp": t_T_abij, "hole e": t_epsilon_i, \
+            "particle e": t_epsilon_a, "dE": dE}
 
-    algoName = "ccd.getResidual"
-    no = tEpsilon_i.size
-    nv = tEpsilon_a.size
-    tR_abij = ctf.tensor([nv,nv,no,no],dtype=tV_klij.dtype,sp=tT_abij.sp)
+def get_residual(t_epsilon_i, t_epsilon_a, t_T_abij, t_V_klij, t_V_ijab, \
+                 t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd, is_dcd, is_bruekner):
 
-    # tV_ijkl and tV_klij are not the same in transcorrelated Hamiltonian!
-    tI_klij = ctf.tensor([no,no,no,no], dtype=tV_klij.dtype,sp=tT_abij.sp)
+    algo_name = "ccd.get_residual"
+    no = t_epsilon_i.size
+    nv = t_epsilon_a.size
+    t_R_abij = ctf.tensor([nv,nv,no,no], dtype=t_V_klij.dtype, sp=t_T_abij.sp)
+
+    # t_V_ijkl and t_V_klij are not the same in transcorrelated Hamiltonian!
+    t_I_klij = ctf.tensor([no,no,no,no], dtype=t_V_klij.dtype,sp=t_T_abij.sp)
 
     # = operatore pass the reference instead of making a copy.
     # if we want a copy, we need to specify that.
-    #tI_klij = ctf.tensor([nv,nv,no,no], dtype=tV_klij.dtype,sp=tV_klij.sp)
-    tI_klij += tV_klij
-    if not fDcd:
-        tI_klij += ctf.einsum("klcd, cdij -> klij", tV_ijab, tT_abij)
+    #t_I_klij = ctf.tensor([nv,nv,no,no], dtype=t_V_klij.dtype,sp=t_V_klij.sp)
+    t_I_klij += t_V_klij
+    if not is_dcd:
+        t_I_klij += ctf.einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
 
-    tR_abij.i("abij") << tV_abij.i("abij") + tV_abcd.i("abcd") * tT_abij.i("cdij")\
-    + tI_klij.i("klij") * tT_abij.i("abkl")
+    t_R_abij.i("abij") << t_V_abij.i("abij") \
+                          + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
+                          + t_I_klij.i("klij") * t_T_abij.i("abkl")
 
-    if not fDcd:
-        tX_alcj = ctf.einsum("klcd, adkj -> alcj", tV_ijab, tT_abij)
-        tR_abij += ctf.einsum("alcj, cbil -> abij", tX_alcj, tT_abij)
+    if not is_dcd:
+        t_X_alcj = ctf.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
+        t_R_abij += ctf.einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
 
 
 
     # intermediates
-    # tTildeT_abij
+    # t_tilde_T_abij
     # tested using MP2 energy, the below tensor op is correct
-    tTildeT_abij = ctf.tensor([nv,nv,no,no],dtype=tT_abij.dtype,sp=tT_abij.sp)
-    tTildeT_abij.set_zero()
-    tTildeT_abij.i("abij") << 2.0 * tT_abij.i("abij") - tT_abij.i("baij")
+    t_tilde_T_abij = ctf.tensor([nv,nv,no,no], dtype=t_T_abij.dtype, \
+                                sp=t_T_abij.sp)
+    t_tilde_T_abij.set_zero()
+    t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") - t_T_abij.i("baij")
 
     # Xai_kbcj for the quadratic terms
-    tXai_cbkj = ctf.einsum("klcd, dblj -> cbkj", tV_ijab, tTildeT_abij)
+    t_Xai_cbkj = ctf.einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
 
-    tR_abij += ctf.einsum("acik, cbkj -> abij", tTildeT_abij, tXai_cbkj)
+    t_R_abij += ctf.einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
 
     # intermediate for exchange of ia and jb indices
-    tFock_ab = ctf.tensor([nv,nv], dtype=tEpsilon_a.dtype, sp=0)
-    tFock_ab.set_zero()
-    tFock_ij = ctf.tensor([no,no], dtype=tEpsilon_i.dtype, sp=0)
-    tFock_ij.set_zero()
-    tFock_ab.i("aa") << tEpsilon_a.i("a")
-    tFock_ij.i("ii") << tEpsilon_i.i("i")
+    t_fock_ab = ctf.tensor([nv,nv], dtype=t_epsilon_a.dtype, sp=0)
+    t_fock_ab.set_zero()
+    t_fock_ij = ctf.tensor([no,no], dtype=t_epsilon_i.dtype, sp=0)
+    t_fock_ij.set_zero()
+    t_fock_ab.i("aa") << t_epsilon_a.i("a")
+    t_fock_ij.i("ii") << t_epsilon_i.i("i")
 
-    if bruekner:
-        tX_ac = tFock_ab
-        tX_ki = tFock_ij
+    if is_bruekner:
+        t_X_ac = t_fock_ab
+        t_X_ki = t_fock_ij
     else:
-        tX_ac = tFock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
-        tX_ki = tFock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+        t_X_ac = t_fock_ab - 1./2 * ctf.einsum("adkl, lkdc -> ac", \
+                                               t_tilde_T_abij, t_V_ijab)
+        t_X_ki = t_fock_ij + 1./2 * ctf.einsum("cdil, lkdc -> ki", \
+                                               t_tilde_T_abij, t_V_ijab)
 
-    if not fDcd:
-        tX_ac -= 1./2. * ctf.einsum("adkl, lkdc -> ac", tTildeT_abij, tV_ijab)
-        tX_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", tTildeT_abij, tV_ijab)
+    if not is_dcd:
+        t_X_ac -= 1./2. * ctf.einsum("adkl, lkdc -> ac", \
+                                     t_tilde_T_abij, t_V_ijab)
+        t_X_ki += 1./2. * ctf.einsum("cdil, lkdc -> ki", \
+                                     t_tilde_T_abij, t_V_ijab)
 
 
-    tEx_abij = ctf.tensor([nv,nv,no,no],dtype=tR_abij.dtype,sp=tR_abij.sp)
-    tEx_baji = ctf.tensor([nv,nv,no,no],dtype=tR_abij.dtype,sp=tR_abij.sp)
+    t_Ex_abij = ctf.tensor([nv,nv,no,no],dtype=t_R_abij.dtype,sp=t_R_abij.sp)
+    t_Ex_baji = ctf.tensor([nv,nv,no,no],dtype=t_R_abij.dtype,sp=t_R_abij.sp)
 
-    tEx_abij.i("abij") << tX_ac.i("ac") * tT_abij.i("cbij") \
-                          - tX_ki.i("ki") * tT_abij.i("abkj") \
-                          - tV_iajb.i("kaic") * tT_abij.i("cbkj")\
-                          - tV_iajb.i("kbic") * tT_abij.i("ackj")\
-                          + tTildeT_abij.i("acik") * tV_iabj.i("kbcj")
-    if not fDcd:
-        tXai_aibj = ctf.einsum("klcd, daki -> alci", tV_ijab, tT_abij)
-        tEx_abij -= ctf.einsum("alci, cblj -> abij", tXai_aibj, tT_abij)
-        tEx_abij += ctf.einsum("alci, bclj -> abij", tXai_aibj, tT_abij)
+    t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
+                          - t_X_ki.i("ki") * t_T_abij.i("abkj") \
+                          - t_V_iajb.i("kaic") * t_T_abij.i("cbkj")\
+                          - t_V_iajb.i("kbic") * t_T_abij.i("ackj")\
+                          + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
+    if not is_dcd:
+        t_Xai_aibj = ctf.einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
+        t_Ex_abij -= ctf.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
+        t_Ex_abij += ctf.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
-    tEx_baji.i("baji") << tEx_abij.i("abij")
-    #tEx_baji.i("baji") << tX_ac.i("bc") * tT_abij.i("caji") \
-    #                        - tX_ki.i("kj") * tT_abij.i("baki") \
-    #                        - tV_iajb.i("kbjc") * tT_abij.i("caki")\
-    #                        - tV_iajb.i("kajc") * tT_abij.i("bcki")\
-    #                        + tTildeT_abij.i("bcjk") * tV_iabj.i("kaci")
+    t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
+    #t_Ex_baji.i("baji") << t_X_ac.i("bc") * t_T_abij.i("caji") \
+    #                        - t_X_ki.i("kj") * t_T_abij.i("baki") \
+    #                        - t_V_iajb.i("kbjc") * t_T_abij.i("caki")\
+    #                        - t_V_iajb.i("kajc") * t_T_abij.i("bcki")\
+    #                        + t_tilde_T_abij.i("bcjk") * t_V_iabj.i("kaci")
     # CCD has more terms than DCD
 
     ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
-    #tEx_baji.i("baji") << tEx_abij.i("abij")
+    #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
-    #tEx_abij.i("abij") << tEx_abij.i("abij") + tEx_abij.i("baji")
-    #print_logging_info(testEx_abij - tEx_abij)
-    tR_abij += tEx_abij + tEx_baji
-    #tR_abij += tEx_baji
+    #t_Ex_abij.i("abij") << t_Ex_abij.i("abij") + t_Ex_abij.i("baji")
+    #print_logging_info(test_Ex_abij - t_Ex_abij)
+    t_R_abij += t_Ex_abij + t_Ex_baji
+    #t_R_abij += t_Ex_baji
 
-    return tR_abij
+    return t_R_abij
 
-def getEnergy(tT_abij, tV_ijab):
+def get_energy(t_T_abij, t_V_ijab):
     '''
     calculate the CCD energy, using the converged amplitudes
     '''
-    tDirCcdE = 2. * ctf.einsum("abij, ijab ->", tT_abij, tV_ijab)
-    tExCcdE  = -1. * ctf.einsum("abij, ijba ->", tT_abij, tV_ijab)
-    return [tDirCcdE, tExCcdE]
+    t_dir_ccd_e = 2. * ctf.einsum("abij, ijab ->", t_T_abij, t_V_ijab)
+    t_ex_ccd_e  = -1. * ctf.einsum("abij, ijba ->", t_T_abij, t_V_ijab)
+    return [t_dir_ccd_e, t_ex_ccd_e]

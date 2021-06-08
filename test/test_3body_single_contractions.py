@@ -64,8 +64,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     timeCoulInt = time.time()
     ueg_model.gamma = gamma
 
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
-    #ueg_model.kCutoff = 0.
+    #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    ueg_model.kCutoff = 0.
     if world.rank() == 0:
         print("kCutoff=",ueg_model.kCutoff)
 
@@ -90,13 +90,13 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     # evaluating 3 exchange contractions using 3-body
     # 1. creation with 3. annihilation
     # factor 2 from mirror symmetry
-    tomega_ex1_pqrs = -2*ctf.einsum("opqrso-> qprs", tV_opqrst[:no,:,:,:,:,:no])
-    # 3. creation with 1. annihilation
-    # factor 2 from mirror symmetry
-    #tomega_ex_pqrs += -2*ctf.einsum("opqqst-> opst", tV_opqrst[:,:,:no,:no,:,:])
-    # 1. creation with 2. annihilation
-    # factor 2 from mirror symmetry
-    #tomega_ex_pqrs += -2*ctf.einsum("opqrot-> pqrt", tV_opqrst[:no,:,:,:,:no,:])
+    tomega_ex1_pqrs = -2*ctf.einsum("opqrso->qprs", tV_opqrst[:no,:,:,:,:,:no])
+
+    # ensure exchange pairs of indices are equivalent. 
+
+    #exchange_indices_norm = ctf.tensor(tomega_ex1_pqrs.shape)
+    #exchange_indices_norm.i("pqrs") << tomega_ex1_pqrs.i("pqrs") - tomega_ex1_pqrs.i("rspq")
+    #print_logging_info("exchange of indices norm check:",ctf.norm(exchange_indices_norm))
 
     # all effective 2-body from analytical expressions, here the RPA does not
     # have factor (n-2)/n
@@ -105,14 +105,49 @@ def main(nel, cutoff,rs, gamma, kc, tc):
 
 
     # check if they are the same
-    print_logging_info("length omega_ex from 3-body = \n", len(tomega_ex1_pqrs.read_all_nnz()[0]))
-    print_logging_info("length omega_ex from analytical = \n", len(tomega_ex1_an_pqrs.read_all_nnz()[0]))
-    print_logging_info("omega_ex from 3-body = \n", tomega_ex1_pqrs.read_all_nnz())
-    print_logging_info("omega_ex from analytical = \n", tomega_ex1_an_pqrs.read_all_nnz())
+    print_logging_info("length omega_ex1 from 3-body = \n", len(tomega_ex1_pqrs.read_all_nnz()[0]))
+    print_logging_info("length omega_ex1 from analytical = \n", len(tomega_ex1_an_pqrs.read_all_nnz()[0]))
+    print_logging_info("omega_ex1 from 3-body = \n", tomega_ex1_pqrs.read_all_nnz())
+    print_logging_info("omega_ex1 from analytical = \n", tomega_ex1_an_pqrs.read_all_nnz())
     ex1_diff_norm = ctf.norm(tomega_ex1_an_pqrs-tomega_ex1_pqrs)
-    print_logging_info("diff ex norm = ", ex1_diff_norm)
+    print_logging_info("diff ex1 norm = ", ex1_diff_norm)
 
 
+    # 3. creation with 1. annihilation
+    # factor 2 from mirror symmetry
+    tomega_ex2_pqrs = -2*ctf.einsum("opqqst->opts", tV_opqrst[:,:,:no,:no,:,:])
+
+    tomega_ex2_an_pqrs = 1./2*ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc, \
+                                               exchange2=True, sp=1)
+
+
+    # check if they are the same
+    print_logging_info("length omega_ex2 from 3-body = \n", len(tomega_ex2_pqrs.read_all_nnz()[0]))
+    print_logging_info("length omega_ex2 from analytical = \n", len(tomega_ex2_an_pqrs.read_all_nnz()[0]))
+    print_logging_info("omega_ex2 from 3-body = \n", tomega_ex2_pqrs.read_all_nnz())
+    print_logging_info("omega_ex2 from analytical = \n", tomega_ex2_an_pqrs.read_all_nnz())
+    ex2_diff_norm = ctf.norm(tomega_ex2_an_pqrs-tomega_ex2_pqrs)
+    print_logging_info("diff ex2 norm = ", ex2_diff_norm)
+
+    # 2. creation with 1. annihilation
+    # factor 2 from mirror symmetry
+    tomega_ex3_pqrs = -2*ctf.einsum("opqpst->oqst", tV_opqrst[:,:no,:,:no,:,:])
+
+    tomega_ex3_an_pqrs = 1./2*ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc, \
+                                               exchange3=True, sp=1)
+
+
+    # check if they are the same
+    print_logging_info("length omega_ex3 from 3-body = \n", len(tomega_ex3_pqrs.read_all_nnz()[0]))
+    print_logging_info("length omega_ex3 from analytical = \n", len(tomega_ex3_an_pqrs.read_all_nnz()[0]))
+    print_logging_info("omega_ex3 from 3-body = \n", tomega_ex3_pqrs.read_all_nnz())
+    print_logging_info("omega_ex3 from analytical = \n", tomega_ex3_an_pqrs.read_all_nnz())
+    ex3_diff_norm = ctf.norm(tomega_ex3_an_pqrs-tomega_ex3_pqrs)
+    print_logging_info("diff ex3 norm = ", ex3_diff_norm)
+    #tomega_ex_pqrs += -2*ctf.einsum("opqqst-> opst", tV_opqrst[:,:,:no,:no,:,:])
+    # 1. creation with 2. annihilation
+    # factor 2 from mirror symmetry
+    #tomega_ex_pqrs += -2*ctf.einsum("opqrot-> pqrt", tV_opqrst[:no,:,:,:,:no,:])
 
 
 if __name__ == '__main__':

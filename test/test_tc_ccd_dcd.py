@@ -94,8 +94,9 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     only2Body=True,sp=1)
+    #tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    #                                 only2Body=True,sp=1)
+    tV_pqrs = ueg_model.eval_2b_integrals(sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -149,8 +150,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_title('Evaluating effective 2-body integrals','=')
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
-    tV_pqrs += ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     effective2Body=True,sp=1)
+    tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+                                     is_effect_2b=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
 
@@ -177,19 +178,21 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ccd_e = 0.
     dcd_e = 0.
 
-    ls = -(np.log(rs)*0.8+1.0)
+    #ls = -(np.log(rs)*0.8+1.0)
+    ls = -0.2
     print_logging_info("Starting CCD")
-    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls, \
-                            sp=0, maxIter=70, fDiis=True, amps=amps, epsilonE=1e-7)
+    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, level_shift=ls, \
+                            sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
     # unpacking
     ccd_e = ccd_results["ccd e"]
     ccd_amp = ccd_results["t2 amp"]
     ccd_dE = ccd_results["dE"]
 
 
-    print_logging_info("Starting DCD")
-    dcd_results = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=ls,\
-                            sp=0, maxIter=70, fDiis=True,amps=ccd_amp, epsilonE=1e-7)
+    ls = -1
+    print_logging_info("Starting CCD with level shift = ", ls)
+    dcd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, level_shift=ls,\
+                            sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]

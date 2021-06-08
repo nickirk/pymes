@@ -1,7 +1,7 @@
 from string import ascii_lowercase
 import numpy as np
 
-def write2Cc4sTensor(tensor, dim, fileName, dtype="r"):
+def write_2_cc4s_tensor(tensor, dim, fileName, dtype="r"):
     # This function write a tensor to the format that 
     # cc4s can read in. Only text file format is available for
     # now. It should only be used for tests in small systems.
@@ -26,4 +26,17 @@ def write2Cc4sTensor(tensor, dim, fileName, dtype="r"):
     else:
         np.savetxt(f, tensor, fmt="%.18e")
     f.close()
+    return
+
+def dump_ftod(ftod):
+    """ This function dumps the Fourier transformed overlap (pair) density to
+    file
+
+    Parameters
+    ----------
+    ftod: nparray
+    Fourier transformed overlap/pair density. Size nb x nb x nG, where
+    nb is the number of bands and nG is the number of plane wave basis functions
+    used for density fitting.
+    """
     return

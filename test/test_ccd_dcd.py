@@ -4,16 +4,6 @@ import time
 import numpy as np
 import sys
 
-# the following way of adding pymes to PYTHONPATH is recommended
-# echo "export PYTHONPATH=$PYTHONPATH:/path/to/the/parent/directory/to/pymes"
-# for example if /home/liao/Work/Research/TCSolids/scripts/pymes is where my
-# pymes is, then I should
-# echo "export
-# PYTHONPATH=$PYTHONPATH:/home/liao/Work/Research/TCSolids/scripts/" >>
-# ~/.bashrc
-# source ~/.bashrc
-#sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
-
 import ctf
 from ctf.core import *
 
@@ -38,9 +28,15 @@ from pymes.logging import print_title, print_logging_info
 
 
 def compute_kinetic_energy(ueg):
-    """
-    input: ueg, an UEG class;
-    return: an array of size of basis_fns/2
+    """ Function computing kinetic energy in 3D UEG
+    Parameters
+    ----------
+    ueg: an UEG class
+
+    Returns
+    -------
+    kinetic_G: nparray
+        an array of kinetic energies of size of basis_fns/2
     """
     num_spatial_orb = int(len(ueg.basis_fns)/2)
     G = []
@@ -52,11 +48,29 @@ def compute_kinetic_energy(ueg):
     return kinetic_G
 
 
-def main(nel, cutoff,rs, gamma, kc):
+def main(nel, cutoff, rs, gamma, kc):
+    """
+    Parameters 
+    ----------
+    nel: integer
+        number of electrons 
+    cutoff: float
+        kinetic energy cutoff for plane wave basis set
+    rs: float 
+        $r_s$ density parameter for 3D UEG
+    gamma: float
+        a parameter inside correlators for fine tuning, see specific 
+        correlators for details
+    kc: float
+        a paramter in the correlator that used in Ref. 10.1021/acs.jctc.7b01257
+        for truncating the correlator to be 0, when $k > kc$.
+        Also used in Ref. https://arxiv.org/pdf/2103.03176
+    """
+
     world=ctf.comm()
     no = int(nel/2)
-    nalpha = int(nel/2)
-    nbeta = int(nel/2)
+    n_alpha = int(nel/2)
+    n_beta = int(nel/2)
     rs = rs
 
     # Cutoff for the single-particle basis set.
@@ -64,7 +78,7 @@ def main(nel, cutoff,rs, gamma, kc):
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     time_set_sys = time.time()
-    ueg_model = ueg.UEG(nel, nalpha, nbeta, rs)
+    ueg_model = ueg.UEG(nel, n_alpha, n_beta, rs)
     print_title("System Information Summary",'=')
     print_logging_info("Number of electrons = {}".format(nel))
     print_logging_info("rs = {}".format(rs))
@@ -78,10 +92,10 @@ def main(nel, cutoff,rs, gamma, kc):
     ueg_model.init_single_basis(cutoff)
 
     num_spatial_orb = int(len(ueg_model.basis_fns)/2)
-    nP = num_spatial_orb
+    n_p = num_spatial_orb
     nGOrb = num_spatial_orb
 
-    nv = nP - no
+    nv = n_p - no
     print_title('Basis set', '=')
     print_logging_info('Number of spin orbitals = {}'\
                        .format(int(len(ueg_model.basis_fns))))
@@ -94,14 +108,14 @@ def main(nel, cutoff,rs, gamma, kc):
     time_pure_2_body_int = time.time()
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    ueg_model.k_cutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
 
     print_title('Evaluating pure 2-body integrals','=')
-    print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
+    print_logging_info("k_cutoff = {}".format(ueg_model.k_cutoff))
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(sp=1)
+    t_V_pqrs = ueg_model.eval_2b_integrals(sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -113,66 +127,76 @@ def main(nel, cutoff,rs, gamma, kc):
     time_hf = time.time()
 
     print_logging_info("Partitioning V_pqrs")
-    tV_ijkl = tV_pqrs[:no,:no,:no,:no]
+    t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
-    holeEnergy = np.real(tEpsilon_i.to_nparray())
+    t_epsilon_i = hf.calcOccupiedOrbE(kinetic_G, t_V_ijkl, no)
+    hole_e = np.real(t_epsilon_i.to_nparray())
 
-    tV_aibj = tV_pqrs[no:,:no,no:,:no]
-    tV_aijb = tV_pqrs[no:,:no,:no,no:]
-    tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
-    particleEnergy = np.real(tEpsilon_a.to_nparray())
+    t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
+    t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
+    t_epsilon_a = hf.calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
+    particle_e = np.real(t_epsilon_a.to_nparray())
 
     print_logging_info("HF orbital energies:")
-    print_logging_info(tEpsilon_i.to_nparray())
-    print_logging_info(tEpsilon_a.to_nparray())
+    print_logging_info(t_epsilon_i.to_nparray())
+    print_logging_info(t_epsilon_a.to_nparray())
 
 
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
-    tEHF = 2*ctf.einsum('i->',tEpsilon_i)
-    tV_klij = tV_pqrs[:no,:no,:no,:no]
+    t_e_hf = 2*ctf.einsum('i->',t_epsilon_i)
+    t_V_klij = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating dir and exc HF energy")
 
-    dirHFE = 2. * ctf.einsum('jiji->',tV_klij.to_nparray())
-    excHFE = -1. * ctf.einsum('ijji->',tV_klij.to_nparray())
+    dirHFE = 2. * ctf.einsum('jiji->',t_V_klij.to_nparray())
+    excHFE = -1. * ctf.einsum('ijji->',t_V_klij.to_nparray())
 
     print_logging_info("Summing dir and exc HF energy")
 
-    tEHF = tEHF-(dirHFE + excHFE)
+    t_e_hf = t_e_hf-(dirHFE + excHFE)
     print_logging_info("Direct = {}".format(dirHFE))
     print_logging_info("Exchange = {}".format(excHFE))
-    print_logging_info("HF energy = {}".format(tEHF))
+    print_logging_info("HF energy = {}".format(t_e_hf))
 
     print_logging_info("{:.3f} seconds spent on evaluating HF energy"\
                        .format((time.time()-time_hf)))
 
-    mp2E, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
-    ccdE = 0.
-    dcdE = 0.
+    mp2_e, mp2Amp = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs)
+    ccd_e = 0.
+    dcd_e = 0.
 
     print_logging_info("Starting CCD")
-    ccdE, ccdAmp, hole, particle = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    ccd_results  = ccd.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+                                             level_shift=-1., sp=0, \
+                                             max_iter=60, is_diis=True)
+    # unpacking ccd results
+    ccd_e = ccd_results["ccd e"]
+    ccd_amp = ccd_results["t2 amp"]
+
     print_logging_info("Starting DCD")
-    dcdE, dcdAmp, hole, particle = dcd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True,amps=ccdAmp)
+    dcd_results = dcd.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+                                             level_shift=-1., sp=0, \
+                                             max_iter=60, is_diis=True, \
+                                             amps=ccd_amp)
+    # unpacking dcd results
+    dcd_e = dcd_results["ccd e"]
+    dcd_amps = dcd_results["t2 amp"]
 
     print_title("Summary of results","=")
-    print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
-                        ueg_model.kCutoff))
-    print_logging_info("HF E = {:.8f}".format(tEHF))
-    print_logging_info("CCD correlation E = {:.8f}".format(ccdE))
-    print_logging_info("DCD correlation E = {:.8f}".format(dcdE))
-    print_logging_info("3-body mean-field E = {:.8f}"\
-                       .format(contr_from_triply_contra_3b))
-    print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccdE+contr_from_triply_contra_3b))
-    print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcdE+contr_from_triply_contra_3b))
+    print_logging_info("Num spin orb={}, rs={}, k_cutoff={}".format(\
+                       len(ueg_model.basis_fns), rs, ueg_model.k_cutoff))
+    print_logging_info("HF E = {:.8f}".format(t_e_hf))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
+    print_logging_info("Total CCD E = {:.8f}".format(t_e_hf+ccd_e))
+    print_logging_info("Total DCD E = {:.8f}".format(t_e_hf+dcd_e))
 
     if world.rank() == 0:
         f = open("E_"+str(nel)+"e_rs"+str(rs)+".dat", "a")
-        f.write(str(len(ueg_model.basis_fns))+"  "+str(tEHF)\
-                +"  "+str(mp2E)+"  "+str(ccdE)+"  "+str(dcdE)+"\n")
+        f.write(str(len(ueg_model.basis_fns))+"  "+str(t_e_hf)\
+                +"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
 
 if __name__ == '__main__':
   #for gamma in None:
@@ -180,6 +204,6 @@ if __name__ == '__main__':
   nel = 14
   for rs in [0.5]:
     for cutoff in [2]:
-      kCutoffFraction = None
-      main(nel,cutoff,rs, gamma, kCutoffFraction)
+      kc = None
+      main(nel, cutoff, rs, gamma, kc)
   ctf.MPI_Stop()
