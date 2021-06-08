@@ -158,7 +158,7 @@ if __name__ == '__main__':
   gamma = None
   nel = 14
   for rs in [5.0]:
-    for cutoff in [14]:
+    for cutoff in [8]:
       kCutoffFraction = None
       main(nel,cutoff,rs, gamma, kCutoffFraction)
   ctf.MPI_Stop()
