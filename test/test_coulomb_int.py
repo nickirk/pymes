@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -u 
+#!/usr/bin/python3 -u
 import time
 import numpy as np
 import sys
@@ -12,7 +12,12 @@ import warnings
 # PYTHONPATH=$PYTHONPATH:/home/liao/Work/Research/TCSolids/scripts/" >>
 # ~/.bashrc
 # source ~/.bashrc
-sys.path.append("/Users/keliao/Work/Research/gpaw")
+
+# working from Mac
+#sys.path.append("/Users/keliao/Work/Research/gpaw")
+
+# working on office PC
+# sys.path.append("/home/liao/Work/Research/gpaw")
 
 import ctf
 from ctf.core import *
@@ -24,7 +29,7 @@ from pymes.solver import dcd
 from pymes.solver import ccd
 from pymes.mean_field import hf
 from pymes.logging import print_title, print_logging_info
-from pymes.integral import coulomb_int
+#from pymes.integral import coulomb_int
 
 # dependencies for gpaw
 from ase.optimize import BFGS
@@ -42,6 +47,8 @@ from gpaw.kpt_descriptor import KPointDescriptor
 from gpaw.wavefunctions.pw import PWDescriptor
 from gpaw.hybrids.coulomb import coulomb_interaction
 
+import matplotlib.pyplot as plt
+
 def mean_field(box = 5, wf_file='N2.gpw', logging_file='H2.txt'):
     print_logging_info("Setting up system")
     #N = molecule('N2')
@@ -57,32 +64,32 @@ def mean_field(box = 5, wf_file='N2.gpw', logging_file='H2.txt'):
                 txt=logging_file,
                 parallel={'domain': 1},
                 convergence={'density': 1.e-6})
-    
+
     N.calc = calc
     E1_pbe = N.get_potential_energy()
 
     print_logging_info("E_pbe = ", E1_pbe)
-    
+
     print_logging_info("Writing wavefunction to file "+wf_file)
     print_logging_info("See GPAW txt files for logs")
     calc.write(wf_file, mode='all')
-    
+
     print_logging_info("Reading wavefunction from "+wf_file)
     print_logging_info("Starting nonselfconsistent one-shot HF calculation")
     E1_hf = nsc_energy(wf_file, 'EXX')
     print_logging_info("E_hf components = ", E1_hf)
     print_logging_info("E_exvv components = ", E1_hf[-1])
     print_logging_info("E_hf sum = ", E1_hf.sum())
-    print_logging_info("Starting full diagonalisation of mean field", 
+    print_logging_info("Starting full diagonalisation of mean field",
             " Hamiltonian")
-    calc.diagonalize_full_hamiltonian(nbands=100)
+    #calc.diagonalize_full_hamiltonian(nbands=100)
     print_logging_info("Writing wavefunction to file "+wf_file)
     calc.write(wf_file, mode='all')
-    
-    return calc
+
+    return {"calc": calc, "exx_vv": E1_hf[-1]}
 
 def rpa(wf_file='N2.gpw', logging_file='N_rpa.txt'):
-    rpa = RPACorrelation(wf_file, nblocks=1, nfrequencies=10, 
+    rpa = RPACorrelation(wf_file, nblocks=1, nfrequencies=10,
                          truncation='wigner-seitz',
                          txt=logging_file)
     E1_i = rpa.calculate(ecut=200)
@@ -90,7 +97,7 @@ def rpa(wf_file='N2.gpw', logging_file='N_rpa.txt'):
 
 
 def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
-    """ This function computes the Fourier transformed 
+    """ This function computes the Fourier transformed
     overlap (coulomb) density (ftod), \gamma^p_q(G) = C^p_q(G) \sqrt(4\pi/G^2),
     where C^p_q(G) is the fourier transformed pair density (ftpd),
     C^p_q(G) = <\phi_p(r)|e^{i(G+k_q-k_p)r}|\phi_q(r)>
@@ -102,7 +109,7 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     nb: int
         Number of bands (orbitals)
     ecut: float
-        Energy cutoff for the plane waves used for density fitting the pair 
+        Energy cutoff for the plane waves used for density fitting the pair
         density, should not be larger than ecut of the single particle wavefunc.
 
     Returns
@@ -125,12 +132,7 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     qd = KPointDescriptor([q_c])
     pd = PWDescriptor(pair.ecut, pair.calc.wfs.gd, complex, qd, \
                       gammacentered=True)
-    #bzk_kv, PWSA = chi0.get_kpoints(pd)
-    #ftpd = chi0.get_matrix_element(q_c, 0, 0, 1, 0, 1, pd = pd, kd = qd, \
-    #                               symmetry=PWSA)
-    #generate_pair_densities returns a generator. How to use it?
-    #ftpd = pair.generate_pair_densities(pd, 2, 4, [0, 1])
-    s = 0 
+    s = 0
     kpt_pair = pair.get_kpoint_pair(pd, s, q_c, 0, nb, 0, nb)
     n_n = np.arange(0, nb)
     m_m = np.arange(0, nb)
@@ -154,7 +156,7 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     return gamma_pqG
 
 def mult_coulomb_kernel(C_pqG, pd):
-    """Function to multiply the sqrt(4pi/G^2) with the Fourier transformed 
+    """Function to multiply the sqrt(4pi/G^2) with the Fourier transformed
     pair density, C^p_q(G) = <\phi_p(r)|e^{i(G+k_q-k_p)r}|\phi_q(r)>
 
     Parameters
@@ -163,17 +165,17 @@ def mult_coulomb_kernel(C_pqG, pd):
         Fourier transformed pair density. Size nb x nb x nG, where nb is the
         number of bands and nG is the number of plane waves.
     pd: GPAW plane wave descriptor object
-        It contains the plane wave basis on which the 
+        It contains the plane wave basis on which the
         pair density is expanded. It should be the same one used in
         the KPointPair object in GPAW. Pay attention to that Q_G might
-        be different than the plane wave basis used for expansion of 
+        be different than the plane wave basis used for expansion of
         orbitals.
 
     Returns
     -------
     gamma_pqG: nparray, float/complex
-        C_pqG*sqrt(4pi/G^2), where G=0 is set to 0. 
-        Named as fourier transformed overlap (Coulomb) density (ftod), 
+        C_pqG*sqrt(4pi/G^2), where G=0 is set to 0.
+        Named as fourier transformed overlap (Coulomb) density (ftod),
         in cc4s it is called ftod.
     """
     # get_reciprocal_vectors return reciprocal lattice vectors plus q, G + q
@@ -193,21 +195,39 @@ def main():
     print_title("Testing coulomb integrals from gpaw",'-')
     time_set_sys = time.time()
     timer = Timer()
-    for box in range(3, 4):
+    mean_field_exx = []
+    recalc_exx = []
+    box_min = 3
+    box_max = 10
+    box_size = []
+    for box in range(box_min, box_max):
         print_logging_info(" box siz = ", box)
         print_logging_info("Starting DFT-PBE, one-shot hf and full ", \
                            "diagonalisation", level=0)
         mean_calc = mean_field(box = box, wf_file='N2.gpw', \
                                logging_file='N2.txt')
         print_logging_info("Testing pair density class", level=0)
-        ftpd_nnG = calc_ft_overlap_density(wf_file='N2.gpw', ecut=200)
+        ftpd_nnG = calc_ft_overlap_density(wf_file='N2.gpw', nb=16, ecut=200)
         no = 1
         V_ijkl = np.einsum("ijG, klG -> ikjl", np.conj(ftpd_nnG[:no,:no,:]), \
                 ftpd_nnG[:no,:no,:])
         E_exx = -np.real(np.einsum("ijji ->", V_ijkl)) * Hartree
-        print_logging_info("Recalculted E_exx from Coulomb integrals: ", E_exx)
+        print_logging_info("Exx from mean field", mean_calc["exx_vv"])
+        print_logging_info("Exx from Coulomb integrals", E_exx)
+        mean_field_exx.append(mean_calc["exx_vv"])
+        recalc_exx.append(E_exx)
+        box_size.append(box)
 
-    # 
+    np.savetxt('data.txt', np.column_stack([box_size, mean_field_exx, recalc_exx]))
+    plt.plot(1./np.arange(box_min, box_max), mean_field_exx, \
+             label="Exx from Mean Field")
+    plt.plot(1./np.arange(box_min, box_max), recalc_exx, label="Exx from Integrals")
+    plt.xlabel("Box Length [A]")
+    plt.ylabel("HF energy [eV]")
+    plt.tight_layout()
+    plt.show()
+
+    #
 
 
 if __name__ == '__main__':
