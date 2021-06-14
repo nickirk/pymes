@@ -34,6 +34,7 @@ from pymes.logging import print_title, print_logging_info
 # dependencies for gpaw
 from ase.optimize import BFGS
 from ase.build import molecule
+from ase import Atoms
 from ase.parallel import paropen
 from ase.parallel import paropen
 from ase.units import Hartree
@@ -51,8 +52,9 @@ import matplotlib.pyplot as plt
 
 def mean_field(box = 5, wf_file='N2.gpw', logging_file='H2.txt'):
     print_logging_info("Setting up system")
-    #N = molecule('N2')
-    N = molecule('H2')
+    #N = molecule('Li2')
+    N = molecule('CO')
+    #N = Atoms('He')
     N.cell = (box, box, box)
     N.center()
     print_logging_info("Initialising calculator")
@@ -96,7 +98,7 @@ def rpa(wf_file='N2.gpw', logging_file='N_rpa.txt'):
     print_logging_info("E_rpa = ", E1_i)
 
 
-def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
+def calc_ft_overlap_density(wf_file, wigner_seitz_trunc=True, nb=100, ecut=400):
     """ This function computes the Fourier transformed
     overlap (coulomb) density (ftod), \gamma^p_q(G) = C^p_q(G) \sqrt(4\pi/G^2),
     where C^p_q(G) is the fourier transformed pair density (ftpd),
@@ -106,6 +108,9 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     ----------
     wf_file: string
         File name of the mean field wavefunction.
+    wigner_seitz_trunc: bool
+        Use Wigner-Seitz truncated Coulomb potential or not. Default yes.
+        If False, using the Coulonb potential 4pi/G^2, with G=0 excluded.
     nb: int
         Number of bands (orbitals)
     ecut: float
@@ -140,18 +145,25 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     # the third dimension of the returned ndarray is nG+2. Here we set it to
     # False, in order to ensure that the 3rd dimension of ftpd_nmG is of
     # the same lenght as the nG.
-    C_pqG = pair.get_pair_density(pd, kpt_pair, n_n, m_m, extend_head=False)
+    C_pqG = pair.get_pair_density(pd, kpt_pair, n_n, m_m, \
+                                  extend_head=False)
     print_logging_info("Shape of FTPD: ", C_pqG.shape, level = 2)
     vol = np.abs(np.linalg.det(pair.calc.wfs.gd.cell_cv))
-    omega = 0.0 # not short range, but regularised coulomb interaction
-    coulomb = coulomb_interaction(omega, pair.calc.wfs.gd, pair.calc.wfs.kd)
-    v_G = coulomb.get_potential(pd)
-    print("length of v_G =\n", len(v_G))
 
-    #gamma_pqG = mult_coulomb_kernel(C_pqG, pd)
-    print_logging_info("Assertion of G vector length ", v_G.shape[0], " ", \
-                       C_pqG.shape[2], level = 2)
-    gamma_pqG = np.einsum("pqG, G -> pqG", C_pqG, np.sqrt(v_G/vol))
+    if wigner_seitz_trunc:
+        # using the Wigner-Seitz truncated potential
+        omega = 0.0 # not short range, but regularised coulomb interaction
+        coulomb = coulomb_interaction(omega, pair.calc.wfs.gd, pair.calc.wfs.kd)
+        v_G = coulomb.get_potential(pd)
+        print("length of v_G =\n", len(v_G))
+
+        print_logging_info("Assertion of G vector length ", v_G.shape[0], " ", \
+                           C_pqG.shape[2], level = 2)
+        gamma_pqG = np.einsum("pqG, G -> pqG", C_pqG, np.sqrt(v_G/vol))
+    else:
+        # using real Coulomb potential without the G=0 component
+        gamma_pqG = mult_coulomb_kernel(C_pqG, pd)
+        gamma_pqG /= np.sqrt(vol)
 
     return gamma_pqG
 
@@ -197,18 +209,23 @@ def main():
     timer = Timer()
     mean_field_exx = []
     recalc_exx = []
-    box_min = 3
-    box_max = 10
+    box_min = 5
+    box_max = 13
     box_size = []
+    wstc = True
     for box in range(box_min, box_max):
         print_logging_info(" box siz = ", box)
         print_logging_info("Starting DFT-PBE, one-shot hf and full ", \
                            "diagonalisation", level=0)
-        mean_calc = mean_field(box = box, wf_file='N2.gpw', \
-                               logging_file='N2.txt')
+
+        mean_calc = mean_field(box = box, wf_file='H2.gpw', \
+                               logging_file='H2.txt')
         print_logging_info("Testing pair density class", level=0)
-        ftpd_nnG = calc_ft_overlap_density(wf_file='N2.gpw', nb=16, ecut=200)
-        no = 1
+        print_logging_info("Using Wigner-Seitz truncation: ", wstc, level=1)
+        ftpd_nnG = calc_ft_overlap_density(wf_file='H2.gpw', \
+                                           wigner_seitz_trunc=wstc, \
+                                           nb=16, ecut=200)
+        no = 5
         V_ijkl = np.einsum("ijG, klG -> ikjl", np.conj(ftpd_nnG[:no,:no,:]), \
                 ftpd_nnG[:no,:no,:])
         E_exx = -np.real(np.einsum("ijji ->", V_ijkl)) * Hartree
@@ -218,16 +235,13 @@ def main():
         recalc_exx.append(E_exx)
         box_size.append(box)
 
-    np.savetxt('data.txt', np.column_stack([box_size, mean_field_exx, recalc_exx]))
-    plt.plot(1./np.arange(box_min, box_max), mean_field_exx, \
-             label="Exx from Mean Field")
-    plt.plot(1./np.arange(box_min, box_max), recalc_exx, label="Exx from Integrals")
-    plt.xlabel("Box Length [A]")
-    plt.ylabel("HF energy [eV]")
-    plt.tight_layout()
-    plt.show()
+    if wstc:
+        file_name = 'Exx_wstc.txt'
+    else:
+        file_name = 'Exx_noG0.txt'
 
-    #
+    np.savetxt(file_name, np.column_stack([box_size, mean_field_exx, \
+               recalc_exx]))
 
 
 if __name__ == '__main__':
