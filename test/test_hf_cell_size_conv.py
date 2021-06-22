@@ -10,7 +10,7 @@ from ctf.core import *
 
 import pymes
 from pymes.logging import print_title, print_logging_info
-from pymes.integral import coulomb_int
+from pymes.integral import coulomb_integral
 
 # dependencies for gpaw
 from ase import Atoms

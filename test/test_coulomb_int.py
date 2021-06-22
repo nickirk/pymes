@@ -10,7 +10,7 @@ from ctf.core import *
 
 import pymes
 from pymes.logging import print_title, print_logging_info
-from pymes.integral import coulomb_int
+from pymes.integral import coulomb_integral
 
 # dependencies for gpaw
 from ase import Atoms
@@ -109,7 +109,7 @@ def main():
         no = int(mole.calc.get_occupation_numbers().sum()/2)
         print_logging_info('Number of occupied bands = %d' % no, level=1)
 
-        ftpd_nnG = coulomb_int.calc_ft_overlap_density(wf_file=wf_file, \
+        ftpd_nnG = coulomb_integral.calc_ft_overlap_density(wf_file=wf_file, \
                                            wigner_seitz_trunc=wstc, \
                                            nb=16, ecut=200)
 
