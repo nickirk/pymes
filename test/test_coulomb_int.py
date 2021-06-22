@@ -114,7 +114,7 @@ def main():
                                            nb=16, ecut=200)
 
 
-        V_ijkl = np.einsum("jiG, klG -> ikjl", np.conj(ftpd_nnG[:no,:no,:]), \
+        V_ijkl = np.einsum("kiG, jlG -> ijkl", np.conj(ftpd_nnG[:no,:no,:]), \
                 ftpd_nnG[:no,:no,:])
 
         E_exx = -np.real(np.einsum("ijji ->", V_ijkl)) * Hartree
