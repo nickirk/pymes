@@ -10,7 +10,7 @@ from ctf.core import *
 
 import pymes
 from pymes.logging import print_title, print_logging_info
-from pymes.integral import coulomb_integral
+from pymes.integral import pair_coulomb_integral
 
 # dependencies for gpaw
 from ase import Atoms
@@ -109,9 +109,11 @@ def main():
         no = int(mole.calc.get_occupation_numbers().sum()/2)
         print_logging_info('Number of occupied bands = %d' % no, level=1)
 
-        ftpd_nnG = coulomb_integral.calc_ft_overlap_density(wf_file=wf_file, \
+        ftpd_nnG = pair_coulomb_integral.calc_ft_pair_coulomb_density(\
+                                           wf_file=wf_file, \
                                            wigner_seitz_trunc=wstc, \
                                            nb=16, ecut=200)
+        print_logging_info("Data type of the FTPD:", ftpd_nnG.dtype, level=2)
 
 
         V_ijkl = np.einsum("kiG, jlG -> ijkl", np.conj(ftpd_nnG[:no,:no,:]), \
@@ -142,6 +144,7 @@ def main():
     energy_diff_err_per_ele /= no*2.
 
     try:
+        # assert the energy difference error is smaller than 1 meV/electron
         assert( (energy_diff_err_per_ele <= 0.001).all())
     except AssertionError:
         print_logging_info("Hartree-Fock energy difference error per electron:\
