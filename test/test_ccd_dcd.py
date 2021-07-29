@@ -197,6 +197,7 @@ def main(nel, cutoff, rs, gamma, kc):
         f = open("E_"+str(nel)+"e_rs"+str(rs)+".dat", "a")
         f.write(str(len(ueg_model.basis_fns))+"  "+str(t_e_hf)\
                 +"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
+    return (ccd_e, dcd_e)
 
 if __name__ == '__main__':
   #for gamma in None:
@@ -205,5 +206,7 @@ if __name__ == '__main__':
   for rs in [0.5]:
     for cutoff in [2]:
       kc = None
-      main(nel, cutoff, rs, gamma, kc)
+      ccd_e, dcd_e = main(nel, cutoff, rs, gamma, kc)
+    assert(np.abs(ccd_e - -0.31611540) < 1e-8)
+    assert(np.abs(dcd_e - -0.31810448) < 1e-8)
   ctf.MPI_Stop()

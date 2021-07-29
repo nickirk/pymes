@@ -3,11 +3,26 @@
 import numpy as np
 import ctf
 import scipy
+import string
 from pymes.logging import print_logging_info
 
-def mix(errors, amplitudes):
+def mix(error_list, amplitude_list):
     '''
-    errors are a list of residules in ctf tensor format
+    Mix the amplitudes from n iterations to minimize the errors in residuals.
+    
+    Parameters
+    ----------
+    error_list: list of ctf tensors, size [[size of amplitudes], n] 
+            The changes of amplitudes in n consective iterations.
+    amplitude_list: list of ctf tensors, size [[size of amplitudes], n]
+            The amplitudes from the last n iterations. Amplitudes refer
+            to the doubles amplitudes in CCD/DCD, and to the singles and doubles
+            amplitudes in CCSD/DCSD.
+
+    Returns 
+    -------
+    opt_amp: list of ctf tensor, size [size of amplitudes]
+            The optimized amplitudes.
     '''
     algoName="diis.mix"
 
@@ -17,18 +32,22 @@ def mix(errors, amplitudes):
     # TODO
     # no need to construct the whole matrix in every iteration,
     # only need to update one row and one column.
-    assert(len(errors) == len(amplitudes))
+    assert(len(error_list) == len(amplitude_list))
 
-    L = np.zeros((len(errors)+1, len(errors)+1))
+    L = np.zeros((len(error_list)+1, len(error_list)+1))
     L[-1, :-1] = -1.
     L[:-1, -1] = -1.
 
-    for i in range(len(errors)):
-        for j in range(i,len(errors)):
-            L[i,j] = np.real(ctf.einsum("abij,abij->", errors[i], errors[j]))
+    for i in range(len(error_list)):
+        for j in range(i,len(error_list)):
+            for nt in range(len(error_list[j])):
+                # get the shape of the tensor
+                indices = string.ascii_lowercase[:len(error_list[j][nt].shape)] 
+                L[i,j] += np.real(ctf.einsum(indices+","+indices+"->", \
+                                 error_list[i][nt], error_list[j][nt]))
             L[j,i] = L[i,j]
 
-    unitVec = np.zeros(len(errors)+1)
+    unitVec = np.zeros(len(error_list)+1)
     unitVec[-1] = -1.
     eigen_values, eigen_vectors = scipy.linalg.eigh(L)
 
@@ -41,11 +60,16 @@ def mix(errors, amplitudes):
         c = np.linalg.inv(L).dot(unitVec)
 
 
-    optAmp = ctf.tensor(amplitudes[0].shape, dtype=amplitudes[0].dtype, sp=amplitudes[0].sp)
+    
+    optAmp = [ctf.tensor(amplitude_list[0][i].shape, \
+                      dtype=amplitude_list[0][i].dtype, \
+                      sp=amplitude_list[0][i].sp)\
+              for i in range(len(amplitude_list[0]))]
 
 
-    for a in range(0,len(errors)):
-        optAmp += amplitudes[a]*c[a]
+    for a in range(0,len(error_list)):
+        for i in range(len(amplitude_list[0])):
+            optAmp[i] += amplitude_list[a][i]*c[a]
 
     print_logging_info(algoName, level=2)
     print_logging_info("Coefficients for combining amplitudes=",level=3)
