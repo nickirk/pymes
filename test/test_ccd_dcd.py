@@ -168,17 +168,19 @@ def main(nel, cutoff, rs, gamma, kc):
     dcd_e = 0.
 
     print_logging_info("Starting CCD")
-    ccd_results  = ccd.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+    solver = ccd.CCD(is_diis=True)
+    ccd_results  = solver.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
                                              level_shift=-1., sp=0, \
-                                             max_iter=60, is_diis=True)
+                                             max_iter=60)
     # unpacking ccd results
     ccd_e = ccd_results["ccd e"]
     ccd_amp = ccd_results["t2 amp"]
 
     print_logging_info("Starting DCD")
-    dcd_results = dcd.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+    solver = ccd.CCD(is_dcd=True, is_diis=True)
+    dcd_results = solver.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
                                              level_shift=-1., sp=0, \
-                                             max_iter=60, is_diis=True, \
+                                             max_iter=60, \
                                              amps=ccd_amp)
     # unpacking dcd results
     dcd_e = dcd_results["ccd e"]
