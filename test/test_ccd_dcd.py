@@ -153,6 +153,12 @@ def main(nel, cutoff, rs, gamma, kc):
     dirHFE = 2. * ctf.einsum('jiji->',t_V_klij.to_nparray())
     excHFE = -1. * ctf.einsum('ijji->',t_V_klij.to_nparray())
 
+    dir_orb_e = 2. * ctf.einsum('jiji->i',t_V_klij.to_nparray())
+    exc_orb_e= -1. * ctf.einsum('ijji->i',t_V_klij.to_nparray())
+    
+    print("Direct correction to orbital energies:\n", dir_orb_e)
+    print("Exchange correction to orbital energies:\n", exc_orb_e)
+
     print_logging_info("Summing dir and exc HF energy")
 
     t_e_hf = t_e_hf-(dirHFE + excHFE)
