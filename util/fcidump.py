@@ -1,8 +1,13 @@
 #!/usr/bin/python3
+import os.path
 import ctf
+from ctf.core import *
 import numpy as np
 
-def write2Fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
+
+from pymes.logging import print_logging_info
+
+def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
     '''
     Input a integral file in ctf format
     np,np,np,np
@@ -47,3 +52,95 @@ def write2Fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
 
         f.close()
     return
+
+def read_fcidump(fcidump_file):
+    '''
+    Read Coulomb integrals from a FCIDUMP file. Works only on a single rank
+    and for small FCIDUMP files ~300 orbitals for 120 GB RAM assuming dense
+    tensor.
+
+    Parameter:
+    ---------
+    fcidump_file: string
+                  filename/path to the FCIDUMP file to be read.
+    Return:
+    ------
+    n_elec: int
+            number of electrons
+    n_orb: int
+           number of orbitals
+    epsilon_p: numpy tensor, [n_orb]
+                 the orbital energies.
+    h_pq: numpy tensor, [n_orb, n_orb]
+            the single operator values.
+    V_pqrs: numpy tensor, [nb, nb, nb, nb]
+              the Coulomb integrals.
+    '''
+    world = ctf.comm()
+
+    header_dict = {"norb": 0, "nelec": 0}
+
+    try:
+        os.path.exists(fcidump_file)
+    except FileNotFoundError:
+        sys.exit(1)
+
+    print_logging_info("Reading "+fcidump_file+"...", level=1)
+
+    #if world.rank() == 0:
+    with open(fcidump_file, 'r') as reader:
+        
+        line = reader.readline()
+        
+        while not (('/' in line) or ("END" in line)): 
+            line += reader.readline()
+        
+        
+        header = line.split(",")
+        
+        
+            #attr=attr.split("=")
+        for key in header_dict.keys():
+            for attr in header:
+                if key in attr.lower():
+                    for word in attr.split("="):
+                        word = word.strip()
+                        if word.isdigit():
+                            header_dict[key] = int(word)
+                            continue
+                    continue
+        n_elec = header_dict["nelec"]
+        n_orb = header_dict["norb"]
+        epsilon_p = np.zeros(n_orb)
+        h_pq = np.zeros([n_orb, n_orb])
+        V_pqrs = np.zeros([n_orb, n_orb, n_orb, n_orb])
+
+        while True:
+            line = reader.readline()
+            if not line:
+                break
+            integral, p, r, q, s = line.split()
+            integral = float(integral)
+            # pqrs
+            p = int(p)
+            r = int(r)
+            q = int(q)
+            s = int(s)
+            
+            if np.abs(integral) < 1e-12:
+                continue
+                
+            if p != 0 and q != 0 and r != 0 and s !=0: 
+               V_pqrs[p-1, q-1, r-1, s-1] = integral 
+
+            if p == q == r == s == 0:
+                e_core = integral
+            
+            if p != 0 and q == r == s == 0:
+                epsilon_p[p-1] = integral
+            
+            if p != 0 and r != 0 and q == s == 0:
+                h_pq[p-1, r-1] = integral
+
+
+    return n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs
