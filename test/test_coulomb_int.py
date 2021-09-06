@@ -12,6 +12,8 @@ import warnings
 # PYTHONPATH=$PYTHONPATH:/home/liao/Work/Research/TCSolids/scripts/" >>
 # ~/.bashrc
 # source ~/.bashrc
+
+# because need instant changes from gpaw during development
 sys.path.append("/Users/keliao/Work/Research/gpaw")
 
 import ctf
@@ -33,6 +35,8 @@ from ase.parallel import paropen
 from ase.parallel import paropen
 from ase.units import Hartree
 from ase.utils.timing import timer, Timer
+
+# modules needed from gpaw
 from gpaw import GPAW, PW
 from gpaw.hybrids.energy import non_self_consistent_energy as nsc_energy
 from gpaw.xc.rpa import RPACorrelation
@@ -54,6 +58,7 @@ def mean_field(box = 5, wf_file='N2.gpw', logging_file='H2.txt'):
                 maxiter=300,
                 xc='LDA',
                 hund=False,
+                setups='ae',
                 txt=logging_file,
                 parallel={'domain': 1},
                 convergence={'density': 1.e-6})
@@ -141,15 +146,21 @@ def calc_ft_overlap_density(wf_file, nb=100, ecut=400):
     C_pqG = pair.get_pair_density(pd, kpt_pair, n_n, m_m, extend_head=False)
     print_logging_info("Shape of FTPD: ", C_pqG.shape, level = 2)
     vol = np.abs(np.linalg.det(pair.calc.wfs.gd.cell_cv))
-    omega = 0.0 # not short range, but regularised coulomb interaction
-    coulomb = coulomb_interaction(omega, pair.calc.wfs.gd, pair.calc.wfs.kd)
-    v_G = coulomb.get_potential(pd)
-    print("length of v_G =\n", len(v_G))
 
-    #gamma_pqG = mult_coulomb_kernel(C_pqG, pd)
-    print_logging_info("Assertion of G vector length ", v_G.shape[0], " ", \
-                       C_pqG.shape[2], level = 2)
-    gamma_pqG = np.einsum("pqG, G -> pqG", C_pqG, np.sqrt(v_G/vol))
+    # Theoretically not clear yet if we can use the truncated coulomb
+    # interaction for post-HF calculations and if that will increase
+    # convergence with system size. But worth trying and figuring out
+    # the details. For now, simply ignore the G=0 component.
+    #omega = 0.0 # not short range, but regularised coulomb interaction
+    #coulomb = coulomb_interaction(omega, pair.calc.wfs.gd, pair.calc.wfs.kd)
+    #v_G = coulomb.get_potential(pd)
+    #print("length of v_G =\n", len(v_G))
+
+    gamma_pqG = mult_coulomb_kernel(C_pqG, pd)
+    #print_logging_info("Assertion of G vector length ", v_G.shape[0], " ", \
+    #                   C_pqG.shape[2], level = 2)
+    #gamma_pqG = np.einsum("pqG, G -> pqG", C_pqG, np.sqrt(v_G/vol))
+    gamma_pqG /= np.sqrt(vol)
 
     return gamma_pqG
 
@@ -205,6 +216,7 @@ def main():
         V_ijkl = np.einsum("ijG, klG -> ikjl", np.conj(ftpd_nnG[:no,:no,:]), \
                 ftpd_nnG[:no,:no,:])
         E_exx = -np.real(np.einsum("ijji ->", V_ijkl)) * Hartree
+        E_exx += 2*np.real(np.einsum("iijj ->", V_ijkl)) * Hartree
         print_logging_info("Recalculted E_exx from Coulomb integrals: ", E_exx)
 
     # 
