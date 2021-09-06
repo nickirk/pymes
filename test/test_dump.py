@@ -94,8 +94,9 @@ def main(nel, cutoff,rs, gamma, kc):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     only2Body=True,sp=1)
+    #tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    #                                 only2Body=True,sp=1)
+    tV_pqrs = ueg_model.eval2BodyIntegrals(sp=1)
 
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
@@ -106,15 +107,14 @@ def main(nel, cutoff,rs, gamma, kc):
     kinetic_G = compute_kinetic_energy(ueg_model)
     fcidump.write2Fcidump(tV_pqrs,kinetic_G,no)
 
-    tV_opqrst = ueg_model.eval3BodyIntegrals(correlator=ueg_model.trunc,sp=1)
-    tcdump.write2Tcdump(tV_opqrst)
+    #tV_opqrst = ueg_model.eval3BodyIntegrals(correlator=ueg_model.trunc,sp=1)
+    #tcdump.write2Tcdump(tV_opqrst)
 
 
 
     """
     stuff for tc-ccd tc-dcd
     not needed for dumping tcdump
-    """
     """
     # triply contracted 3-body integrals: (ii|jj|kk)
     # doubly contracted 3-body integrals:
@@ -157,6 +157,8 @@ def main(nel, cutoff,rs, gamma, kc):
     print_logging_info("{:.3f} seconds spent on evaluating HF energy"\
                        .format((time.time()-time_hf)))
 
+    results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=-1., sp=0, maxIter=60, fDiis=True)
+    """
     # Now add the contributions from the 3-body integrals into the diagonal and
     # two body operators, also to the total energy, corresponding to 3 orders
     # of contractions
@@ -219,7 +221,7 @@ if __name__ == '__main__':
   gamma = None
   nel = 14
   for rs in [0.5]:
-    for cutoff in [2]:
+    for cutoff in [8]:
       kCutoffFraction = None
       main(nel,cutoff,rs, gamma, kCutoffFraction)
   ctf.MPI_Stop()

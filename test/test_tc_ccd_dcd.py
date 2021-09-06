@@ -87,16 +87,16 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
     #ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
-    ueg_model.kCutoff = kc
+    ueg_model.k_cutoff = kc
 
     print_title('Evaluating pure 2-body integrals','=')
-    print_logging_info("kCutoff = {}".format(ueg_model.kCutoff))
+    print_logging_info("kCutoff = {}".format(ueg_model.k_cutoff))
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    #tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-    #                                 only2Body=True,sp=1)
-    tV_pqrs = ueg_model.eval_2b_integrals(sp=1)
+    tV_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+                                     is_only_2b=True,sp=1)
+    #tV_pqrs = ueg_model.eval_2b_integrals(sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -150,8 +150,10 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_title('Evaluating effective 2-body integrals','=')
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
+    #tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+    #                                 is_effect_2b=True,sp=1)
     tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
-                                     is_effect_2b=True,sp=1)
+                                     is_rpa_approx=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
 
@@ -228,8 +230,8 @@ if __name__ == '__main__':
   gamma = None
   amps = None
   nel = 14
-  for rs in [50.0]:
-    for cutoff in [3]:
-      kCutoffFraction = 6**(1./2)
+  for rs in [0.5]:
+    for cutoff in [5]:
+      kCutoffFraction = 4.99
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
   ctf.MPI_Stop()

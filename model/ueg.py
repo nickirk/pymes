@@ -33,19 +33,19 @@ class UEG:
             later lookup. Size Nx*Ny*Nz, Nx, Ny, Nz are the k-vector points
             in x, y, z directions.
 
-        basis_fns: tuple 
-            of relevant class PlaneWaveFn objects, 
+        basis_fns: tuple
+            of relevant class PlaneWaveFn objects,
             i.e. the single-particle basis set.
 
         correlator: function
             correlator used in transcorrelation scheme.
 
         cutoff: float
-            plane wave vector cutoff for determining the plane wave basis 
+            plane wave vector cutoff for determining the plane wave basis
             functions.
 
         k_cutoff: float
-            plane wave vector cutoff inside the correlaor function trunc. 
+            plane wave vector cutoff inside the correlaor function trunc.
         """
 
         if (n_ele) % 2 != 0:
@@ -112,7 +112,7 @@ class UEG:
         Modifies
         ----------------
            self.basis_indices_map: nparray,
-                dtype = int, 
+                dtype = int,
                 size = product of numbers of k-points in x, y, z directions
         """
 
@@ -132,15 +132,15 @@ class UEG:
         Parameters
         ----------
         cutoff: float,
-            energy cutoff, in units of `2*(2\pi/L)^2`, defining the 
-            single-particle basis.  
-            Only single-particle basis functions with a kinetic energy equal 
+            energy cutoff, in units of `2*(2\pi/L)^2`, defining the
+            single-particle basis.
+            Only single-particle basis functions with a kinetic energy equal
             to or less than the cutoff are included as basis functions.
 
         Returns
         -------
-        basis_fns: tuple 
-            of relevant class PlaneWaveFn objects, 
+        basis_fns: tuple
+            of relevant class PlaneWaveFn objects,
             i.e. the single-particle basis set.
 
     """
@@ -170,8 +170,8 @@ class UEG:
 
 
     def eval_3b_integrals(self, correlator = None, dtype=np.float64, sp=1):
-        """ Member function of class UEG to evaluate the full 3-body integrals 
-        within the transcorrelation framework. 
+        """ Member function of class UEG to evaluate the full 3-body integrals
+        within the transcorrelation framework.
 
         Parameters:
         -----------
@@ -187,7 +187,7 @@ class UEG:
         Returns:
         -------
         t_V_opqrst: tensor object (CTF tensor by default)
-            The full 3-body integrals, dimension [nP, nP, nP, nP, nP, nP], 
+            The full 3-body integrals, dimension [nP, nP, nP, nP, nP, nP],
             where nP: int, is the number of spatial orbitals.
         """
 
@@ -226,9 +226,12 @@ class UEG:
 
         for o in range(nP):
             if (o) % world.np() == rank:
-                print_logging_info("Elapsed time = {:.3f} s: calculating the {}-{} out of {} orbitals"\
-                            .format(time.time()-startTime, o, \
-                            o+world.np() if o+world.np() < nP else nP, nP),level=1)
+                print_logging_info("Elapsed time = {:.3f} s: " \
+                                   .format(time.time()-startTime) + \
+                                   "calculating the {}-{} out of {} orbitals"\
+                                   .format(o, o+world.np() \
+                                           if o+world.np() < nP else nP, nP), \
+                                   level=1)
                 for r in range(nP):
                     kIntVec1 = self.basis_fns[2*r].k - self.basis_fns[2*o].k
                     for p in range(nP):
@@ -277,7 +280,7 @@ class UEG:
 
 
 
-    def eval_2b_integrals(self, correlator = None, 
+    def eval_2b_integrals(self, correlator = None,
                           is_rpa_approx = False, \
                           is_only_2b = False, \
                           is_only_non_hermi_2b = False, \
@@ -300,8 +303,8 @@ class UEG:
         correlator: function
             for example the member function UEG.trunc
         is_rpa_approx: bool
-            parameter which determines whether to include only the RPA type 
-            contractions from the 3-body integrals into the final 2-body 
+            parameter which determines whether to include only the RPA type
+            contractions from the 3-body integrals into the final 2-body
             integrals, besides the normal Coulomb repulsion integrals and
             the additional 2-body tc integrals.
         is_only_2b: bool
@@ -312,22 +315,22 @@ class UEG:
             2-body tc integrals, besides the Coulomb integrals.
         is_only_hermi_2b: bool
             parameter which determines whether to inclulde only the hermitian
-            2-body tc terms/integrals (excluding the nonhermitian terms), 
+            2-body tc terms/integrals (excluding the nonhermitian terms),
             besides the Coulomb integrals.
         is_effect_2b: bool
             parameter which determines to include all 2-body integrals,
             including the normal Coulomb and 2-body tc integrals, plus
             the effective 2-body integrals as a result of single contractions
-            from the 3-body integrals. There are four types of single 
+            from the 3-body integrals. There are four types of single
             contractions in the 3-body integrals: RPA type and 3 exchange types.
         is_exchange_1: bool
-            generates only the 1st type of single contraction in the 3-body 
+            generates only the 1st type of single contraction in the 3-body
             integrals. For test purpose only.
         is_exchange_2: bool
-            generates only the 2nd type of single contraction in the 3-body 
+            generates only the 2nd type of single contraction in the 3-body
             integrals. For test purpose only.
         is_exchange_3: bool
-            generates only the 3rd type of single contraction in the 3-body 
+            generates only the 3rd type of single contraction in the 3-body
             integrals. For test purpose only.
         dtype: data type
             for the returning integral elements. By default, np.float64 is used.
@@ -335,7 +338,7 @@ class UEG:
             Sparse format for the returned integrals.
             1: sparse (default)
             0: dense
-            
+
         Returns
         -------
         t_V_pqrs: tensor
@@ -356,38 +359,42 @@ class UEG:
         if correlator is not None:
             self.correlator = correlator
             print_logging_info("Using TC method", level=1)
-            print_logging_info("Using correlator: ", correlator.__name__, level=1)
+            print_logging_info("Using correlator: ", correlator.__name__, \
+                               level=1)
             if self.k_cutoff is not None:
-                print_logging_info("k_cutoff in correlator = {:.8f}".format(self.k_cutoff), level=1)
+                print_logging_info("k_cutoff in correlator = {:.8f}".format(\
+                                                        self.k_cutoff), level=1)
             if self.gamma is not None:
-                print_logging_info("Gamma in correlator = {:.8f}".format(self.gamma), level=1)
+                print_logging_info("Gamma in correlator = {:.8f}".format(\
+                                                           self.gamma), level=1)
 
             if is_only_2b:
-                print_logging_info("Including only pure 2-body terms: ", is_only_2b, level=1)
+                print_logging_info("Including only pure 2-body terms: ", \
+                                   is_only_2b, level=1)
             if is_rpa_approx:
-                print_logging_info("Including only RPA approximation for 3-body: ",\
-                               is_rpa_approx, level=1)
+                print_logging_info("Including only RPA approximation for ",\
+                                   "3-body: ", is_rpa_approx, level=1)
             if is_effect_2b:
-                print_logging_info("Including effective 2-body terms from 3-body: "\
-                               , is_effect_2b, level=1)
+                print_logging_info("Including effective 2-body terms from ",\
+                                   "3-body: ", is_effect_2b, level=1)
             if is_exchange_1:
-                print_logging_info("Using only 1. exchange type 2-body from 3-body: "\
-                               , is_exchange_1, level=1)
+                print_logging_info("Using only 1. exchange type 2-body from ",\
+                                   "3-body: ", is_exchange_1, level=1)
             if is_exchange_2:
-                print_logging_info("Using only 2. exchange type 2-body from 3-body: "\
-                               , is_exchange_2, level=1)
+                print_logging_info("Using only 2. exchange type 2-body from ",\
+                                   "3-body: ", is_exchange_2, level=1)
 
             if is_exchange_3:
-                print_logging_info("Using only 3. exchange type 2-body from 3-body: "\
-                               , is_exchange_3, level=1)
+                print_logging_info("Using only 3. exchange type 2-body from ",\
+                                   "3-body: ", is_exchange_3, level=1)
             # Just for testing, not used in production
             if is_only_non_hermi_2b:
-                print_logging_info("Including only non-hermitian 2-body terms: "\
-                               , is_only_non_hermi_2b, level=1)
+                print_logging_info("Including only non-hermitian 2-body ",\
+                                   "terms: ", is_only_non_hermi_2b, level=1)
 
             if is_only_hermi_2b:
-                print_logging_info("Including only hermitian 2-body terms: "\
-                               , is_only_non_hermi_2b, level=1)
+                print_logging_info("Including only hermitian 2-body terms: ",\
+                                   is_only_non_hermi_2b, level=1)
 
 
         nP = int(len(self.basis_fns)/2)
@@ -400,10 +407,12 @@ class UEG:
 
         for p in range(nP):
             if (p) % world.np() == rank:
-                print_logging_info("Elapsed time = {:.3f} s: calculating the {}-{} out of {} orbitals"\
-                                   .format(time.time()-startTime, p, \
-                                    p+world.np() if p+world.np() < nP else nP, \
-                                    nP), level=1)
+                print_logging_info("Elapsed time = {:.3f} s: calculating "\
+                                   .format(time.time()-startTime)
+                                   + "the {}-{} out of {} orbitals"\
+                                   .format(p, p+world.np() \
+                                           if p+world.np() < nP else nP, nP), \
+                                   level=1)
                 for r in range(nP):
                     dIntK = self.basis_fns[r*2].k-self.basis_fns[p*2].k
                     dKVec = self.basis_fns[r*2].kp-self.basis_fns[p*2].kp
@@ -433,101 +442,101 @@ class UEG:
                         elif is_rpa_approx:
                             # tc
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                rs_dk = self.basis_fns[r*2].kp \
+                                        -self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
-                                        +  uMat\
-                                        + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare) \
-                                        - (self.n_ele-2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                        +  uMat \
+                                        + dkSquare * correlator(dkSquare) \
+                                        - (rs_dk.dot(dKVec)) \
+                                          * correlator(dkSquare) \
+                                        - (self.n_ele-2)*dkSquare \
+                                          *correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
-                                #w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_only_2b:
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                rs_dk = self.basis_fns[r*2].kp \
+                                        -self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)\
-                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare)
-                                        #- (self.n_ele - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                        - (rs_dk.dot(dKVec)) \
+                                          * correlator(dkSquare)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_only_hermi_2b:
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                rs_dk = self.basis_fns[r*2].kp \
+                                        - self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
                                         +  uMat\
                                         + dkSquare * correlator(dkSquare)
-                                        #- (self.n_ele - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  uMat / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_only_non_hermi_2b:
                             w = 0.
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r*2].kp-self.basis_fns[s*2].kp
+                                rs_dk = self.basis_fns[r*2].kp \
+                                        - self.basis_fns[s*2].kp
                                 w = 4.*np.pi/dkSquare \
-                                        - (rs_dk.dot(dKVec)) * correlator(dkSquare)
-                                        #- (self.n_ele - 2)*dkSquare*correlator(dkSquare)**2/self.Omega
+                                    - (rs_dk.dot(dKVec)) * correlator(dkSquare)
                                 w = w / self.Omega
-                            #else:
-                            #    #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
-                            #    w =  uMat / self.Omega
-
-                                # \sum_k' (k-k')k'u(k-k')u(k')
 
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_effect_2b:
                             if np.abs(dkSquare) > 0.:
-                                w = - (self.n_ele)*dkSquare*correlator(dkSquare)**2/self.Omega\
-                                    + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)\
-                                    - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)\
-                                    + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = - (self.n_ele)*dkSquare\
+                                      *correlator(dkSquare)**2/self.Omega\
+                                    + 2.*self.contractExchange3Body(\
+                                                self.basis_fns[2*r].kp, dKVec)\
+                                    - 2.*self.contractExchange3Body(\
+                                                self.basis_fns[2*p].kp, dKVec)\
+                                    + 2.*self.contractP_KWithQ(\
+                                                self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
-                                w =  (2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec))
+                                w =  (2.*self.contractP_KWithQ(\
+                                                self.basis_fns[2*r].kp, dKVec))
                                 w = w / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         # exchange 1-3 are for test purpose only.
                         elif is_exchange_1:
                             if np.abs(dkSquare) > 0.:
-                                w = + 2.*self.contractExchange3Body(self.basis_fns[2*r].kp, dKVec)
+                                w = + 2.*self.contractExchange3Body(\
+                                                self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_exchange_2:
                             if np.abs(dkSquare) > 0.:
-                                w = - 2.*self.contractExchange3Body(self.basis_fns[2*p].kp, dKVec)
+                                w = - 2.*self.contractExchange3Body(\
+                                                self.basis_fns[2*p].kp, dKVec)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
                                 w =  0.
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
                         elif is_exchange_3:
                             if np.abs(dkSquare) > 0.:
-                                w = + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = + 2.*self.contractP_KWithQ(\
+                                                self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             else:
-                                #w = correlator(dkSquare, multiply_by_k_square=True) + uMat
-                                w = + 2.*self.contractP_KWithQ(self.basis_fns[2*r].kp, dKVec)
+                                w = + 2.*self.contractP_KWithQ(\
+                                                self.basis_fns[2*r].kp, dKVec)
                                 w = w / self.Omega
                             indices.append(nP**3*p + nP**2*q + nP*r + s)
                             values.append(w)
@@ -537,12 +546,14 @@ class UEG:
         if is_effect_2b:
             # symmetrize the integral with respect to electron 1 and 2
             t_V_sym_pqrs = ctf.tensor(t_V_pqrs.shape, sp=t_V_pqrs.sp)
-            t_V_sym_pqrs.i("pqrs") << 0.5*(t_V_pqrs.i("pqrs")+t_V_pqrs.i("qpsr"))
+            t_V_sym_pqrs.i("pqrs") << 0.5*(t_V_pqrs.i("pqrs")\
+                                           +t_V_pqrs.i("qpsr"))
             del t_V_pqrs
             t_V_pqrs = t_V_sym_pqrs
 
-        print_logging_info("{:.3f} s spent on ".format(time.time()-startTime)+algoName,\
-                           level=1)
+        print_logging_info("{:.3f} s spent on ".format(time.time()\
+                                                       -startTime)\
+                           +algoName, level=1)
         return t_V_pqrs
 
 
@@ -561,7 +572,8 @@ class UEG:
         result: float
         """
 
-        pPrim = np.array([self.basis_fns[i*2].kp for i in range(int(self.n_ele/2))])
+        pPrim = np.array([self.basis_fns[i*2].kp for i in \
+                          range(int(self.n_ele/2))])
         pVec = pVec-pPrim
         kVecSquare = np.einsum("i,i->", kVec, kVec)
         pVecSquare = np.einsum("ni,ni->n", pVec, pVec)
@@ -588,14 +600,16 @@ class UEG:
         result: float
         """
 
-        pPrim = np.array([self.basis_fns[i*2].kp for i in range(int(self.n_ele/2))])
+        pPrim = np.array([self.basis_fns[i*2].kp for i in \
+                          range(int(self.n_ele/2))])
         vec1 = pVec - kVec - pPrim
         vec2 = pVec-pPrim
 
         dotProduct = np.einsum("ni,ni->n", vec1, vec2)
         vec1Square = np.einsum("ni,ni->n", vec1, vec1)
         vec2Square = np.einsum("ni,ni->n", vec2, vec2)
-        result = dotProduct * self.correlator(vec1Square) * self.correlator(vec2Square)
+        result = dotProduct * self.correlator(vec1Square) \
+                 * self.correlator(vec2Square)
 
         result = np.einsum("n->",result) / self.Omega
 
@@ -612,7 +626,8 @@ class UEG:
         # need to test convergence of this cutoff
         if self.kPrime is None:
             self.kPrime = np.array([[i,j,k] for i in range(-cutoff,cutoff+1) \
-                    for j in range(-cutoff,cutoff+1) for k in range(-cutoff,cutoff+1)])
+                                    for j in range(-cutoff,cutoff+1) for k in \
+                                    range(-cutoff,cutoff+1)])
         k1 = 2*np.pi*self.kPrime/self.L
         k2 = k - k1
 
@@ -682,14 +697,17 @@ class UEG:
         e_perl = np.zeros(num_p)
 
         # generate p vectors
-        k_vec_p = np.array([self.basis_fns[i*2].kp for i in range(int(len(self.basis_fns)/2))])
-        k_vec_i = np.array([self.basis_fns[i*2].kp for i in range(int(self.n_ele/2))])
+        k_vec_p = np.array([self.basis_fns[i*2].kp for i in \
+                            range(int(len(self.basis_fns)/2))])
+        k_vec_i = np.array([self.basis_fns[i*2].kp for i in \
+                            range(int(self.n_ele/2))])
 
         # the perl shape diagram
         for orb_p in range(num_p):
             k_vec_p_minus_i = k_vec_p[orb_p] - k_vec_i
-            k_vec_p_minus_i_square = np.einsum("ij, ij-> i", k_vec_p_minus_i, k_vec_p_minus_i)
-            e_perl[orb_p] = np.sum(self.correlator(k_vec_p_minus_i_square)**2\
+            k_vec_p_minus_i_square = np.einsum("ij, ij-> i", k_vec_p_minus_i, \
+                                               k_vec_p_minus_i)
+            e_perl[orb_p] = np.sum(self.correlator(k_vec_p_minus_i_square)**2 \
                                    *k_vec_p_minus_i_square)
 
         e_perl = 2.0*self.n_ele/self.Omega**2/2 * e_perl
@@ -699,14 +717,18 @@ class UEG:
         # wave diagram
         e_wave = np.zeros(num_p)
         t_diff_vec_pi_pij = ctf.tensor([num_p, num_o, 3])
-        t_diff_vec_pi_pij.i("pij") << ctf.astensor(k_vec_p).i("pj")-ctf.astensor(k_vec_i).i("ij")
-        t_diff_vec_pi_square_pi = ctf.einsum("pij,pij -> pi", t_diff_vec_pi_pij, \
+        t_diff_vec_pi_pij.i("pij") << ctf.astensor(k_vec_p).i("pj") \
+                                      - ctf.astensor(k_vec_i).i("ij")
+        t_diff_vec_pi_square_pi = ctf.einsum("pij,pij -> pi", \
+                                             t_diff_vec_pi_pij, \
                                              t_diff_vec_pi_pij)
-        t_diff_pi_dot_diff_pj_pij = ctf.einsum("pik, pjk -> pij", t_diff_vec_pi_pij, \
+        t_diff_pi_dot_diff_pj_pij = ctf.einsum("pik, pjk -> pij", \
+                                               t_diff_vec_pi_pij, \
                                                t_diff_vec_pi_pij)
         diff_pi_square = t_diff_vec_pi_square_pi.to_nparray()
         u_diff_pi = self.correlator(diff_pi_square)
-        t_u_diff_pi_multiply_u_diff_pj_pij = ctf.einsum("pi,pj->pij", u_diff_pi, u_diff_pi)
+        t_u_diff_pi_multiply_u_diff_pj_pij = ctf.einsum("pi,pj->pij", \
+                                                        u_diff_pi, u_diff_pi)
         e_wave = ctf.einsum("pij,pij->p", t_diff_pi_dot_diff_pj_pij, \
                             t_u_diff_pi_multiply_u_diff_pj_pij)
 
@@ -721,12 +743,16 @@ class UEG:
 
         e_shield = np.ones(num_p)
         t_diff_vec_ij_ijk = ctf.tensor([num_o, num_o, 3])
-        t_diff_vec_ij_ijk.i("ijk") << ctf.astensor(k_vec_i).i("ik")-ctf.astensor(k_vec_i).i("jk")
-        t_diff_vec_ij_square_ij = ctf.einsum("ijk,ijk -> ij", t_diff_vec_ij_ijk, t_diff_vec_ij_ijk)
+        t_diff_vec_ij_ijk.i("ijk") << ctf.astensor(k_vec_i).i("ik") \
+                                      - ctf.astensor(k_vec_i).i("jk")
+        t_diff_vec_ij_square_ij = ctf.einsum("ijk,ijk -> ij", \
+                                             t_diff_vec_ij_ijk, \
+                                             t_diff_vec_ij_ijk)
         diff_ij_square = t_diff_vec_ij_square_ij.to_nparray()
         u_diff_ij = self.correlator(diff_ij_square)
         u_diff_ij_square = u_diff_ij**2
-        e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, diff_ij_square)
+        e_shield = e_shield * ctf.einsum("ij,ij->", u_diff_ij_square, \
+                                         diff_ij_square)
         # bug, missing a factor of 2 from spin degree of freedom
         e_shield =  2*e_shield / 2 / self.Omega**2
 
@@ -741,7 +767,8 @@ class UEG:
                                                t_diff_vec_ij_ijk, \
                                                -t_diff_vec_pi_pij)
 
-        t_u_diff_ij_multiply_u_diff_ip_ijp = ctf.einsum("ij,pi->ijp", u_diff_ij,\
+        t_u_diff_ij_multiply_u_diff_ip_ijp = ctf.einsum("ij,pi->ijp", \
+                                                        u_diff_ij, \
                                                         u_diff_pi)
         e_frog = ctf.einsum("ijp, ijp->p", t_diff_ij_dot_diff_ip_ijp, \
                             t_u_diff_ij_multiply_u_diff_ip_ijp)
@@ -780,7 +807,8 @@ class UEG:
             k_cutoffDenom = 1e-12
         if not multiply_by_k_square:
             b = kSquare*(kSquare+gamma**2)
-            result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>k_cutoffDenom)
+            result = np.divide(a , b, out = np.zeros_like(b), \
+                               where=np.abs(b)>k_cutoffDenom)
         else:
             if kSquare > k_cutoffSquare:
                 result = a/(kSquare+gamma**2)
@@ -887,9 +915,9 @@ class UEG:
             result = np.divide(mu, beta_square, out = np.zeros_like(kSquare),\
                 where=(beta_square > 1e-12))
             result[beta_square>k_cutoffSquare] = 0.
-            result += np.divide(4*mu, beta_square**2, out = np.zeros_like(kSquare),\
-                where=(beta_square >= k_cutoffSquare))
-                #where=(beta_square > 1e-12 and beta_square <= k_cutoffSquare))
+            result += np.divide(4*mu, beta_square**2, \
+                                out = np.zeros_like(kSquare),\
+                                where=(beta_square >= k_cutoffSquare))
         # there should be an overall - sign
         return -result
 
@@ -910,12 +938,12 @@ class UEG:
         #else:
         #    result = - 12.566370614359173 / kSquare/kSquare
 
-        #result = np.divide(-4.*np.pi*applyErf(kSquare,k_cutoffSquare), kSquare**2, \
-        #        out = np.zeros_like(kSquare), where=kSquare>1e-12)
         kc = np.sqrt(k_cutoffSquare)
         k = np.sqrt(kSquare)
-        result = np.divide(-4.*np.pi*(1.+special.erf((k-kc)/(kc*self.gamma)))/2., kSquare**2, \
-                out = np.zeros_like(kSquare), where=kSquare>(kc*self.gamma)**2)
+        result = np.divide(-4.*np.pi*(1.+special.erf((k-kc) \
+                                         /(kc*self.gamma)))/2., kSquare**2, \
+                           out = np.zeros_like(kSquare), \
+                           where=kSquare>(kc*self.gamma)**2)
         return result
 
     def coulomb(self, kSquare, multiply_by_k_square=False):
@@ -926,7 +954,8 @@ class UEG:
             gamma = 1.
         else:
             gamma = self.gamma
-        result = np.divide(-4.*np.pi*gamma, kSquare, out = np.zeros_like(kSquare), where=kSquare>1e-12)
+        result = np.divide(-4.*np.pi*gamma, kSquare, \
+                           out = np.zeros_like(kSquare), where=kSquare>1e-12)
         return result
 
     def stg(self,kSquare,multiply_by_k_square=False):
@@ -944,7 +973,8 @@ class UEG:
             k_cutoffDenom = 1e-12
         if not multiply_by_k_square:
             b = (kSquare+gamma**2)**2
-            result = np.divide(a , b, out = np.zeros_like(b), where=np.abs(b)>k_cutoffDenom)
+            result = np.divide(a , b, out = np.zeros_like(b), \
+                               where=np.abs(b)>k_cutoffDenom)
 
         return result
 
@@ -967,7 +997,7 @@ class UEG:
         gamma_pqG: nparray of dtype float
             of size nP*nP*nG, where nG is the length of overlap_basis.
             Meaning Fourier transformed overlap densities/pair densities (FTOD)
-            $C^p_q({\bf G}) = \int\mathrm d{\bf r} 
+            $C^p_q({\bf G}) = \int\mathrm d{\bf r}
              \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}$
         """
 
@@ -981,9 +1011,12 @@ class UEG:
         for p in range(0,nP,1):
             for q in range(0,nP,1):
                 for g in range(0,nG,1):
-                    if ((basis[2*p].k-basis[2*q].k) == overlap_basis[2*g].k).all():
-                        GSquare = overlap_basis[2*g].kp.dot(overlap_basis[2*g].kp)
+                    if ((basis[2*p].k-basis[2*q].k) \
+                         == overlap_basis[2*g].k).all():
+                        GSquare = overlap_basis[2*g].kp.dot(\
+                                                        overlap_basis[2*g].kp)
                         if np.abs(GSquare) > 1e-12 :
-                            gamma_pqG[p,q,g] = np.sqrt(4.*np.pi/GSquare/self.Omega)
+                            gamma_pqG[p,q,g] = np.sqrt(4.*np.pi \
+                                                       /GSquare/self.Omega)
         return gamma_pqG
 
