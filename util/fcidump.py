@@ -132,6 +132,9 @@ def read_fcidump(fcidump_file):
                 
             if p != 0 and q != 0 and r != 0 and s !=0: 
                V_pqrs[p-1, q-1, r-1, s-1] = integral 
+               V_pqrs[r-1, q-1, p-1, s-1] = integral 
+               V_pqrs[r-1, s-1, p-1, q-1] = integral 
+               V_pqrs[p-1, s-1, r-1, q-1] = integral 
 
             if p == q == r == s == 0:
                 e_core = integral
