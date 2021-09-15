@@ -19,7 +19,7 @@ class DIIS:
         
         Parameters
         ----------
-        error: ctf tensors, [size of amplitudes]
+        error: list of ctf tensors, [size of amplitudes]
                 The changes of amplitudes in the nth iteration.
         amplitude: ctf tensors, size [size of amplitudes]
                 The amplitudes from the nth iteration. Amplitudes refer
@@ -50,18 +50,26 @@ class DIIS:
         if running_dim_space == self.dim_space:
             self.error_list.pop(0)
             self.amplitude_list.pop(0)
-        self.error_list.append([error])
-        self.amplitude_list.append([amplitude])
+        self.error_list.append(error)
+        self.amplitude_list.append(amplitude)
 
         L_tmp = np.zeros((len(self.error_list)+1, len(self.error_list)+1))
         L_tmp[-1, :-1] = -1.
         L_tmp[:-1, -1] = -1.
 
+        # TODO: explain what is happening here
         if running_dim_space == self.dim_space:
             L_tmp[:-3, :-3] = self.L[1:-2, 1:-2]
         else:
             L_tmp[:-2, :-2] = self.L[:-1, :-1]
+
+        # TODO: explain what is happening here
+        # i loop over saved error list
         for i in range(len(self.error_list)):
+          # only need the last list of new errors, because we update only 
+          # one row and column of the L matrix
+          # nt loops over the types of amplitudes, ie singles and doubles
+          
           for nt in range(len(self.error_list[-1])):
               # get the shape of the tensor
               indices = string.ascii_lowercase[:len(\

@@ -123,7 +123,7 @@ class CCD:
             t_T_abij += delta * t_delta_T_abij
     
             if self.is_diis:
-                t_T_abij = self.mixer.mix(t_delta_T_abij, t_T_abij)[0]
+                t_T_abij = self.mixer.mix([t_delta_T_abij], [t_T_abij])[0]
             # update energy and norm of amplitudes
             #if self.is_dr_ccd:
             #    e_dir_ccd, e_ex_ccd = drccd.get_energy(t_T_abij, t_V_ijab)
