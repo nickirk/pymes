@@ -53,7 +53,7 @@ def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
         f.close()
     return
 
-def read_fcidump(fcidump_file):
+def read_fcidump(fcidump_file, is_tc=False):
     '''
     Read Coulomb integrals from a FCIDUMP file. Works only on a single rank
     and for small FCIDUMP files ~300 orbitals for 120 GB RAM assuming dense
@@ -63,6 +63,8 @@ def read_fcidump(fcidump_file):
     ---------
     fcidump_file: string
                   filename/path to the FCIDUMP file to be read.
+    is_tc: bool
+           tells if the FCIDUMP file is symmetric or not (transcorrelated or not)
     Return:
     ------
     n_elec: int
@@ -127,14 +129,17 @@ def read_fcidump(fcidump_file):
             q = int(q)
             s = int(s)
             
-            if np.abs(integral) < 1e-12:
+            if np.abs(integral) < 1e-17:
                 continue
                 
             if p != 0 and q != 0 and r != 0 and s !=0: 
-               V_pqrs[p-1, q-1, r-1, s-1] = integral 
-               V_pqrs[r-1, q-1, p-1, s-1] = integral 
-               V_pqrs[r-1, s-1, p-1, q-1] = integral 
-               V_pqrs[p-1, s-1, r-1, q-1] = integral 
+                if not is_tc:
+                    V_pqrs[p-1, q-1, r-1, s-1] = integral 
+                    V_pqrs[r-1, q-1, p-1, s-1] = integral 
+                    V_pqrs[r-1, s-1, p-1, q-1] = integral 
+                    V_pqrs[p-1, s-1, r-1, q-1] = integral 
+                else:
+                    V_pqrs[p-1, q-1, r-1, s-1] = integral 
 
             if p == q == r == s == 0:
                 e_core = integral
@@ -143,7 +148,11 @@ def read_fcidump(fcidump_file):
                 epsilon_p[p-1] = integral
             
             if p != 0 and r != 0 and q == s == 0:
-                h_pq[p-1, r-1] = integral
+                if not is_tc:
+                    h_pq[p-1, r-1] = integral
+                    h_pq[r-1, p-1] = integral
+                else:
+                    h_pq[p-1, r-1] = integral
 
 
     return n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs
