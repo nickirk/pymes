@@ -4,6 +4,13 @@ import ctf
 from ctf.core import *
 
 
+def construct_hf_matrix(t_h_pq, t_V_pqrs, no):
+    t_fock_pq = t_h_pq.copy()
+    t_fock_pq += ctf.einsum("piqi -> pq", 2.*t_V_pqrs[:,:no,:,:no])\
+                 -ctf.einsum("piiq -> pq", t_V_pqrs[:,:no,:no,:])
+
+    return t_fock_pq
+
 
 def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     dtype = tV_ijkl.dtype
@@ -17,16 +24,16 @@ def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     e = e + exE
     return e
 
-def calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv):
+def calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
     algoName = "calcVirtualOrbE"
-    e = ctf.astensor(kinetic_G[no:], dtype = tV_aijb.dtype)
+    e = ctf.astensor(kinetic_G[no:], dtype = t_V_aijb.dtype)
     #tConjGamma_aiG = ctf.einsum("iaG -> aiG", ctf.conj(tGamma_iaG))
     #dirCoul_aibj =  ctf.einsum('aiG,bjG->aibj',tConjGamma_aiG, tGamma_aiG)
     #exCoul_aijb = ctf.einsum('ajG,ibG->aijb',tConjGamma_aiG, tGamma_iaG)
-    dirE = ctf.tensor([nv], dtype=tV_aijb.dtype, sp=0)
-    dirE.i("a") << 2. * tV_aibj.i("aiai")
-    exE = ctf.tensor([nv], dtype=tV_aibj.dtype, sp=0)
-    exE.i("a") << -1. * tV_aijb.i("aiia")
+    dirE = ctf.tensor([nv], dtype=t_V_aijb.dtype, sp=0)
+    dirE.i("a") << 2. * t_V_aibj.i("aiai")
+    exE = ctf.tensor([nv], dtype=t_V_aibj.dtype, sp=0)
+    exE.i("a") << -1. * t_V_aijb.i("aiia")
 
     e = e + dirE
     e = e + exE
