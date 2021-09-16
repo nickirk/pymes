@@ -9,16 +9,17 @@ from pymes.solver import drccd
 
 class CCD:
 
-    def __init__(self, is_dcd=False, is_diis=True, is_dr_ccd=False, \
+    def __init__(self, no, is_dcd=False, is_diis=True, is_dr_ccd=False, \
                  is_bruekner=False):
         self.is_dcd = is_dcd
         self.is_diis = is_diis
         self.is_dr_ccd = is_dr_ccd
         self.is_bruekner = is_bruekner
+        self.no = no
         if self.is_diis:
             self.mixer = diis.DIIS(dim_space=6)
 
-    def solve(self, t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
+    def solve(self, t_fock_pq, t_V_pqrs, level_shift=0., sp=0, \
               max_iter=100,  amps=None,\
               epsilon_e=1e-8):
         '''
@@ -32,12 +33,12 @@ class CCD:
         time_ccd = time.time()
         world = ctf.comm()
     
-        no = t_epsilon_i.size
-        nv = t_epsilon_a.size
+        no = self.no
+        nv = t_fock_pq.shape[0]-no
     
         # if use Bruekner method, backup the hole and particle energies
-        t_epsilon_original_i = t_epsilon_i.copy()
-        t_epsilon_original_a = t_epsilon_a.copy()
+        t_epsilon_i = t_fock_pq.diagonal()[:no]
+        t_epsilon_a = t_fock_pq.diagonal()[no:]
     
         # parameters
         level_shift = level_shift
@@ -96,7 +97,7 @@ class CCD:
                                               t_V_abij, t_V_aijb, t_V_iabj, \
                                               t_V_ijab)
             else:
-                t_R_abij = 1.0*self.get_residual(t_epsilon_i, t_epsilon_a, t_T_abij, \
+                t_R_abij = 1.0*self.get_residual(t_fock_pq, t_T_abij, \
                                             t_V_klij, t_V_ijab,\
                                             t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd)
     
@@ -160,12 +161,12 @@ class CCD:
         return {"ccd e": e_ccd, "t2 amp": t_T_abij, "hole e": t_epsilon_i, \
                 "particle e": t_epsilon_a, "dE": dE}
     
-    def get_residual(self, t_epsilon_i, t_epsilon_a, t_T_abij, t_V_klij, t_V_ijab, \
+    def get_residual(self, t_fock_pq, t_T_abij, t_V_klij, t_V_ijab, \
                      t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd):
     
         algo_name = "ccd.get_residual"
-        no = t_epsilon_i.size
-        nv = t_epsilon_a.size
+        no = self.no
+        nv = t_fock_pq.shape[0]-no
         t_R_abij = ctf.tensor([nv,nv,no,no], dtype=t_V_klij.dtype, sp=t_T_abij.sp)
     
         # t_V_ijkl and t_V_klij are not the same in transcorrelated Hamiltonian!
@@ -201,13 +202,8 @@ class CCD:
     
         t_R_abij += ctf.einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
     
-        # intermediate for exchange of ia and jb indices
-        t_fock_ab = ctf.tensor([nv,nv], dtype=t_epsilon_a.dtype, sp=0)
-        t_fock_ab.set_zero()
-        t_fock_ij = ctf.tensor([no,no], dtype=t_epsilon_i.dtype, sp=0)
-        t_fock_ij.set_zero()
-        t_fock_ab.i("aa") << t_epsilon_a.i("a")
-        t_fock_ij.i("ii") << t_epsilon_i.i("i")
+        t_fock_ab = t_fock_pq[no:,no:]
+        t_fock_ij = t_fock_pq[:no,:no]
     
         if self.is_bruekner:
             t_X_ac = t_fock_ab

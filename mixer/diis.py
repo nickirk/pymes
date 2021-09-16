@@ -88,7 +88,7 @@ class DIIS:
         unitVec[-1] = -1.
         eigen_values, eigen_vectors = scipy.linalg.eigh(self.L)
     
-        if np.any(np.abs(eigen_values) <= 1e-14):
+        if np.any(np.abs(eigen_values) < 1e-14):
             print_logging_info("Linear dependence found in DIIS subspace.", \
                                level=2)
             valid_indices = np.abs(eigen_values) > 1e-14

@@ -129,7 +129,7 @@ def read_fcidump(fcidump_file, is_tc=False):
             q = int(q)
             s = int(s)
             
-            if np.abs(integral) < 1e-17:
+            if np.abs(integral) < 1e-19:
                 continue
                 
             if p != 0 and q != 0 and r != 0 and s !=0: 

@@ -55,11 +55,11 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     # tested against cc4s.
     #print_logging_info(edir)
 
-    print_logging_info("Direct contribution = {:.8f}".format(np.real(eDir)),\
+    print_logging_info("Direct contribution = {:.12f}".format(np.real(eDir)),\
                        level=1)
-    print_logging_info("Exchange contribution = {:.8f}".format(np.real(eExc)),\
+    print_logging_info("Exchange contribution = {:.12f}".format(np.real(eExc)),\
                        level=1)
-    print_logging_info("MP2 energy = {:.8f}".format(np.real(eDir+eExc)), level=1)
+    print_logging_info("MP2 energy = {:.12f}".format(np.real(eDir+eExc)), level=1)
     print_logging_info("{:.3f} seconds spent on "\
                        .format((time.time()-timeMp2))+algoName, level=1)
     return [eDir+eExc, tT_abij]

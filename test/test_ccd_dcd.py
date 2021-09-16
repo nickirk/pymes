@@ -174,8 +174,10 @@ def main(nel, cutoff, rs, gamma, kc):
     dcd_e = 0.
 
     print_logging_info("Starting CCD")
-    solver = ccd.CCD(is_diis=True)
-    ccd_results  = solver.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+    t_h_pq = ctf.astensor(np.diag(kinetic_G))
+    t_fock_pq = hf.construct_hf_matrix(t_h_pq, t_V_pqrs, no)
+    solver = ccd.CCD(no,is_diis=True)
+    ccd_results  = solver.solve(t_fock_pq, t_V_pqrs, \
                                              level_shift=-1., sp=0, \
                                              max_iter=60)
     # unpacking ccd results
@@ -212,7 +214,7 @@ if __name__ == '__main__':
   gamma = None
   nel = 14
   for rs in [0.5]:
-    for cutoff in [2]:
+    for cutoff in [10]:
       kc = None
       ccd_e, dcd_e = main(nel, cutoff, rs, gamma, kc)
     assert(np.abs(ccd_e - -0.31611540) < 1e-8)
