@@ -3,6 +3,14 @@ import numpy as np
 import ctf
 from ctf.core import *
 
+def calc_hf_e(no, e_core, t_h_pq, t_V_pqrs):
+
+    t_e_hf = 2.* ctf.einsum('ii->', t_h_pq[:no,:no])
+    dirHFE = 2. * ctf.einsum('jiji->',t_V_pqrs[:no,:no,:no,:no])
+    excHFE = -1. * ctf.einsum('ijji->',t_V_pqrs[:no,:no,:no,:no])
+    
+    t_e_hf = t_e_hf + (dirHFE + excHFE) + e_core
+    return t_e_hf
 
 def construct_hf_matrix(t_h_pq, t_V_pqrs, no):
     t_fock_pq = t_h_pq.copy()

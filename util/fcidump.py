@@ -92,16 +92,15 @@ def read_fcidump(fcidump_file, is_tc=False):
     #if world.rank() == 0:
     with open(fcidump_file, 'r') as reader:
         
-        line = reader.readline()
+        line = reader.readline().strip()
         
         while not (('/' in line) or ("END" in line)): 
-            line += reader.readline()
+            line += reader.readline().strip()
         
         
         header = line.split(",")
         
         
-            #attr=attr.split("=")
         for key in header_dict.keys():
             for attr in header:
                 if key in attr.lower():
@@ -119,6 +118,8 @@ def read_fcidump(fcidump_file, is_tc=False):
 
         while True:
             line = reader.readline()
+            #if not line.strip():
+            #    continue
             if not line:
                 break
             integral, p, r, q, s = line.split()
