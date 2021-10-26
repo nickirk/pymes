@@ -71,8 +71,58 @@ class EOM_CCSD:
         return self.e_excit, self.u_vecs
 
     def update_singles(self, t_fock_pq, dict_t_V):
-        return
+        no = self.ccsd.no
+        t_delta_singles = ctf.tensor(self.u_singles.shape, 
+                                     dtype=self.u_singles.dtype, 
+                                     sp=self.u_singles.sp)
+        
+        # fock matrix contribution
+        t_delta_singles += 2.*ctf.einsum("bj, baji->ai", t_fock_pq[:no,no:],
+                                         self.u_doubles)\
+                            - ctf.einsum("ij, aj", t_fock_pq[:no,:no],
+                                           self.u_singles)\
+                            - ctf.einsum("bj, abji->ai",t_fock_pq[:no,no:],
+                                         self.u_doubles)\
+                            - ctf.einsum("ba, bi->ai", t_fock_pq[no:,no:],
+                                         self.u_singles)
+        # integral and u_singles products
+        t_delta_singles += 2.*ctf.einsum("jabi, bj->ai", dict_t_V["iabj"],
+                                         self.u_singles)\
+                            - ctf.einsum("jaib, bj->ai", dict_t_V["iajb"],
+                                         self.u_singles)
+        # integral and u_doubles products
+        t_delta_singles += -2.*ctf.einsum("jkib, abjk->ai", dict_t_V["ijka"],
+                                          self.u_doubles)\
+                            + 2.*ctf.einsum("jabc, bcji->ai", dict_t_V["iabc"],
+                                          self.u_doubles)\
+                            + ctf.einsum("jkib, bajk->ai", dict_t_V["ijka"],
+                                          self.u_doubles)\
+                            - ctf.einsum("jacb, bcji->ai", dict_t_V["iabc"],
+                                          self.u_doubles)
+        # integral, T and u_singles products
+        t_delta_singles += 4.*ctf.einsum("jkbc, baji, ck->ai", dict_t_V["ijab"],
+                                         self.ccsd.t_T_abij, self.u_singles)\
+                           -2.*ctf.einsum("jkbc, bajk, ci->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                           -2.*ctf.einsum("jkbc, bcji, ak->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                           -2.*ctf.einsum("jkbc, abji, ak->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                           -2.*ctf.einsum("jkcb, baji, ck->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                            + ctf.einsum("jkbc, abjk, ci->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                            + ctf.einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                            + ctf.einsum("jkcb, abji, ck->ai", dict_t_V["ijab"],
+                                          self.ccsd.t_T_abij, self.u_singles)\
+                            
+        return t_delta_singles
     
     def update_doubles(self, t_fock_pq, dict_t_V):
-        return
+        no = self.ccsd.no
+        t_delta_doubles = ctf.tensor(self.u_doubles.shape, 
+                                     dtype=self.u_doubles.dtype, 
+                                     sp=self.u_doubles.sp)
+        return t_delta_doubles
     
