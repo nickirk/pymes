@@ -180,8 +180,8 @@ class CCD:
             t_I_klij += ctf.einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
     
         t_R_abij.i("abij") << t_V_abij.i("abij") \
+                              + t_I_klij.i("klij") * t_T_abij.i("abkl")\
                               + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
-                              + t_I_klij.i("klij") * t_T_abij.i("abkl")
     
         if not self.is_dcd:
             t_X_alcj = ctf.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)

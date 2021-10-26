@@ -6,7 +6,14 @@ from pymes.solver import mp2
 from pymes.solver import ccd
 from pymes.mixer import diis
 from pymes.logging import print_logging_info
-import time
+
+'''
+CCSD implementation using the T1-similarity transformed Hamiltonian.
+In this formalism, CCSD class can inherit some functionalities from
+the CCD class. E.g. the doubles amplitudes update.
+
+Author: Ke Liao <ke.liao.whu@gmail.com>
+'''
 
 class CCSD(ccd.CCD):
     def __init__(self, no, is_diis=True, delta_e=1.e-8, is_non_canonical=False, is_dcsd=False):
@@ -101,42 +108,7 @@ class CCSD(ccd.CCD):
 
         # try to reduce the number of times partitioning big tensors, 
         # it is very time consuming.
-        dict_t_V = {}
-        t_V_abci = t_V_pqrs[no:,no:,no:,:no]
-        dict_t_V['abci'] = t_V_abci
-        t_V_iabj = t_V_pqrs[:no,no:,no:,:no]
-        dict_t_V['iabj'] = t_V_iabj
-        t_V_iajk = t_V_pqrs[:no,no:,:no,:no]
-        dict_t_V['iajk'] = t_V_iajk
-        t_V_aijk = t_V_pqrs[no:,:no,:no,:no]
-        dict_t_V['aijk'] = t_V_aijk
-        t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
-        dict_t_V['ijkl'] = t_V_ijkl
-        t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
-        dict_t_V['aibj'] = t_V_aibj
-        t_V_ijak = t_V_pqrs[:no,:no,no:,:no]
-        dict_t_V['ijak'] = t_V_ijak
-        t_V_abic = t_V_pqrs[no:,no:,:no,no:]
-        dict_t_V['abic'] = t_V_abic
-        t_V_iajb = t_V_pqrs[:no,no:,:no,no:]
-        dict_t_V['iajb'] = t_V_iajb
-        t_V_abcd = t_V_pqrs[no:,no:,no:,no:]
-        dict_t_V['abcd'] = t_V_abcd
-        t_V_iabc = t_V_pqrs[:no,no:,no:,no:]
-        dict_t_V['iabc'] = t_V_iabc
-        t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
-        dict_t_V['aijb'] = t_V_aijb
-        t_V_ijka = t_V_pqrs[:no,:no,:no,no:]
-        dict_t_V['ijka'] = t_V_ijka
-        t_V_aibc = t_V_pqrs[no:,:no,no:,no:]
-        dict_t_V['aibc'] = t_V_aibc
-        t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
-        dict_t_V['ijab'] = t_V_ijab
-        t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
-        dict_t_V['ijkl'] = t_V_ijkl
-        t_V_abij = t_V_pqrs[no:,no:,:no,:no]
-        dict_t_V['abij'] = t_V_abij
-        
+        dict_t_V = self.partition_V(t_V_pqrs)
 
 
         print_logging_info(algo_name)
@@ -157,23 +129,20 @@ class CCSD(ccd.CCD):
         t_D_ai = ctf.tensor([nv,no],dtype=t_V_pqrs.dtype, sp=sp)
         t_D_abij = ctf.tensor([nv,nv,no,no],dtype=t_V_pqrs.dtype, sp=sp)
 
-        # why the ctf contraction is not used here?
-        # let's see if the ctf contraction does the same job
+        
         dE = np.abs(np.real(e_mp2))
         iteration = 0
         e_last_iter_ccsd = np.real(e_mp2)
         e_ccsd = 0.
         e_dir_ccsd = 0.
         e_ex_ccsd = 0.
-        residules = []
         amps = []
-        mixSize = 5
 
         # before computing dressed fock and V, make a copy of the original
         # data. In density fitting, this will be the density-fitted quantities
 
         t_fock_pq_orig = t_fock_pq.copy()
-        t_V_pqrs_orig = t_V_pqrs.copy()
+
         t_epsilon_i = ctf.einsum("ii -> i", t_fock_pq_orig[:no, :no])
         t_epsilon_a = ctf.einsum("aa -> a", t_fock_pq_orig[no:, no:])
 
@@ -222,6 +191,7 @@ class CCSD(ccd.CCD):
             if self.is_diis:
                 t_T_ai, t_T_abij = self.mixer.mix([t_delta_T_ai,
                                      t_delta_T_abij], [t_T_ai, t_T_abij])
+
 
 
             # update energy and norm of amplitudes
@@ -459,7 +429,7 @@ class CCSD(ccd.CCD):
         t_V_iabj_dressed += - ctf.einsum("ikbj, ak -> iabj", dict_t_V['ijak'], t_T_ai)\
                     + ctf.einsum("iabc, cj -> iabj", dict_t_V['iabc'], t_T_ai)\
                     - ctf.einsum("ikbc, ak, cj -> iabj", dict_t_V['ijab'], t_T_ai,
-                                 t_T_ai)\
+                                 t_T_ai)
 
 
         # t_V_abcd 
@@ -518,3 +488,42 @@ class CCSD(ccd.CCD):
         t_ex_ccsd_e  = -1. * ctf.einsum("abij, ijba ->", t_T_tmp_abij, t_V_ijab)
         t_1b_e = 2.0* ctf.einsum("ia, ai ->", t_fock_ia, t_T_ai)
         return [t_1b_e, t_dir_ccsd_e, t_ex_ccsd_e]
+
+    def partition_V(self, t_V_pqrs):
+        dict_t_V = {}
+        t_V_abci = t_V_pqrs[no:,no:,no:,:no]
+        dict_t_V['abci'] = t_V_abci
+        t_V_iabj = t_V_pqrs[:no,no:,no:,:no]
+        dict_t_V['iabj'] = t_V_iabj
+        t_V_iajk = t_V_pqrs[:no,no:,:no,:no]
+        dict_t_V['iajk'] = t_V_iajk
+        t_V_aijk = t_V_pqrs[no:,:no,:no,:no]
+        dict_t_V['aijk'] = t_V_aijk
+        t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
+        dict_t_V['ijkl'] = t_V_ijkl
+        t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
+        dict_t_V['aibj'] = t_V_aibj
+        t_V_ijak = t_V_pqrs[:no,:no,no:,:no]
+        dict_t_V['ijak'] = t_V_ijak
+        t_V_abic = t_V_pqrs[no:,no:,:no,no:]
+        dict_t_V['abic'] = t_V_abic
+        t_V_iajb = t_V_pqrs[:no,no:,:no,no:]
+        dict_t_V['iajb'] = t_V_iajb
+        t_V_abcd = t_V_pqrs[no:,no:,no:,no:]
+        dict_t_V['abcd'] = t_V_abcd
+        t_V_iabc = t_V_pqrs[:no,no:,no:,no:]
+        dict_t_V['iabc'] = t_V_iabc
+        t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
+        dict_t_V['aijb'] = t_V_aijb
+        t_V_ijka = t_V_pqrs[:no,:no,:no,no:]
+        dict_t_V['ijka'] = t_V_ijka
+        t_V_aibc = t_V_pqrs[no:,:no,no:,no:]
+        dict_t_V['aibc'] = t_V_aibc
+        t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
+        dict_t_V['ijab'] = t_V_ijab
+        t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
+        dict_t_V['ijkl'] = t_V_ijkl
+        t_V_abij = t_V_pqrs[no:,no:,:no,:no]
+        dict_t_V['abij'] = t_V_abij
+
+        return dict_t_V
