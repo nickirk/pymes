@@ -200,7 +200,7 @@ class CCSD(ccd.CCD):
             #else:
             e_1b_ccsd, e_dir_ccsd, e_ex_ccsd = self.get_energy(
                                                 t_fock_pq_orig[:no,no:], t_T_ai, 
-                                                t_T_abij, t_V_ijab)
+                                                t_T_abij, dict_t_V["ijab"])
             e_ccsd = np.real(e_1b_ccsd + e_dir_ccsd + e_ex_ccsd)
             dE = e_ccsd - e_last_iter_ccsd
             e_last_iter_ccsd = e_ccsd
