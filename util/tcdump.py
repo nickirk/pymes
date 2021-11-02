@@ -1,7 +1,8 @@
-#!/usr/bin/python3
 import ctf
+from ctf.core import *
 import numpy as np
-import h5py
+
+from pymes.logging import print_logging_info
 
 
 
@@ -32,5 +33,57 @@ def write_2_tcdump(t_V_opqrst, dtype='r'):
     return
 
 def read_from_tcdump(file_name="TCDUMP"):
+    '''
+    Parameters:
+    -----------
+    file_name: string
+               path to the tcdump file name, default TCDUMP in txt format
+    Returns:
+    --------
+    t_V_opqrst: ctf tensor, sparse
+    '''
     # need to tell if the file is in hdf5 format. 
+    print_logging_info("Reading in TCDUMP", level=0)
+    if file_name == "*.hdf5":
+        print_logging_info("Integral file in hdf5 format.", level=1)
+        integrals, indices, nb=__read_from_hdf5_tcdump("file_name")
+    else:
+        print_logging_info("Assuming integral file in txt format.", level=1)
+        integrals, indices, nb = __read_from_txt_tcdump(file_name)
+    t_V_opqrst = ctf.tensor([nb,nb,nb,nb,nb,nb], sp=1)
+    t_V_opqrst.write(indices,integrals)
     return t_V_opqrst
+
+def __read_from_txt_tcdump(file_name="TCDUMP"):
+    integrals = []
+    indices = []
+    with open(file_name, 'r') as reader:
+        nb = int(reader.readline().strip())
+        while True:
+            line = reader.readline()
+            #if not line.strip():
+            #    continue
+            if not line:
+                break
+            integral, o, r, p, s, q, t = line.split()
+            integral = float(integral)
+            o = int(o)-1
+            p = int(p)-1
+            q = int(q)-1
+            r = int(r)-1
+            s = int(s)-1
+            t = int(t)-1
+            index = o*nb**5+p*nb**4+q*nb**3+r*nb**2+s*nb**1+t
+            integrals.append(integral)
+            indices.append(index)
+    return integrals, indices, nb
+
+
+def __read_from_hdf5_tcdump(file_name="TCDUMP.hdf5"):
+    import h5py
+    # if hdf5 file format is used, try to read in parallel.
+    # the tensor t_V_opqrst is stored as a sparse ctf tensor
+    integrals = []
+    indices = []
+    nb = 0
+    return integrals, indices, nb

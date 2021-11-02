@@ -53,7 +53,7 @@ def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
         f.close()
     return
 
-def read_fcidump(fcidump_file, is_tc=False):
+def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
     '''
     Read Coulomb integrals from a FCIDUMP file. Works only on a single rank
     and for small FCIDUMP files ~300 orbitals for 120 GB RAM assuming dense
