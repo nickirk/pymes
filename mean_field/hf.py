@@ -12,7 +12,7 @@ def calc_hf_e(no, e_core, t_h_pq, t_V_pqrs):
     t_e_hf = t_e_hf + (dirHFE + excHFE) + e_core
     return t_e_hf
 
-def construct_hf_matrix(t_h_pq, t_V_pqrs, no):
+def construct_hf_matrix(no, t_h_pq, t_V_pqrs):
     t_fock_pq = t_h_pq.copy()
     t_fock_pq += ctf.einsum("piqi -> pq", 2.*t_V_pqrs[:,:no,:,:no])\
                  -ctf.einsum("piiq -> pq", t_V_pqrs[:,:no,:no,:])

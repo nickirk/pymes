@@ -9,7 +9,7 @@ from pymes.logging import print_logging_info
 '''
 EOM-CCSD implementation
 EOM-CCSD is used to calculate excitation energies of a system.
-This implementation will take into the transcorrelation into account,
+This implementation will take the transcorrelation into account,
 i.e. the lower symmetries in the tc integrals than in the normal Coulomb
 integrals. 
 

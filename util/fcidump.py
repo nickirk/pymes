@@ -89,6 +89,8 @@ def read_fcidump(fcidump_file, is_tc=False):
 
     print_logging_info("Reading "+fcidump_file+"...", level=1)
 
+    e_core = 0.
+
     #if world.rank() == 0:
     with open(fcidump_file, 'r') as reader:
         
@@ -156,4 +158,4 @@ def read_fcidump(fcidump_file, is_tc=False):
                     h_pq[p-1, r-1] = integral
 
 
-    return n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs
+    return (n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs)

@@ -1,19 +1,20 @@
 #!/usr/bin/python3
 import ctf
 import numpy as np
+import h5py
 
 
 
-def write2Tcdump(tV_opqrst, dtype='r'):
+def write_2_tcdump(t_V_opqrst, dtype='r'):
     world = ctf.comm()
 
-    nOrb = tV_opqrst.shape[0]
+    nOrb = t_V_opqrst.shape[0]
 
     # (or|ps|qt)
 
     if world.rank() == 0:
         f = open("TCDUMP", "w")
-        inds, vals = tV_opqrst.read_all_nnz()
+        inds, vals = t_V_opqrst.read_all_nnz()
         for l in range(len(inds)):
             o = int(inds[l]/nOrb**5)
             p = int((inds[l]-o*nOrb**5)/nOrb**4)
@@ -29,3 +30,7 @@ def write2Tcdump(tV_opqrst, dtype='r'):
                         +str(t+1)+"\n")
         f.close()
     return
+
+def read_from_tcdump(file_name="TCDUMP"):
+    # need to tell if the file is in hdf5 format. 
+    return t_V_opqrst
