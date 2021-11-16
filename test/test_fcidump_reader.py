@@ -14,7 +14,7 @@ from pymes.util.fcidump import read_fcidump
 from pymes.mean_field import hf
 from pymes.logging import print_logging_info
 
-n_elec, n_orb, e_core, epsilon, h, V_pqrs = read_fcidump("FCIDUMP.test")
+n_elec, n_orb, e_core, epsilon, h, V_pqrs = read_fcidump("FCIDUMP.test", is_tc=True)
 
 print("Checking known integral values")
 V_000 = V_pqrs[0,0,0,0]
