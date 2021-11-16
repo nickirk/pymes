@@ -94,14 +94,15 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
     #if world.rank() == 0:
     with open(fcidump_file, 'r') as reader:
         
+        print_logging_info("Parsing header...", level=2)
         line = reader.readline().strip()
         
-        while not (('/' in line) or ("END" in line)): 
+        while not (('/' in line) or ("END".lower() in line.lower())): 
             line += reader.readline().strip()
+
         
         
         header = line.split(",")
-        
         
         for key in header_dict.keys():
             for attr in header:
@@ -118,6 +119,7 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
         h_pq = np.zeros([n_orb, n_orb])
         V_pqrs = np.zeros([n_orb, n_orb, n_orb, n_orb])
 
+        print_logging_info("Reading integrals...", level=2)
         while True:
             line = reader.readline()
             #if not line.strip():

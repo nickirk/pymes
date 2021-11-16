@@ -108,7 +108,7 @@ class CCSD(ccd.CCD):
 
         # try to reduce the number of times partitioning big tensors, 
         # it is very time consuming.
-        dict_t_V = self.partition_V(t_V_pqrs)
+        dict_t_V = self.partition_V(no, t_V_pqrs)
 
 
         print_logging_info(algo_name)
@@ -489,7 +489,7 @@ class CCSD(ccd.CCD):
         t_1b_e = 2.0* ctf.einsum("ia, ai ->", t_fock_ia, t_T_ai)
         return [t_1b_e, t_dir_ccsd_e, t_ex_ccsd_e]
 
-    def partition_V(self, t_V_pqrs):
+    def partition_V(self, no, t_V_pqrs):
         dict_t_V = {}
         t_V_abci = t_V_pqrs[no:,no:,no:,:no]
         dict_t_V['abci'] = t_V_abci

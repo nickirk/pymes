@@ -27,7 +27,7 @@ def write_2_tcdump(t_V_opqrst, dtype='r'):
             # depends on the correlator, sometimes there are 0 integrals when
             # there is a k=0. But in general, this is not the case
                 f.write(str(vals[l])+" "+str(o+1)+" "+\
-                        str(p+1)+" "+str(q+1)+" "+str(r+1)+" "+str(s+1)+" "\
+                        str(r+1)+" "+str(p+1)+" "+str(s+1)+" "+str(q+1)+" "\
                         +str(t+1)+"\n")
         f.close()
     return
@@ -43,10 +43,10 @@ def read_from_tcdump(file_name="TCDUMP"):
     t_V_opqrst: ctf tensor, sparse
     '''
     # need to tell if the file is in hdf5 format. 
-    print_logging_info("Reading in TCDUMP", level=0)
-    if file_name == "*.hdf5":
+    print_logging_info("Reading in TCDUMP", level=1)
+    if file_name == "*.h5":
         print_logging_info("Integral file in hdf5 format.", level=1)
-        integrals, indices, nb=__read_from_hdf5_tcdump("file_name")
+        integrals, indices, nb = __read_from_hdf5_tcdump("file_name")
     else:
         print_logging_info("Assuming integral file in txt format.", level=1)
         integrals, indices, nb = __read_from_txt_tcdump(file_name)
@@ -61,8 +61,6 @@ def __read_from_txt_tcdump(file_name="TCDUMP"):
         nb = int(reader.readline().strip())
         while True:
             line = reader.readline()
-            #if not line.strip():
-            #    continue
             if not line:
                 break
             integral, o, r, p, s, q, t = line.split()
