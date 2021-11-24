@@ -6,7 +6,7 @@ from pymes.logging import print_logging_info
 
 
 
-def write_2_tcdump(t_V_opqrst, dtype='r'):
+def write_2_tcdump(t_V_opqrst, dtype='r', sp=1):
     world = ctf.comm()
 
     nOrb = t_V_opqrst.shape[0]
@@ -32,7 +32,7 @@ def write_2_tcdump(t_V_opqrst, dtype='r'):
         f.close()
     return
 
-def read_from_tcdump(file_name="TCDUMP"):
+def read_from_tcdump(file_name="TCDUMP", sp=1):
     '''
     Parameters:
     -----------
@@ -50,7 +50,7 @@ def read_from_tcdump(file_name="TCDUMP"):
     else:
         print_logging_info("Assuming integral file in txt format.", level=1)
         integrals, indices, nb = __read_from_txt_tcdump(file_name)
-    t_V_opqrst = ctf.tensor([nb,nb,nb,nb,nb,nb], sp=1)
+    t_V_opqrst = ctf.tensor([nb,nb,nb,nb,nb,nb], sp=sp)
     t_V_opqrst.write(indices,integrals)
     return t_V_opqrst
 
@@ -63,7 +63,7 @@ def __read_from_txt_tcdump(file_name="TCDUMP"):
             line = reader.readline()
             if not line:
                 break
-            integral, o, r, p, s, q, t = line.split()
+            integral, o, p, q, r, s, t = line.split()
             integral = float(integral)
             o = int(o)-1
             p = int(p)-1

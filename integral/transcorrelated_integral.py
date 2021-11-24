@@ -78,7 +78,10 @@ class Transcorrelation:
         the non-hermitian 2-body transcorrelated integrals in the 
         TC-Hamiltonian. The mathematical expression for this kind of integrals
         is: 
-        
+        <pq|\nabla_i u(r_i,r_j)\cdot \nabla_i|rs>
+        = \int \mathrm d{\bf G} \tilde{u}({\bf G}) (-i{\bf G})\cdot \int d{\bf r_i}
+        \phi_p^*({\bf r_i})\nabla_i\phi_r({\bf r_i})e^{-i{\bf G}\cdot {\bf r_i}}
+        \int d{\bf r_j}\phi_q^*({\bf r_j})\phi_s({\bf r_j})e^{i{\bf G \cdot r_j}}
         '''
         return
 
@@ -124,6 +127,19 @@ class Transcorrelation:
                                         ft_pair_density_pqG)
 
         return convol_2b_pqrs
+
+    def eval_single_contr_3b_pqrs(self):
+    return
+
+    def eval_double_contr_3b_pq(self):
+    return
+
+    def eval_triple_contr_3b(self):
+    return
+    
+    def eval_generic_3b_opqrst(self):
+    return
+
 
 class Correlator:
 
