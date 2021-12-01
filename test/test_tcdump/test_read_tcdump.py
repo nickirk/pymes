@@ -1,4 +1,3 @@
-
 import ctf
 from ctf.core import *
 import numpy as np
@@ -7,51 +6,54 @@ import itertools
 
 from pymes.logging import print_logging_info
 from pymes.util import tcdump
+from pymes.integral import contraction
 
 def main(file_name):
-    # def known values
-    #print_logging_info("Random entries test...")
-    #known_vals = [4.3547807609918094E-003,5.1685802980897883E-006, 1.5086553250634954E-005]
-    #known_inds = [[0,0,0,13,0,13],[1,2,1,11,11,7],[8,7,5,10,9,10]]
-    t_V_opqrst = tcdump.read_from_tcdump(file_name)
-    #inds, vals = t_V_opqrst.read_all_nnz()
-    #nb = 14
-    #for index in range(len(known_vals)):
-    #    print(known_inds[index])
-    #    loc = 0
-    #    for l in range(len(known_inds[index])):
-    #        loc += known_inds[index][-l-1]*nb**l
-    #    assert(np.abs(vals[np.where(inds == loc)]-known_vals[index]) < 1e-12)
-    #print_logging_info("Past!")
+    t_V_orpsqt = tcdump.read_from_tcdump(file_name, sp=0)
+    print(t_V_orpsqt.sym)
 
-    # symmetries
-    #sym = ctf.einsum("opqrst -> rpqost", t_V_opqrst)
-    #inds_sym, vals_sym = sym.read_all_nnz()
-    #inds, vals = t_V_opqrst.read_all_nnz()
-    #print(inds_sym, inds)
-    #assert(np.array_equal(sym.to_nparray(),t_V_opqrst.to_nparray()))
+    no = 2
+    t_V_ijklmn = ctf.tensor([no,no,no,no,no,no], sym=t_V_orpsqt.sym, sp=t_V_orpsqt.sp)
+    print(t_V_ijklmn.sym)
+    t_V_ijklmn.i("ijklmn") << t_V_orpsqt[:no,:no,:no,:no,:no,:no].i("ijklmn")
+    print(t_V_ijklmn.sym)
+    full_tensor = t_V_ijklmn
+    print(full_tensor.sym)
 
-    #sym = ctf.einsum("opqrst ->", sym)
-    #print_logging_info("Exchange of 1. and 4. indices = ", sym)
-
-    #sym = ctf.einsum("opqrst -> poqsrt", t_V_opqrst) - t_V_opqrst
-    #sym = ctf.einsum("opqrst ->", sym)
-    #print_logging_info("Exchange of 1. and 4. electrons = ", sym)
-    full_inds = gen_sym_indices('opqrst')
-    full_tensor = t_V_opqrst
-    i = 1
-    #for inds in full_inds[1:]:
-    #    print(inds)
-    #    print(i)
-    #    i += 1
-    #    full_tensor += ctf.einsum("opqrst -> "+inds, t_V_opqrst)
-    
-    # now remove repeated summations
-    repeated_entries = gen_sym_indices("opqost")
-    print(len(repeated_entries))
-
-    sym = ctf.einsum("opqrst -> rpqost", full_tensor)
+    print_logging_info("Testing exchange of the 1st electron pair indices...")
+    sym = ctf.tensor([no,no,no,no,no,no], sym=t_V_ijklmn.sym, sp=t_V_orpsqt.sp) 
+    sym.i("ijklmn") << full_tensor.i("jiklmn")
     assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
+    print_logging_info("Past!")
+
+    print_logging_info("Testing exchange of the 2nd electron pair indices...")
+    sym.set_zero()
+    sym.i("ijklmn") << full_tensor.i("ijlkmn")
+    assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
+    print_logging_info("Past!")
+
+    print_logging_info("Testing exchange of the 3rd electron pair indices...")
+    
+    sym.set_zero()
+    sym.i("ijklmn") << full_tensor.i("ijklnm")
+    assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
+    print_logging_info("Past!")
+
+    print_logging_info("Testing exchange of the 1st and 2nd electron pairs of indices...")
+    sym.set_zero()
+    sym.i("ijklmn") << full_tensor.i("klijnm")
+    assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
+    print_logging_info("Past!")
+
+    print_logging_info("Testing exchange of the 1st and 2nd electron pairs of indices and a pair of indices...")
+    sym.set_zero()
+    sym.i("ijklmn") << full_tensor.i("lkijnm")
+    assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
+    print_logging_info("Past!")
+
+    # write out the TCDUMP to compare with the original one
+    tcdump.write_2_tcdump(t_V_orpsqt, file_name="TCDUMP.w")
+
 
 def gen_sym_indices(string_inds):
     full_sym_inds = [string_inds]
@@ -63,6 +65,7 @@ def gen_sym_indices(string_inds):
             tmp_inds = list(full_sym_inds[ind])
             tmp_inds[i], tmp_inds[i+3] = tmp_inds[i+3], tmp_inds[i]
             full_sym_inds.append(''.join(tmp_inds))
+            print(full_sym_inds)
         i += 1
         
     # exchange of a pair of indices
@@ -74,8 +77,9 @@ def gen_sym_indices(string_inds):
             per = ''.join(per_1+per_2)
             tmp_inds.append(per)
     full_sym_inds = tmp_inds
-    full_sym_inds = set(full_sym_inds)
-    return list(full_sym_inds)
+    #full_sym_inds = set(full_sym_inds)
+    #return list(full_sym_inds)
+    return full_sym_inds
 
 
 
