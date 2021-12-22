@@ -9,7 +9,7 @@ from pymes.util import tcdump
 from pymes.integral import contraction
 
 def main(file_name):
-    t_V_orpsqt = tcdump.read_from_tcdump(file_name, sp=0)
+    t_V_orpsqt = tcdump.read(file_name, sp=0)
     print(t_V_orpsqt.sym)
 
     no = 2

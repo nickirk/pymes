@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import ctf
-from ctf.core import *
+
 from pymes.logging import print_logging_info
 
 def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):

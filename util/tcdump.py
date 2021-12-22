@@ -1,5 +1,4 @@
 import ctf
-from ctf.core import *
 import numpy as np
 import itertools
 
@@ -7,7 +6,7 @@ from pymes.logging import print_logging_info
 
 
 
-def write_2_tcdump(t_V_orpsqt, file_name="TCDUMP", sym=True, type='r', sp=1):
+def write(t_V_orpsqt, file_name="TCDUMP", sym=True, type='r', sp=1):
     world = ctf.comm()
 
     nOrb = t_V_orpsqt.shape[0]
@@ -33,7 +32,7 @@ def write_2_tcdump(t_V_orpsqt, file_name="TCDUMP", sym=True, type='r', sp=1):
         f.close()
     return
 
-def read_from_tcdump(file_name="TCDUMP", sym=True, sp=1):
+def read(file_name="TCDUMP", sym=True, sp=1):
     '''
     Parameters:
     -----------
@@ -51,7 +50,7 @@ def read_from_tcdump(file_name="TCDUMP", sym=True, sp=1):
     print_logging_info("Reading in TCDUMP", level=1)
     SY = ctf.SYM.SY
     NS = ctf.SYM.NS
-    if file_name == "*.h5":
+    if file_name == "*.h5" or file_name == "*.hdf5":
         print_logging_info("Integral file in hdf5 format.", level=1)
         integrals, indices, nb = __read_from_hdf5_tcdump("file_name")
     else:

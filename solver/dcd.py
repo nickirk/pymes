@@ -1,8 +1,8 @@
 import time
-import numpy as np
-import ctf
+
 from ctf.core import *
 from pymes.solver import ccd
+
 
 def solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
           is_dcd=True, max_iter=100, is_diis=True, amps=None, is_bruekner=False, \

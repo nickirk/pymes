@@ -1,21 +1,13 @@
 #!/usr/bin/python3 -u
 # -*- coding: utf-8 -*-
 
-import time
-import sys
-import os.path
-sys.path.append("/home/liao/Work/Research/")
 
 import ctf
-import numpy as np
-
-import pymes
-from pymes.util.fcidump import read_fcidump
-from pymes.mean_field import hf
 from pymes.logging import print_logging_info
+from pymes.util.fcidump import read
 
 print_logging_info("Testing tc-FCIDUMP reader...")
-n_elec, n_orb, e_core, epsilon, h, V_pqrs = read_fcidump("./test_contraction/FCIDUMP", is_tc=True)
+n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("./test_contraction/FCIDUMP", is_tc=True)
 
 
 t_V_pqrs = ctf.astensor(V_pqrs)

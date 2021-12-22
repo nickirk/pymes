@@ -2,7 +2,7 @@
 
 import numpy as np
 import ctf
-import scipy
+
 import string
 from pymes.logging import print_logging_info
 
@@ -86,7 +86,7 @@ class DIIS:
     
         unitVec = np.zeros(len(self.error_list)+1)
         unitVec[-1] = -1.
-        eigen_values, eigen_vectors = scipy.linalg.eigh(self.L)
+        eigen_values, eigen_vectors = np.linalg.eigh(self.L)
     
         if np.any(np.abs(eigen_values) < 1e-12):
             print_logging_info("Linear dependence found in DIIS subspace.", \

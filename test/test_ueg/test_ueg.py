@@ -1,22 +1,14 @@
 #!/usr/bin/python3 -u
 
 import time
-import numpy as np
-import sys
-
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
 
 import ctf
-from ctf.core import *
+import numpy as np
+from mean_field import hf
+from model import ueg
+from solver import ccd, mp2
 
-import pymes
-from pymes.solver import mp2
-from pymes.model import ueg
-from pymes.solver import dcd
-from pymes.solver import ccd
-from pymes.util.interface2Cc4s import write2Cc4sTensor
-from pymes.util.fcidump import write2Fcidump
-from pymes.mean_field import hf
+
 
 ## Script for generating plane wave basis
 ## hamiltonian integrals for unifrom electron gas

@@ -1,10 +1,10 @@
-# PyMeS
+# PyMES
 
-**Py**thon package for **M**any-**e**lectron **S**imulations (PyMeS)
+**Py**thon package for **M**any-**E**lectron **S**imulations (PyMES)
 
 # Building
 
-PyMeS does not need to be build, just add the following line to your .bashrc or .zshrc file
+PyMES does not need to be build, just add the following line to your .bashrc or .zshrc file
 
 ```bash
 export PYTHONPATH=/the/directory/containing/pymes:$PYTHONPATH
@@ -21,7 +21,7 @@ source ~/.bashrc
 ```
 
 
-But PyMeS depends on the Cyclops Tensor Framework (CTF). Therefore you need to build the CTF before using pymes.
+But PyMES depends on the Cyclops Tensor Framework (CTF). Therefore, you need to build the CTF before using pymes.
 
 ## Building CTF
 Building instructions can be found at https://github.com/cyclops-community/ctf.  

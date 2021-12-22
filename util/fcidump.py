@@ -1,17 +1,16 @@
 #!/usr/bin/python3
 import os.path
 import ctf
-from ctf.core import *
 import numpy as np
-
 
 from pymes.logging import print_logging_info
 
-def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
-    '''
+
+def write(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
+    """
     Input a integral file in ctf format
     np,np,np,np
-    '''
+    """
     world = ctf.comm()
 
     nP = integrals.shape[0]
@@ -21,30 +20,28 @@ def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
         # write header
         f.write("&FCI\n")
         f.write(" NORB=%i,\n" % nP)
-        f.write(" NELEC=%i,\n" % (no*2))
+        f.write(" NELEC=%i,\n" % (no * 2))
         f.write(" MS2=%i,\n" % ms2)
-        #prepare orbsym
+        # prepare orbsym
         OrbSym = [orbsym] * nP
-        f.write(" ORBSYM="+str(OrbSym).strip('[]')+",\n")
+        f.write(" ORBSYM=" + str(OrbSym).strip('[]') + ",\n")
         f.write(" ISYM=%i,\n" % isym)
         f.write("/\n")
 
-
         for l in range(len(inds)):
-            p = int(inds[l]/nP**3)
-            q = int((inds[l]-p*nP**3)/nP**2)
-            r = int((inds[l]-p*nP**3-q*nP**2)/nP)
-            s = int(inds[l]-p*nP**3-q*nP**2-r*nP)
+            p = int(inds[l] / nP ** 3)
+            q = int((inds[l] - p * nP ** 3) / nP ** 2)
+            r = int((inds[l] - p * nP ** 3 - q * nP ** 2) / nP)
+            s = int(inds[l] - p * nP ** 3 - q * nP ** 2 - r * nP)
 
-            f.write("  " + str(vals[l]) + "  " + str(p+1) \
-                    + "  " + str(r+1) + "  " + str(q+1)+ "  " + str(s+1) + "\n")
+            f.write("  " + str(vals[l]) + "  " + str(p + 1) \
+                    + "  " + str(r + 1) + "  " + str(q + 1) + "  " + str(s + 1) + "\n")
 
         for i in range(nP):
-            f.write("  " + str(kinetic[i]) + "  " + str(i+1) + "  "\
-                    + str(i+1) +"  0  0\n")
+            f.write("  " + str(kinetic[i]) + "  " + str(i + 1) + "  " \
+                    + str(i + 1) + "  0  0\n")
 
-
-        #for i in range(nP-no):
+        # for i in range(nP-no):
         #    f.write("  " + str(particleEnergies[i]) + "  " + str(i+no+1)\
         #            + "  0  0  0\n")
 
@@ -53,8 +50,9 @@ def write_2_fcidump(integrals, kinetic, no, ms2=1, orbsym=1, isym=1, dtype='r'):
         f.close()
     return
 
-def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
-    '''
+
+def read(fcidump_file="FCIDUMP", is_tc=False):
+    """
     Read Coulomb integrals from a FCIDUMP file. Works only on a single rank
     and for small FCIDUMP files ~300 orbitals for 120 GB RAM assuming dense
     tensor.
@@ -77,7 +75,7 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
             the single operator values.
     V_pqrs: numpy tensor, [nb, nb, nb, nb]
               the Coulomb integrals.
-    '''
+    """
     world = ctf.comm()
 
     header_dict = {"norb": 0, "nelec": 0}
@@ -87,23 +85,21 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
     except FileNotFoundError:
         sys.exit(1)
 
-    print_logging_info("Reading "+fcidump_file+"...", level=1)
+    print_logging_info("Reading " + fcidump_file + "...", level=1)
 
     e_core = 0.
 
-    #if world.rank() == 0:
+    # if world.rank() == 0:
     with open(fcidump_file, 'r') as reader:
-        
+
         print_logging_info("Parsing header...", level=2)
         line = reader.readline().strip()
-        
-        while not (('/' in line) or ("END".lower() in line.lower())): 
+
+        while not (('/' in line) or ("END".lower() in line.lower())):
             line += reader.readline().strip()
 
-        
-        
         header = line.split(",")
-        
+
         for key in header_dict.keys():
             for attr in header:
                 if key in attr.lower():
@@ -122,7 +118,7 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
         print_logging_info("Reading integrals...", level=2)
         while True:
             line = reader.readline()
-            #if not line.strip():
+            # if not line.strip():
             #    continue
             if not line:
                 break
@@ -133,31 +129,30 @@ def read_fcidump(fcidump_file="FCIDUMP", is_tc=False):
             r = int(r)
             q = int(q)
             s = int(s)
-            
+
             if np.abs(integral) < 1e-19:
                 continue
-                
-            if p != 0 and q != 0 and r != 0 and s !=0: 
+
+            if p != 0 and q != 0 and r != 0 and s != 0:
                 if not is_tc:
-                    V_pqrs[p-1, q-1, r-1, s-1] = integral 
-                    V_pqrs[r-1, q-1, p-1, s-1] = integral 
-                    V_pqrs[r-1, s-1, p-1, q-1] = integral 
-                    V_pqrs[p-1, s-1, r-1, q-1] = integral 
+                    V_pqrs[p - 1, q - 1, r - 1, s - 1] = integral
+                    V_pqrs[r - 1, q - 1, p - 1, s - 1] = integral
+                    V_pqrs[r - 1, s - 1, p - 1, q - 1] = integral
+                    V_pqrs[p - 1, s - 1, r - 1, q - 1] = integral
                 else:
-                    V_pqrs[p-1, q-1, r-1, s-1] = integral 
+                    V_pqrs[p - 1, q - 1, r - 1, s - 1] = integral
 
             if p == q == r == s == 0:
                 e_core = integral
-            
+
             if p != 0 and q == r == s == 0:
-                epsilon_p[p-1] = integral
-            
+                epsilon_p[p - 1] = integral
+
             if p != 0 and r != 0 and q == s == 0:
                 if not is_tc:
-                    h_pq[p-1, r-1] = integral
-                    h_pq[r-1, p-1] = integral
+                    h_pq[p - 1, r - 1] = integral
+                    h_pq[r - 1, p - 1] = integral
                 else:
-                    h_pq[p-1, r-1] = integral
+                    h_pq[p - 1, r - 1] = integral
 
-
-    return (n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs)
+    return n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs

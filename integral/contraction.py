@@ -1,11 +1,8 @@
 import ctf
-from ctf.core import *
 import itertools
+import numpy as np
 
 from pymes.logging import print_logging_info
-
-
-
 '''
 This module deal with the contractions in the 3-body integrals arising
 from the transcorrelation.
@@ -19,32 +16,48 @@ Author: Ke Liao <ke.liao.whu@gmail.com>
 
 
 def get_single_contraction(no, t_L_opqrst):
+    """
+    Parameters:
+    -----------
+    no: int, number of occupied orbitals
+    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS]
+
+    Returns:
+    --------
+    t_D_pqrs: ctf tensor, [nb, nb, nb, nb]
+    """
     nb = t_L_opqrst.shape[0]
     t_D_pqrs = ctf.tensor([nb,nb,nb,nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
-    # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3
-    t_D_pqrs += 2**1*3.0*ctf.einsum("ipqirs->pqrs", t_L_opqrst[:no,:,:,:no,:,:])
-    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3
-    # TODO: wrong diagram/expression, it cannot be the same as the previous one
-    t_D_pqrs += -3.0*ctf.einsum("ipqirs->pqrs", t_L_opqrst[:no,:,:,:no,:,:])
+    # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1
+    t_D_pqrs += 2**1*3.0*ctf.einsum("ipqirs->pqrs", t_L_opqrst[:no, :, :, :no, :, :])
+    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3*2, spin fac = 2
+    t_D_pqrs += -3.0*2.0*2.0*ctf.einsum("ipqrit->pqrs", t_L_opqrst[:no,:,:,:,:no,:])
 
     return t_D_pqrs
 
 def get_double_contraction(no, t_L_opqrst):
+    """
+    Parameters:
+    -----------
+    no: int, number of occupied orbitals
+    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS]
+
+    Returns:
+    --------
+    t_S_pq: ctf tensor, [nb,nb]
+    """
     nb = t_L_opqrst.shape[0]
     t_S_pq = ctf.tensor([nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 2, loops = 2, sign = 1, spin fac = 2**2, equavilent diagrams= 3
     t_S_pq += 2.0**2*3.0*ctf.einsum("ijpijq->pq", t_L_opqrst[:no,:no,:,:no,:no,:])
-    # hole lines = 2, loops = 0, sign = 1, spin fac = 2**0, equavilent diagrams= 3
-    t_S_pq += 3.0*ctf.einsum("ijpqij->pq", t_L_opqrst[:no,:no,:,:,:no,:no])
-    # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equavilent diagrams= 3
-    t_S_pq += -2**1*3.0*ctf.einsum("ijpjiq->pq", t_L_opqrst[:no,:no,:,:no,:no,:])
-    # hole lines = 2, loops = 1, sign = -1, equavilent diagrams= 3
-    t_S_pq += -2**1*3.0*ctf.einsum("pjiijq->pq", t_L_opqrst[:,:no,:no,:no,:no,:])
-
+    # hole lines = 2, loops = 1, sign = -1, spin fac = 2**2, equ = 3*2 (rotational and mirrorring syms)
+    t_S_pq += -1.*2.**2*3.*2.*ctf.einsum("ijpiqj->pq", t_L_opqrst[:no,:no,:,:no,:,:no])
+    # hole lines = 2, loops = 0, sign = 1, spin fac = 2**1, equavilent diagrams= 3*2 (rot and mirror)
+    t_S_pq += 3.*2.*2.*ctf.einsum("ijpqij->pq", t_L_opqrst[:no,:no,:,:,:no,:no])
     return t_S_pq
 
 def get_triple_contraction(no, t_L_orpsqt):
-    '''
+    """
     Parameters:
     -----------
     no: int, number of occupied orbitals
@@ -53,16 +66,16 @@ def get_triple_contraction(no, t_L_orpsqt):
     Returns:
     --------
     t_T_0: float
-    '''
+    """
     
     t_T_0 = 0.
     
     print_logging_info("Triple contraction")
-    # hole lines = 3, loops =3, (-1)^(3+3)=1, spin fac = 2**3, equ diagrams = 1, 2*6 from sym tensor
 
-    t_L_ijklmn = ctf.tensor([no,no,no,no,no,no]) 
+    t_L_ijklmn = ctf.tensor([no,no,no,no,no,no])
     t_L_ijklmn = t_L_orpsqt[:no,:no,:no,:no,:no,:no]
 
+    # hole lines = 3, loops =3, (-1)^(3+3)=1, spin fac = 2**3, equ diagrams = 1, 2*6 from sym tensor
     t_T_0 += 2.**3*ctf.einsum("iijjkk->", t_L_ijklmn)
     # hole lines = 3, loops =2, (-1)^(3+2)=-1, spin fac = 2**2, equ diagrams = 3
     t_T_0 += -2**2*3.0*ctf.einsum("ijjikk->", t_L_ijklmn)
@@ -73,7 +86,7 @@ def get_triple_contraction(no, t_L_orpsqt):
 
 
 def recover_L(t_L_sym_opqrst, shape):
-    '''
+    """
     This function handles the 48-fold symmetry presents in L tensor
     
     Parameters:
@@ -84,10 +97,10 @@ def recover_L(t_L_sym_opqrst, shape):
     Returns:
     --------
     t_L_opqrst: ctf full tensor, with shape equal to the requested one
-    '''
+    """
     world = ctf.comm()
     t_L_opqrst = ctf.tensor(t_L_sym_opqrst.shape, sp=1)
-    inds_sym, vals_sym = t_V_opqrst.read_local_nnz()
+    inds_sym, vals_sym = t_L_opqrst.read_local_nnz()
 
     inds_full = []
     vals_full = []
@@ -100,7 +113,7 @@ def recover_L(t_L_sym_opqrst, shape):
 
 
 def global_ind_2_list_inds(global_ind, shape):
-    '''
+    """
     Decompose global ctf indices to individual indices
 
     Parameters:
@@ -111,7 +124,7 @@ def global_ind_2_list_inds(global_ind, shape):
     Returns:
     --------
     list_inds: list of ints, length the same as the length of shape, the individual indices
-    '''
+    """
     list_inds = []
 
     for n in range(len(shape)-1):
@@ -123,7 +136,7 @@ def global_ind_2_list_inds(global_ind, shape):
 
 
 def list_inds_2_global_ind(list_inds, shape):
-    '''
+    """
     Calculate the global index of a list of indices of a tensor
 
     Parameters:
@@ -134,7 +147,7 @@ def list_inds_2_global_ind(list_inds, shape):
     Returns:
     --------
     global_ind: int, the global index of a non-zero entry
-    '''
+    """
     global_ind = 0
 
     for i in range(len(list_inds)-1):
@@ -146,7 +159,7 @@ def list_inds_2_global_ind(list_inds, shape):
 
 
 def gen_sym_int_inds(list_inds):
-    '''
+    """
     This function generates all the indices related by the 48-fold symmetries.
 
     Parameters:
@@ -156,7 +169,7 @@ def gen_sym_int_inds(list_inds):
     Returns:
     --------
     sym_related_inds: list of list of ints, all the possible symmetry related inds
-    '''
+    """
     # two indices exchange symmetry
     sym_related_inds = []
     
@@ -174,14 +187,14 @@ def gen_sym_int_inds(list_inds):
     return
 
 def sym_contraction(ein_inds, t_L_opqrst):
-    '''
+    """
     ein_inds: string, containing the indices to contract over
-    '''
+    """
     return
 
 
 def gen_sym_str_inds(string_inds):
-    '''
+    """
     This function generates all 48 symmetry related indices.
 
     Parameters:
@@ -191,7 +204,7 @@ def gen_sym_str_inds(string_inds):
     Returns:
     --------
     full_sym_inds: list of strings
-    '''
+    """
     full_sym_inds = [string_inds]
     # exchange of two indices
     i = 0
@@ -215,7 +228,7 @@ def gen_sym_str_inds(string_inds):
     return full_sym_inds
 
 def gen_sym_diag_str_inds(string_inds, sorted_string=None):
-    '''
+    """
     This function generates the overlap block of string_inds relative to the sorted string.
     E.g. if string_inds = "ibcajk", the sorted string is "abcijk". This function detects "a" and "i"
     are swapped, so it will output abcajk. There are two types of symmetry operations among the six characters,
@@ -233,7 +246,7 @@ def gen_sym_diag_str_inds(string_inds, sorted_string=None):
     Returns:
     --------
     full_sym_inds: list of strings
-    '''
+    """
     if sorted_string is None:
         sorted_string = sorted(list(string_inds))
     string_inds = list(string_inds)

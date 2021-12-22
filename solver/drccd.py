@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import ctf
-from ctf.core import *
+
 from pymes.solver import mp2
 #from pymes.solver import ccd
 from pymes.mixer import diis
