@@ -28,20 +28,27 @@ def get_single_contraction(no, t_L_opqrst):
     """
     nb = t_L_opqrst.shape[0]
     t_D_pqrs = ctf.tensor([nb, nb, nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
+    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3, spin fac = 1
+    t_D_pqrs += -3.0 * 2 * ctf.einsum("irpiqs->pqrs", t_L_opqrst[:no, :, :, :no, :, :])
+    t_D_pqrs.i("pqrs") << t_D_pqrs.i("qpsr")
+    t_D_pqrs /= 2.
     # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1
-    t_D_pqrs += 2**1*3.0*ctf.einsum("ipqirs->pqrs", t_L_opqrst[:no, :, :, :no, :, :])
-    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3*2, spin fac = 1
-    t_D_pqrs += -3.0 * ctf.einsum("ipqris->pqrs", t_L_opqrst[:no, :, :, :, :no, :])
-    t_D_pqrs += -3.0 * ctf.einsum("piqirs->pqrs", t_L_opqrst[:, :no, :, :no, :, :])
+    t_D_pqrs += 2**1*3.0*ctf.einsum("iiprqs->pqrs", t_L_opqrst[:no, :no, :, :, :, :])
 
-    return -t_D_pqrs/6.*2
+
+
+    #t_D_pqrs += -3.0  *  ctf.einsum("qiispr->pqrs", t_L_opqrst[:, :no, :no, :, :, :])
+
+
+    return -t_D_pqrs/6.
 
 def get_double_contraction(no, t_L_opqrst):
     """
     Parameters:
     -----------
     no: int, number of occupied orbitals
-    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS]
+    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS],
+            **indices in chemists' notation due to the constraint of symmetry functionality in ctf**
 
     Returns:
     --------
@@ -50,15 +57,15 @@ def get_double_contraction(no, t_L_opqrst):
     nb = t_L_opqrst.shape[0]
     t_S_pq = ctf.tensor([nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 2, loops = 2, sign = 1, spin fac = 2**2, equavilent diagrams= 3
-    t_S_pq += 2.0**2*3.0*ctf.einsum("ijpijq->pq", t_L_opqrst[:no,:no,:,:no,:no,:])
+    t_S_pq += 2.0**2*3.0*ctf.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equ = 3*2 (rotational and mirrorring syms)
     #t_S_pq += -1.*2.**2*3.*2.*ctf.einsum("ijpiqj->pq", t_L_opqrst[:no,:no,:,:no,:,:no])
-    t_S_pq += -1. * 2. ** 1 * 3. * ctf.einsum("ijpiqj->pq", t_L_opqrst[:no, :no, :, :no, :, :no])
+    t_S_pq += -1. * 2. ** 1 * 3. * 2 * ctf.einsum("iijqpj->pq", t_L_opqrst[:no, :no, :no, :, :, :no])
     # hole lines = 2, loops = 0, sign = 1, spin fac = 2**0, equavilent diagrams= 3*2 (rot and mirror)
-    #t_S_pq += 3.*2.*2.*ctf.einsum("ijpqij->pq", t_L_opqrst[:no,:no,:,:,:no,:no])
-    t_S_pq += 3. * 2. * ctf.einsum("ijpqij->pq", t_L_opqrst[:no, :no, :, :, :no, :no])
+
+    t_S_pq += 3. * 2. * ctf.einsum("iqjipj->pq", t_L_opqrst[:no, :, :no, :no, :, :no])
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equavilent diagrams= 3
-    t_S_pq += -1.*3.*2.*ctf.einsum("ijpjiq->pq", t_L_opqrst[:no, :no, :, :no, :no, :])
+    t_S_pq += -1.*3.*2.*ctf.einsum("ijjipq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
 
     return -t_S_pq/6.
 
@@ -67,7 +74,8 @@ def get_triple_contraction(no, t_L_orpsqt):
     Parameters:
     -----------
     no: int, number of occupied orbitals
-    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS]
+    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS],
+        **indices in chemists' notation due to the constraint of symmetry functionality in ctf**
 
     Returns:
     --------

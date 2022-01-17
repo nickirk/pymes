@@ -93,7 +93,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
+    tV_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
                                      only2Body=True,sp=1)
     tV_sym_pqrs = ctf.tensor(tV_pqrs.shape, sp=tV_pqrs.sp)
     tV_sym_pqrs.i("pqrs") << 0.5 *( tV_pqrs.i("pqrs") + tV_pqrs.i("qpsr"))

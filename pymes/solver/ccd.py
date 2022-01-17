@@ -42,8 +42,8 @@ class CCD:
         t_epsilon_a = t_fock_pq.diagonal()[no:]
 
         # parameters
-        level_shift = level_shift
-        max_iter = max_iter
+        #level_shift = level_shift
+        #max_iter = max_iter
         # epsilon_e = 1e-8
         delta = 1.0
 
@@ -135,21 +135,21 @@ class CCD:
 
             if iteration <= max_iter:
                 print_logging_info("Iteration = ", iteration, level=1)
-                print_logging_info("Correlation Energy = {:.8f}".format(e_ccd),
+                print_logging_info("Correlation Energy = {:.12f}".format(e_ccd),
                                    level=2)
-                print_logging_info("dE = {:.8e}".format(dE), level=2)
-                print_logging_info("L1 Norm of T2 = {:.8f}".format(t2_l1_norm),
+                print_logging_info("dE = {:.12e}".format(dE), level=2)
+                print_logging_info("L1 Norm of T2 = {:.12f}".format(t2_l1_norm),
                                    level=2)
-                print_logging_info("Norm Residul = {:.8f}".format(residual_norm),
+                print_logging_info("Norm Residual = {:.12f}".format(residual_norm),
                                    level=2)
             else:
                 print_logging_info("A converged solution is not found!", level=1)
 
-        print_logging_info("Direct contribution = {:.8f}".format(
+        print_logging_info("Direct contribution = {:.12f}".format(
             np.real(e_dir_ccd)), level=1)
-        print_logging_info("Exchange contribution = {:.8f}".format(
+        print_logging_info("Exchange contribution = {:.12f}".format(
             np.real(e_ex_ccd)), level=1)
-        print_logging_info("CCD correlation energy = {:.8f}".format(
+        print_logging_info("CCD correlation energy = {:.12f}".format(
             e_ccd), level=1)
         print_logging_info("{:.3f} seconds spent on CCD".format(
             (time.time() - time_ccd)), level=1)
@@ -217,22 +217,17 @@ class CCD:
         t_Ex_baji = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
 
         t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
-        - t_X_ki.i("ki") * t_T_abij.i("abkj") \
-        - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
-        - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
-        + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
+            - t_X_ki.i("ki") * t_T_abij.i("abkj") \
+            - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
+            - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
+            + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
         if not self.is_dcd:
             t_Xai_aibj = ctf.einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
             t_Ex_abij -= ctf.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
             t_Ex_abij += ctf.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
         t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
-        # t_Ex_baji.i("baji") << t_X_ac.i("bc") * t_T_abij.i("caji") \
-        #                        - t_X_ki.i("kj") * t_T_abij.i("baki") \
-        #                        - t_V_iajb.i("kbjc") * t_T_abij.i("caki")\
-        #                        - t_V_iajb.i("kajc") * t_T_abij.i("bcki")\
-        #                        + t_tilde_T_abij.i("bcjk") * t_V_iabj.i("kaci")
-        # CCD has more terms than DCD
+
 
         ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
         # t_Ex_baji.i("baji") << t_Ex_abij.i("abij")

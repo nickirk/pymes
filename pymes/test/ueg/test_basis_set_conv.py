@@ -219,12 +219,12 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 if __name__ == '__main__':
     #for gamma in None:
     gamma = None
-    nel = 54
+    nel = 14
     opt_kc = np.loadtxt("rs_opt_kc.dat")
-    for cutoff in [36]:
+    for cutoff in [5]:
         amps = None
         n = 0
-        for rs in [0.5,1.0,2.0,5.0,10.0,20.0,50.0]:
+        for rs in [0.5]:
             print_logging_info("rs = ", rs, "rs from file = ", opt_kc[n,0])
             kCutoffFraction = opt_kc[n,1]
             amps = main(nel, cutoff, rs, gamma, kCutoffFraction, amps)

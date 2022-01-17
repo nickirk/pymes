@@ -45,7 +45,7 @@ class CCSD(ccd.CCD):
         The ccsd algorithm, in the screened Coulomb integrals formalism
         see ref. JCP 138.14 (2013), D. Kats and F.R. Manby
         and ref. JCP 144.4 (2016), D. Kats
-        t_V_ijkl = V^{ij}_{kl}
+        t_V_klij = V^{ij}_{kl}
         t_V_abij = V^{ab}_{ij}
         t_T_abij = T^{ab}_{ij}
         the upper indices refer to conjugation
@@ -161,7 +161,7 @@ class CCSD(ccd.CCD):
             t_R_ai = self.get_singles_residual(t_fock_pq, t_T_ai, t_T_abij,
                                                dict_t_V)
 
-            t_V_ijkl_dressed = dict_t_V_dressed['ijkl']
+            t_V_klij_dressed = dict_t_V_dressed['klij']
             t_V_ijab_dressed = dict_t_V_dressed['ijab']
             t_V_abij_dressed = dict_t_V_dressed['abij']
             t_V_iajb_dressed = dict_t_V_dressed['iajb']
@@ -170,7 +170,7 @@ class CCSD(ccd.CCD):
 
             t_R_abij = self.get_doubles_residual(
                 t_fock_pq, t_T_abij,
-                t_V_ijkl_dressed, t_V_ijab_dressed,
+                t_V_klij_dressed, t_V_ijab_dressed,
                 t_V_abij_dressed, t_V_iajb_dressed,
                 t_V_iabj_dressed, t_V_abcd_dressed
             )
@@ -351,7 +351,7 @@ class CCSD(ccd.CCD):
         # be dressed. So we should dress t_V_abij first.
 
         # tensors need dressing, make copies so not to destroy the original ones
-        t_V_ijkl_dressed = dict_t_V['ijkl'].copy()
+        t_V_klij_dressed = dict_t_V['klij'].copy()
         t_V_ijab_dressed = dict_t_V['ijab'].copy()
         t_V_abij_dressed = dict_t_V['abij'].copy()
         t_V_iajb_dressed = dict_t_V['iajb'].copy()
@@ -367,7 +367,7 @@ class CCSD(ccd.CCD):
 
         t_V_abij_dressed += - ctf.einsum("alij, bl -> abij",
                                          dict_t_V['aijk'], t_T_ai) \
-                            + ctf.einsum("klij, ak, bl -> abij", dict_t_V['ijkl'], t_T_ai,
+                            + ctf.einsum("klij, ak, bl -> abij", dict_t_V['klij'], t_T_ai,
                                          t_T_ai) \
                             - ctf.einsum("alcj, ci, bl -> abij", dict_t_V['aibj'], t_T_ai,
                                          t_T_ai) \
@@ -391,10 +391,10 @@ class CCSD(ccd.CCD):
                             + 1.0 * ctf.einsum("klcd, ak, ci, bl, dj -> abij", dict_t_V['ijab'],
                                                t_T_ai, t_T_ai, t_T_ai, t_T_ai)
 
-        # t_V_ijkl
-        t_V_ijkl_dressed += 1.0 * ctf.einsum("ijal, ak -> ijkl", dict_t_V['ijak'], t_T_ai) \
-                            + 1.0 * ctf.einsum("ijka, al -> ijkl", dict_t_V['ijka'], t_T_ai) \
-                            + 1.0 * ctf.einsum("ijab, ak, bl -> ijkl", dict_t_V['ijab'], t_T_ai,
+        # t_V_klij
+        t_V_klij_dressed += 1.0 * ctf.einsum("klaj, ai -> klij", dict_t_V['ijak'], t_T_ai) \
+                            + 1.0 * ctf.einsum("klib, bj -> klij", dict_t_V['ijka'], t_T_ai) \
+                            + 1.0 * ctf.einsum("klab, ai, bj -> klij", dict_t_V['ijab'], t_T_ai,
                                                t_T_ai)
         # t_V_ijab is unchanged
 
@@ -416,7 +416,7 @@ class CCSD(ccd.CCD):
                             + ctf.einsum("jicd, aj, bi -> abcd", dict_t_V['ijab'], t_T_ai,
                                          t_T_ai)
 
-        return {'ijkl': t_V_ijkl_dressed,
+        return {'klij': t_V_klij_dressed,
                 'ijab': t_V_ijab_dressed,
                 'abij': t_V_abij_dressed,
                 'iajb': t_V_iajb_dressed,
@@ -452,7 +452,7 @@ class CCSD(ccd.CCD):
         """
         Computes the residuals for the doubles amplitudes.
         """
-        algo_name = "ccsd.get_residual"
+        algo_name = "ccsd.get_doubles_residual"
         # return ccd's get_residual function
         return self.get_residual(t_fock_pq, t_T_abij, t_V_klij,
                                  t_V_ijab, t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd)
@@ -477,8 +477,8 @@ class CCSD(ccd.CCD):
         dict_t_V['iajk'] = t_V_iajk
         t_V_aijk = t_V_pqrs[no:, :no, :no, :no]
         dict_t_V['aijk'] = t_V_aijk
-        t_V_ijkl = t_V_pqrs[:no, :no, :no, :no]
-        dict_t_V['ijkl'] = t_V_ijkl
+        t_V_klij = t_V_pqrs[:no, :no, :no, :no]
+        dict_t_V['klij'] = t_V_klij
         t_V_aibj = t_V_pqrs[no:, :no, no:, :no]
         dict_t_V['aibj'] = t_V_aibj
         t_V_ijak = t_V_pqrs[:no, :no, no:, :no]
@@ -499,8 +499,6 @@ class CCSD(ccd.CCD):
         dict_t_V['aibc'] = t_V_aibc
         t_V_ijab = t_V_pqrs[:no, :no, no:, no:]
         dict_t_V['ijab'] = t_V_ijab
-        t_V_ijkl = t_V_pqrs[:no, :no, :no, :no]
-        dict_t_V['ijkl'] = t_V_ijkl
         t_V_abij = t_V_pqrs[no:, no:, :no, :no]
         dict_t_V['abij'] = t_V_abij
 

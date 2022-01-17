@@ -10,7 +10,8 @@ from pymes.log import print_logging_info
 '''
 This file contains functions to read in the tcfactors produced by TCHINT. 
 Adapted from modules in NECI. License and Copyright info:
-!  Copyright (c) 2013, Ali Alavi, the following procedure has been copied and modified from the NECI program which is licenced under GNU GPL v.3 licence
+!  Copyright (c) 2013, Ali Alavi, the following procedure has been copied and modified from the NECI program which 
+   is licenced under GNU GPL v.3 licence
 
 Author: Ke Liao
 '''

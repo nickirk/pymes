@@ -115,6 +115,6 @@ class DIIS:
         print_logging_info(c[:-1],level=3)
         print_logging_info("Sum of coefficients = {:.8f}".format(np.sum(c[:-1])),\
                            level=3)
-        print_logging_info("Langrangian multiplier = {:.8f}".format(c[-1]), level=3)
+        print_logging_info("Lagrangian multiplier = {:.8f}".format(c[-1]), level=3)
     
         return optAmp
