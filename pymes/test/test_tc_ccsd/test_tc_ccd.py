@@ -5,9 +5,8 @@ from pymes.mean_field import hf
 from pymes.solver import ccd
 from pymes.util import fcidump, tcdump
 
-def test_read_tcdump(tcdump_file=):
-    t_L_opqrst = tcdump.read(tcdump_file, sp=0)
-    
+
+
 def test_tc_ref_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FNO", ref_e = -8.042996662464):
     # known values
 
@@ -22,6 +21,14 @@ def test_tc_ref_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FN
 
     # make sure HF energy is correct first
     hf_e = hf.calc_hf_e(no, e_core, t_h_pq, t_V_pqrs)
+    # get hf_e from fock matrix
+    t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
+    hf_e_from_fock = 2 * ctf.einsum("ii->", t_fock_pq[:no, :no]) + e_core
+    dirHFE = 2. * ctf.einsum('jiji->', t_V_pqrs[:no, :no, :no, :no])
+    excHFE = -1. * ctf.einsum('ijji->', t_V_pqrs[:no, :no, :no, :no])
+    hf_e_from_fock -= dirHFE + excHFE
+
+    assert hf_e == hf_e_from_fock
     print("HF e without T_0 = ", hf_e)
     hf_e += t_T_0
     print("HF e + T_0 = ", hf_e)
