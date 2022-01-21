@@ -6,7 +6,7 @@ import numpy as np
 from pymes.log import print_logging_info
 
 
-def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r'):
+def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r', file="FCIDUMP"):
     """
     This function writes out integrals into a FCIDUMP file
 
@@ -26,7 +26,7 @@ def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r'):
     nP = integrals.shape[0]
     inds, vals = integrals.read_all_nnz()
     if world.rank() == 0:
-        f = open("FCIDUMP", "w")
+        f = open(file, "w")
         # write header
         f.write("&FCI\n")
         f.write(" NORB=%i,\n" % nP)
@@ -48,14 +48,12 @@ def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r'):
                     + "  " + str(r + 1) + "  " + str(q + 1) + "  " + str(s + 1) + "\n")
 
         for i in range(nP):
-            f.write("  " + str(h[i]) + "  " + str(i + 1) + "  " \
-                    + str(i + 1) + "  0  0\n")
+            for j in range(nP):
+                if np.abs(h[i, j]) > 1.e-10:
+                    f.write("  " + str(h[i, j]) + "  " + str(i + 1) + "  " \
+                            + str(j + 1) + "  0  0\n")
 
-        # for i in range(nP-no):
-        #    f.write("  " + str(particleEnergies[i]) + "  " + str(i+no+1)\
-        #            + "  0  0  0\n")
-
-        f.write("  0.0  0  0  0  0")
+        f.write(str(e_nuc) + " 0  0  0  0")
 
         f.close()
     return
@@ -159,7 +157,7 @@ def read(fcidump_file="FCIDUMP", is_tc=False):
                 epsilon_p[p - 1] = integral
 
             if p != 0 and r != 0 and q == s == 0:
-                # the 1-body integral is still symmetric tc o
+                # the 1-body integral is still symmetric tc or non-tc
                 h_pq[p - 1, r - 1] = integral
                 h_pq[r - 1, p - 1] = integral
 

@@ -3,8 +3,11 @@
 
 
 import ctf
+import numpy as np
 from pymes.log import print_logging_info
-from pymes.util.fcidump import read
+from pymes.util.fcidump import read, write
+
+
 def test_tc_fcidump_reader():
     print_logging_info("Testing tc-FCIDUMP reader...")
     n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("./test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
@@ -45,3 +48,15 @@ def test_tc_fcidump_reader():
     print_logging_info("Exchange of s and r indices= ", sym)
     assert sym > 1.e-12, "Tensor should not have this symmetry!"
     print_logging_info("All tests passed!")
+
+def test_fcidump_write():
+    n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("./test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
+    no = n_elec // 2
+    write(ctf.astensor(V_pqrs), ctf.astensor(h), no, e_core, file="fcidump.w")
+    n_elec_r, n_orb_r, e_core_r, epsilon_r, h_r, V_pqrs_r = read("./fcidump.w", is_tc=True)
+    assert n_elec_r == n_elec
+    assert n_orb_r == n_orb
+    assert e_core_r == e_core
+    assert np.array_equal(epsilon_r, epsilon)
+    assert np.array_equal(h_r, h)
+    assert np.array_equal(V_pqrs_r, V_pqrs)

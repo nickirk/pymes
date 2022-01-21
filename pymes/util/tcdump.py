@@ -25,8 +25,8 @@ def write(t_V_orpsqt, file_name="TCDUMP", sym=True, type='r', sp=1):
             q = int((inds[l]-o*nOrb**5-r*nOrb**4-p*nOrb**3-s*nOrb**2)/nOrb)
             t = int(inds[l]-o*nOrb**5-r*nOrb**4-p*nOrb**3-s*nOrb**2-q*nOrb)
             if np.abs(vals[l]) > 1e-10:
-                if (o <= p <= q) and (unique_index(o,r) <= unique_index(p,s) <= unique_index(q,t)):
-                    f.write(str(-vals[l]/3.)+" "+str(o+1)+" "+\
+                #if (o <= p <= q) and (unique_index(o,r) <= unique_index(p,s) <= unique_index(q,t)):
+                f.write(str(-vals[l]/3.)+" "+str(o+1)+" "+\
                             str(p+1)+" "+str(q+1)+" "+str(r+1)+" "+str(s+1)+" "\
                             +str(t+1)+"\n")
         f.close()

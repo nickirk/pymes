@@ -29,15 +29,12 @@ def get_single_contraction(no, t_L_opqrst):
     nb = t_L_opqrst.shape[0]
     t_D_pqrs = ctf.tensor([nb, nb, nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3, spin fac = 1
-    t_D_pqrs += -3.0 * 2 * ctf.einsum("irpiqs->pqrs", t_L_opqrst[:no, :, :, :no, :, :])
-    t_D_pqrs.i("pqrs") << t_D_pqrs.i("qpsr")
-    t_D_pqrs /= 2.
+    t_D_pqrs += -3.0 * 2. * ctf.einsum("pqriis->prqs", t_L_opqrst[:, :, :, :no, :no, :])
+    t_D_pqrs += -3.0 * 2. * ctf.einsum("rspiiq->prqs", t_L_opqrst[:, :, :, :no, :no, :])
+    t_D_pqrs /= 2.0
     # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1
-    t_D_pqrs += 2**1*3.0*ctf.einsum("iiprqs->pqrs", t_L_opqrst[:no, :no, :, :, :, :])
+    t_D_pqrs += 2**1*3.0*ctf.einsum("pqrsii->prqs", t_L_opqrst[:, :, :, :, :no, :no])
 
-
-
-    #t_D_pqrs += -3.0  *  ctf.einsum("qiispr->pqrs", t_L_opqrst[:, :no, :no, :, :, :])
 
 
     return -t_D_pqrs/6.
@@ -60,10 +57,11 @@ def get_double_contraction(no, t_L_opqrst):
     t_S_pq += 2.0**2*3.0*ctf.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equ = 3*2 (rotational and mirrorring syms)
     #t_S_pq += -1.*2.**2*3.*2.*ctf.einsum("ijpiqj->pq", t_L_opqrst[:no,:no,:,:no,:,:no])
-    t_S_pq += -1. * 2. ** 1 * 3. * 2 * ctf.einsum("iijqpj->pq", t_L_opqrst[:no, :no, :no, :, :, :no])
+    t_S_pq += -1. * 2. ** 1 * 3. * 2. *ctf.einsum("iipjjq->pq", t_L_opqrst[:no, :no, :, :no, :no, :])
+
     # hole lines = 2, loops = 0, sign = 1, spin fac = 2**0, equavilent diagrams= 3*2 (rot and mirror)
 
-    t_S_pq += 3. * 2. * ctf.einsum("iqjipj->pq", t_L_opqrst[:no, :, :no, :no, :, :no])
+    t_S_pq += 3. * 2. * ctf.einsum("pijqij->pq", t_L_opqrst[:, :no, :no, :, :no, :no])
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equavilent diagrams= 3
     t_S_pq += -1.*3.*2.*ctf.einsum("ijjipq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
 
