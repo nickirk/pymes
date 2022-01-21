@@ -35,9 +35,7 @@ def get_single_contraction(no, t_L_opqrst):
     # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1
     t_D_pqrs += 2**1*3.0*ctf.einsum("pqrsii->prqs", t_L_opqrst[:, :, :, :, :no, :no])
 
-
-
-    return -t_D_pqrs/6.
+    return -t_D_pqrs/3.
 
 def get_double_contraction(no, t_L_opqrst):
     """
@@ -55,8 +53,8 @@ def get_double_contraction(no, t_L_opqrst):
     t_S_pq = ctf.tensor([nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 2, loops = 2, sign = 1, spin fac = 2**2, equavilent diagrams= 3
     t_S_pq += 2.0**2*3.0*ctf.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
+
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equ = 3*2 (rotational and mirrorring syms)
-    #t_S_pq += -1.*2.**2*3.*2.*ctf.einsum("ijpiqj->pq", t_L_opqrst[:no,:no,:,:no,:,:no])
     t_S_pq += -1. * 2. ** 1 * 3. * 2. *ctf.einsum("iipjjq->pq", t_L_opqrst[:no, :no, :, :no, :no, :])
 
     # hole lines = 2, loops = 0, sign = 1, spin fac = 2**0, equavilent diagrams= 3*2 (rot and mirror)

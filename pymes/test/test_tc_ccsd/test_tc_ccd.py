@@ -60,10 +60,21 @@ def test_tc_ccd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FN
     t_delta_V = contraction.get_single_contraction(no, t_L_opqrst)
     print("V_pqrs (22|11) = ", t_V_pqrs[1, 0, 1, 0])
     print("V_pqrs (11|22) = ", t_V_pqrs[0, 1, 0, 1])
+    print("V_pqrs (21|12) = ", t_V_pqrs[1, 0, 0, 1])
+    print("V_pqrs (12|12) = ", t_V_pqrs[0, 0, 1, 1])
 
+    print("t_delta_V (11|11) = ", t_delta_V[0, 0, 0, 0])
     print("t_delta_V (22|11) = ", t_delta_V[1, 0, 1, 0])
     print("t_delta_V (11|22) = ", t_delta_V[0, 1, 0, 1])
+    print("t_delta_V (21|12) = ", t_delta_V[1, 0, 0, 1])
+    print("t_delta_V (12|12) = ", t_delta_V[0, 0, 1, 1])
+
     t_V_pqrs += t_delta_V
+    print("modified V_pqrs (11|11) = ", t_V_pqrs[0, 0, 0, 0])
+    print("modified V_pqrs (22|11) = ", t_V_pqrs[1, 0, 1, 0])
+    print("modified V_pqrs (11|22) = ", t_V_pqrs[0, 1, 0, 1])
+    print("modified V_pqrs (21|12) = ", t_V_pqrs[1, 0, 0, 1])
+    print("modified V_pqrs (12|12) = ", t_V_pqrs[0, 0, 1, 1])
 
     mycc = ccd.CCD(no)
     ccd_result = mycc.solve(t_fock_pq, t_V_pqrs, epsilon_e=1.e-11)
@@ -71,13 +82,13 @@ def test_tc_ccd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FN
     ccd_e = ccd_result["ccd e"]
     t2 = ccd_result["t2 amp"]
 
-    print("t2 = ", t2)
+
 
     assert np.abs(ccd_e - ref_e) < 1.e-9
 
 def test_tc_ccd_h2():
     test_tc_ref_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e = -1.1660095160466279 )
-    test_tc_ccd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e =-0.589670829E-02)
+    test_tc_ccd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e =-0.005919199166)
 
 def test_tc_ccd_ueg():
     test_tc_ref_energy(fcidump_file="14E.RS0.5.CO2.KCDEFAULT.TC.FCIDUMP", tcdump_file="14E.RS0.5.CO2.KCDEFAULT.TC.TCDUMP", ref_e = 58.437681570270)
