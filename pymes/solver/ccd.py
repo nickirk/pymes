@@ -10,19 +10,21 @@ from pymes.solver import drccd
 
 class CCD:
 
-    def __init__(self, no, is_dcd=False, is_diis=True, is_dr_ccd=False,
+    def __init__(self, no, delta_e = 1.e-8, is_dcd=False, is_diis=True, is_dr_ccd=False,
                  is_bruekner=False):
         self.is_dcd = is_dcd
         self.is_diis = is_diis
         self.is_dr_ccd = is_dr_ccd
         self.is_bruekner = is_bruekner
         self.no = no
+        self.delta_e = delta_e
+        self.max_iter = 50
         if self.is_diis:
             self.mixer = diis.DIIS(dim_space=6)
 
     def solve(self, t_fock_pq, t_V_pqrs, level_shift=0., sp=0,
-              max_iter=100, amps=None,
-              epsilon_e=1e-8):
+              amps=None, **kwargs
+              ):
         '''
         ccd algorithm
         t_V_ijkl = V^{ij}_{kl}
@@ -42,11 +44,17 @@ class CCD:
         t_epsilon_a = t_fock_pq.diagonal()[no:]
 
         # parameters
-        #level_shift = level_shift
-        #max_iter = max_iter
-        # epsilon_e = 1e-8
-        delta = 1.0
+        # level_shift = self.level_shift
+        if "max_iter" in kwargs:
+            max_iter = kwargs['max_iter']
+        else:
+            max_iter = self.max_iter
+        if "delta_e" in kwargs:
+            delta_e = kwargs['delta_e']
+        else:
+            delta_e = self.delta_e
 
+        delta = 1.0
         # construct the needed integrals here on spot.
 
         t_V_iabj = t_V_pqrs[:no, no:, no:, :no]
@@ -86,7 +94,8 @@ class CCD:
         e_dir_ccd = 0.
         e_ex_ccd = 0.
 
-        while np.abs(dE) > epsilon_e and iteration <= max_iter:
+
+        while np.abs(dE) > delta_e and iteration <= max_iter:
             iteration += 1
             if self.is_dr_ccd:
                 t_R_abij = drccd.get_residual(t_epsilon_i, t_epsilon_a, t_T_abij,
