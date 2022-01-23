@@ -28,7 +28,7 @@ def test_tc_ref_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FN
     return 0
 
 
-def test_tc_ccsd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FNO", ref_e = -0.010032224361999909):
+def test_tc_ccsd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FNO", ref_e = -0.010391224684):
 
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file, is_tc=True)
     no = int(n_elec / 2)
@@ -50,10 +50,10 @@ def test_tc_ccsd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_F
     t_V_pqrs += t_delta_V
 
     mycc = ccsd.CCSD(no)
-    ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs)["ccsd e"]
+    ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs, epsilon_e=1.e-11 )["ccsd e"]
 
     assert np.abs(ccsd_e - ref_e) < 1.e-7
 
 def test_tc_ccsd_h2():
     test_tc_ref_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e = -1.1660095160466279)
-    test_tc_ccsd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e =-0.5896708E-02)
+    test_tc_ccsd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e =-0.005919199166)

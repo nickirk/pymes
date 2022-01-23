@@ -28,7 +28,6 @@ class CCSD(ccd.CCD):
         self.no = no
 
         # parameters
-        self.level_shift = 0.
         self.max_iter = 50
         self.delta = 1.0
         # convergence criterion for energy difference
@@ -40,7 +39,7 @@ class CCSD(ccd.CCD):
     def write_logging_info(self):
         return
 
-    def solve(self, t_fock_pq, t_V_pqrs, level_shift=None, amps=None, sp=0):
+    def solve(self, t_fock_pq, t_V_pqrs, level_shift=0., amps=None, sp=0, **kwargs):
         """
         The ccsd algorithm, in the screened Coulomb integrals formalism
         see ref. JCP 138.14 (2013), D. Kats and F.R. Manby
@@ -96,10 +95,15 @@ class CCSD(ccd.CCD):
         nv = t_fock_pq.shape[0] - self.no
 
         delta = self.delta
-        max_iter = self.max_iter
-        if level_shift is None:
-            level_shift = self.level_shift
-        delta_e = self.delta_e
+
+        if "max_iter" in kwargs:
+            max_iter = kwargs['max_iter']
+        else:
+            max_iter = self.max_iter
+        if "delta_e" in kwargs:
+            delta_e = kwargs['delta_e']
+        else:
+            delta_e = self.delta_e
 
         # construct the needed integrals here on spot.
         t_epsilon_i = t_fock_pq.diagonal()[:no]
