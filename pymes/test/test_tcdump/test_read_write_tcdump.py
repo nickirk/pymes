@@ -54,4 +54,5 @@ def test_read_write(file_name="TCDUMP.H2.tc"):
     # write out the TCDUMP to compare with the original one
     tcdump.write(t_V_orpsqt, file_name="TCDUMP.w")
 
-
+def test_read_write_hdf5(file='tcdump.h5'):
+    test_read_write(file)

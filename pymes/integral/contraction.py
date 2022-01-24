@@ -28,8 +28,9 @@ def get_single_contraction(no, t_L_opqrst):
     """
     nb = t_L_opqrst.shape[0]
     t_D_pqrs = ctf.tensor([nb, nb, nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
-    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3, spin fac = 1
+    # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3*2, spin fac = 1
     t_D_pqrs += -3.0 * 2. * ctf.einsum("pqriis->prqs", t_L_opqrst[:, :, :, :no, :no, :])
+    # symmetrisation wrt electrons
     t_D_pqrs += -3.0 * 2. * ctf.einsum("rspiiq->prqs", t_L_opqrst[:, :, :, :no, :no, :])
     t_D_pqrs /= 2.0
     # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1

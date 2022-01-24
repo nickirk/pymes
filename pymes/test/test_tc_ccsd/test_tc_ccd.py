@@ -63,3 +63,7 @@ def test_tc_ccd_energy(fcidump_file="FCIDUMP.LiH.tc", tcdump_file="TCDUMP.LiH_FN
 def test_tc_ccd_h2():
     test_tc_ref_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e = -1.1660095160466279 )
     test_tc_ccd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="TCDUMP.H2.tc", ref_e =-0.005919199166)
+
+def test_tc_ccd_h2_hdf5():
+    test_tc_ref_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="../test_tcdump/tcdump.h5", ref_e=-1.1660095160466279)
+    test_tc_ccd_energy(fcidump_file="FCIDUMP.H2.tc", tcdump_file="../test_tcdump/tcdump.h5", ref_e=-0.005919199166)
