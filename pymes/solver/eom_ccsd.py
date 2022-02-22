@@ -71,13 +71,28 @@ class EOM_CCSD:
         return self.e_excit, self.u_vecs
 
     def update_singles(self, t_fock_pq, dict_t_V):
+        """
+        Calculate the matrix-vector product between similarity-transformed H and u vector for the singles
+        block.
+
+        Parameters:
+        -----------
+        t_fock_pq: ctf tensor, fock matrix
+        dict_t_V: dictionary of V blocks, which are ctf tensors
+
+        Returns:
+        --------
+        t_delta_singles: ctf tensor, the change of the singles block of u
+        """
+
+
         no = self.ccsd.no
         t_delta_singles = ctf.tensor(self.u_singles.shape, 
                                      dtype=self.u_singles.dtype, 
                                      sp=self.u_singles.sp)
         
         # fock matrix contribution
-        t_delta_singles += 2.*ctf.einsum("bj, baji->ai", t_fock_pq[:no,no:],
+        t_delta_singles += 2.*ctf.einsum("jb, baji->ai", t_fock_pq[:no,no:],
                                          self.u_doubles)\
                             - ctf.einsum("ij, aj", t_fock_pq[:no,:no],
                                            self.u_singles)\
@@ -124,5 +139,8 @@ class EOM_CCSD:
         t_delta_doubles = ctf.tensor(self.u_doubles.shape, 
                                      dtype=self.u_doubles.dtype, 
                                      sp=self.u_doubles.sp)
+
+        # first add all terms that involve P(ijab,jiba), physicists' notations are used
+
         return t_delta_doubles
     
