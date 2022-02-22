@@ -140,7 +140,25 @@ class EOM_CCSD:
                                      dtype=self.u_doubles.dtype, 
                                      sp=self.u_doubles.sp)
 
-        # first add all terms that involve P(ijab,jiba), physicists' notations are used
+        # add those involve P(ijab,jiba) and from u_singles
+        t_delta_doubles += 4. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                           self.u_doubles)\
+                           - 2. * ctf.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
+                                            self.u_singles) \
+                           - 2. * ctf.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                            self.u_doubles) \
+                           - 2. * ctf.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+        # add exchange contributions
+        t_delta_doubles.("abij") << t_delta_doubles("baji")
+        # after adding exchanging indices contribution from P(ijab, jiba),
+        # now add all terms that don't involve P(ijab,jiba)
+        t_delta_doubles += ctf.einsum("klij, abkl -> abij", dict_t_V["ijkl"], self.u_doubles) \
+                           + ctf.einsum("klcd, abkl, cdij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                        self.u_doubles) \
+                           + ctf.einsum("klcd, cdij, abkl -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij, self.u_doubles) \
+                           + ctf.einsum("abcd, cdij -> abij", dict_t_V["abcd"], self.u_doubles)
+
 
         return t_delta_doubles
     
