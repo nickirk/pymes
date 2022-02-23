@@ -140,23 +140,97 @@ class EOM_CCSD:
                                      dtype=self.u_doubles.dtype, 
                                      sp=self.u_doubles.sp)
 
-        # add those involve P(ijab,jiba) and from u_singles
-        t_delta_doubles += 4. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
-                                           self.u_doubles)\
-                           - 2. * ctf.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
-                                            self.u_singles) \
-                           - 2. * ctf.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
-                                            self.u_doubles) \
+        # add those involving P(ijab,jiba) and from u_singles, in total 18 terms
+        t_delta_doubles += - 2. * ctf.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
                            - 2. * ctf.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], self.ccsd.t_T_abij,
                                              self.u_singles) \
+                           + 2. * ctf.einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           + 2. * ctf.einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], dict_t_V["abij"],
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], dict_t_V["abij"],
+                                             self.u_singles) \
+                           + 1. * ctf.einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           + 1. * ctf.einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           + 1. * ctf.einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("kbij, ak -> abij", dict_t_V["iajk"], self.u_singles) \
+                           + 1. * ctf.einsum("kldi, bdkj, al -> abij", dict_t_V["ijak"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("kacd, bckj, di -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           + 1. * ctf.einsum("kldi, abkj, dl -> abij", dict_t_V["ijak"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("kadc, cbkj, di -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("kadc, bcki, dj -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("lacd, cdji, bl -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           - 1. * ctf.einsum("lacd, cbij, dl -> abij", dict_t_V["iabc"], self.ccsd.t_T_abij,
+                                             self.u_singles) \
+                           + 1. * ctf.einsum("abic, cj -> abij", dict_t_V["abic"], self.u_singles)
+
+        # add those involving P(ijab,jiba) and from u_doubles, in total 22 terms
+        t_delta_doubles += + 4. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                           self.u_doubles) \
+                           - 2. * ctf.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("klcd, cdki, ablj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("klcd, caki, bdlj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 2. * ctf.einsum("kaci, cbkj -> abij", dict_t_V["iabj"],
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 2. * ctf.einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 1. * ctf.einsum("ki, abkj -> abij", t_fock_pq[:no, no:],
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("ac, cbij -> abij", t_fock_pq[no:, no:],
+                                             self.u_doubles) \
+                           - 1. * ctf.einsum("kaic, cbkj -> abij", dict_t_V["iajb"],
+                                             self.u_doubles) \
+                           - 1. * ctf.einsum("kbic, ackj -> abij", dict_t_V["iajb"],
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("kldc, dcki, ablj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           - 1. * ctf.einsum("kaci, bckj -> abij", dict_t_V["iabj"],
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("kldc, abkj, dcli -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("kldc, caki, dbjl -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("kldc, ackj, dbil -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles) \
+                           + 1. * ctf.einsum("lkcd, cbij, dalk -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                             self.u_doubles)
+
         # add exchange contributions
-        t_delta_doubles.("abij") << t_delta_doubles("baji")
+        t_delta_doubles.i("abij") << t_delta_doubles.i("baji")
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        t_delta_doubles += ctf.einsum("klij, abkl -> abij", dict_t_V["ijkl"], self.u_doubles) \
-                           + ctf.einsum("klcd, abkl, cdij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+        t_delta_doubles += + ctf.einsum("klij, abkl -> abij", dict_t_V["ijkl"], self.u_doubles) \
+                           + ctf.einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
                                         self.u_doubles) \
-                           + ctf.einsum("klcd, cdij, abkl -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij, self.u_doubles) \
+                           + ctf.einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], self.ccsd.t_T_abij,
+                                        self.u_doubles) \
                            + ctf.einsum("abcd, cdij -> abij", dict_t_V["abcd"], self.u_doubles)
 
 

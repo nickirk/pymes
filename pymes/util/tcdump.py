@@ -96,7 +96,7 @@ def _read_from_hdf5_tcdump(file_name="TCDUMP.hdf5"):
     import h5py
     # if hdf5 file format is used, try to read in parallel.
     # the tensor t_V_opqrst is stored as a sparse ctf tensor
-    f = h5py.File(file_name)
+    f = h5py.File(file_name, 'r')
     ints_raw = f['tcdump']['values']
     inds_raw = f['tcdump']['indices']
     nb = f['tcdump'].attrs['nOrbs']
@@ -143,3 +143,10 @@ def restore_6_fold_sym(inds, val, nb):
     inds_sym = list(set(inds_sym))
     ints_sym = [val] * len(inds_sym)
     return inds_sym, ints_sym
+
+def restore_6_fold_sym_tensor(t_L_opqrst):
+
+    for per_1, per_2 in zip(itertools.permutations("opq"), itertools.permutations("rst")):
+
+
+    return t_L_opqrst
