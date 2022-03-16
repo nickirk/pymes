@@ -143,10 +143,3 @@ def restore_6_fold_sym(inds, val, nb):
     inds_sym = list(set(inds_sym))
     ints_sym = [val] * len(inds_sym)
     return inds_sym, ints_sym
-
-def restore_6_fold_sym_tensor(t_L_opqrst):
-
-    for per_1, per_2 in zip(itertools.permutations("opq"), itertools.permutations("rst")):
-
-
-    return t_L_opqrst

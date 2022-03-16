@@ -121,7 +121,7 @@ class CCSD(ccd.CCD):
         print_logging_info("Using DIIS mixer: ", self.is_diis, level=1)
         print_logging_info("Iteration = 0", level=1)
 
-        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift,
+        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, dict_t_V["ijab"], dict_t_V["abij"], level_shift,
                                     sp=sp)
         t_T_ai = ctf.tensor([nv, no], dtype=t_T_abij.dtype, sp=sp)
         t_T_ai.set_zero()

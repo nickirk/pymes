@@ -1,10 +1,11 @@
 import time
 import numpy as np
 import ctf
+import os, psutil
 
 from pymes.log import print_logging_info
 
-def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
+def solve(tEpsilon_i, tEpsilon_a, t_V_ijab, t_V_abij, levelShift=0., sp=0):
     '''
     mp2 algorithm
     '''
@@ -16,45 +17,51 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     no = tEpsilon_i.size
     nv = tEpsilon_a.size
 
-    tV_ijab = tV_pqrs[:no,:no,no:,no:]
-    tV_abij = tV_pqrs[no:,no:,:no,:no]
+    #t_T_abij = t_V_abij.copy()
+    t_T_abij = ctf.tensor([nv,nv,no,no],dtype=t_V_abij.dtype,sp=t_V_abij.sp)
 
-
-    tT_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype,sp=sp)
-    #tT_abij += tV_abij
-    tD_abij = ctf.tensor([nv,nv,no,no],dtype=tV_abij.dtype, sp=sp)
-
-    # the following ctf.einsum gives wrong result, with nan
-    # the eisum gives the outer product of the input tensors
-    #EinsumDabij = np.einsum('i,j,a,b->abij',tEpsilon_i.to_nparray(), tEpsilon_i.to_nparray(), (-tEpsilon_a).to_nparray(),(-tEpsilon_a).to_nparray())
-    #tEinsumDabij = ctf.einsum('i,j,a,b->abij',tEpsilon_i, tEpsilon_i, -tEpsilon_a,-tEpsilon_a)
-    #tEinsumDabij = ctf.astensor(EinsumDabij)
 
     # the following ctf expression calcs the outer sum, as wanted.
-    tD_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
-    #tD_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
-    tD_abij = 1./(tD_abij+levelShift)
+    print_logging_info("Creating D_abij", level = 1)
+    process = psutil.Process(os.getpid())
+
+    # memory efficient implementation for sparse V_abij, validity for dense still need to be tested.
+    print_logging_info("Calculating T_abij", level = 1)
+    inds, vals = t_V_abij.read_local_nnz()
+    del t_V_abij
+    epsilon_i = tEpsilon_i.to_nparray()
+    epsilon_a = tEpsilon_a.to_nparray()
+
+    print_logging_info("Looping through nnz in t_V_abij", level = 1)
+    print_logging_info("Total nnz entries on rank 0 = ", len(inds), level = 1)
+    num_proc = world.np()
+
+    for ind in range(len(inds)):
+        if ind % num_proc == 0:
+            print_logging_info("Completed ", ind/len(inds)*100, " percent...", level=2)
+            print_logging_info("Current memory usage ", process.memory_info().rss / 1024. ** 2, " MB", level=2)
+        global_ind = inds[ind]
+        [a, b, i, j] = get_orb_inds(global_ind, [nv, nv, no, no])
+        vals[ind] /= (epsilon_i[i] + epsilon_i[j] - epsilon_a[a] - epsilon_a[b] + levelShift)
+
+    t_T_abij.write(inds, vals)
+
+    #t_T_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
+    #t_D_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
+    #t_T_abij = 1./(t_T_abij+levelShift)
     # why the ctf contraction is not used here?
     # let's see if the ctf contraction does the same job
-    tT_abij = ctf.einsum('abij,abij->abij', tV_abij, tD_abij)
-    #tT_abij.i("abij") << tV_abij.i("abij") * tD_abij.i("abij")
 
-    # the following expression evaluate the sum of the two tensors on the right
-    # to form an intermediate tensor
-    # and then assign the sum of the intermediate tensor and the previous two tensors
-    # on the same indices to the tensor on the left. Tensor contraction always
-    # sum on the same indices!!
-    # tT2_abij.i("abij") << tT2_abij.i('abij') +  tD_abij.i("abij")
+    # the implementation below is memory heavy
+    #t_T_abij = ctf.einsum('abij,abij->abij', t_V_abij, t_T_abij)
+    #t_T_abij = t_V_abij / (t_T_abij + levelShift)
 
-    #write2Cc4sTensor(tT_abij.to_nparray(),[4,nv,nv,no,no],"Doubles")
 
-    eDir  = 2.0*ctf.einsum('abij,ijab->',tT_abij, tV_ijab)
-    eExc = -1.0*ctf.einsum('abij,ijba->',tT_abij, tV_ijab)
-    # There is a bug with this contraction involving
-    # exchange integals, using einsum instead
-    # tested against cc4s.
-    #print_logging_info(edir)
 
+    print_logging_info("Calculating direct energy", level = 1)
+    eDir  = 2.0*ctf.einsum('abij,ijab->',t_T_abij, t_V_ijab)
+    print_logging_info("Calculating exchange energy", level = 1)
+    eExc = -1.0*ctf.einsum('abij,ijba->',t_T_abij, t_V_ijab)
     print_logging_info("Direct contribution = {:.12f}".format(np.real(eDir)),\
                        level=1)
     print_logging_info("Exchange contribution = {:.12f}".format(np.real(eExc)),\
@@ -62,4 +69,21 @@ def solve(tEpsilon_i, tEpsilon_a, tV_pqrs, levelShift=0., sp=0):
     print_logging_info("MP2 energy = {:.12f}".format(np.real(eDir+eExc)), level=1)
     print_logging_info("{:.3f} seconds spent on "\
                        .format((time.time()-timeMp2))+algoName, level=1)
-    return [eDir+eExc, tT_abij]
+    return [eDir+eExc, t_T_abij]
+
+def get_orb_inds(global_ind, dims):
+    """
+    Args:
+        global_ind: int, the global index of an entry on a ctf tensor
+        dims: list of ints, the dimensions of the ctf tensor
+
+    Returns:
+        inds: list of ints, the corresponding indices of the entry on the tensor
+    """
+
+    inds = []
+    for i in range(len(dims)):
+        ind = global_ind // np.prod(dims[i+1:])
+        global_ind -= ind * np.prod(dims[i+1:])
+        inds.append(int(ind))
+    return inds
