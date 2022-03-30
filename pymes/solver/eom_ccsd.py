@@ -66,6 +66,7 @@ class EOM_CCSD:
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
                             - t_epsilon_a.i("a") - t_epsilon_a.i("b")
         lowest_ex_ind = np.argsort(-t_D_ai.to_nparray().ravel())[:self.n_excit]
+
         for i in range(self.n_excit):
             A = np.zeros(t_D_ai.shape).ravel()
             A[lowest_ex_ind] = 1.
@@ -73,8 +74,12 @@ class EOM_CCSD:
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor(t_D_abij.shape))
         # start iterative solver, arnoldi or davidson
-        # TODO: need QR decomposition of the matrix made up of the states to ensure the orthogonality among them
+        # need QR decomposition of the matrix made up of the states to ensure the orthogonality among them~~
         # u_singles, u_doubles = QR(u_singles, u_doubles)
+        # in a first attempt, we don't need the QR decomposition
+
+
+
         is_converged = False
         for i in range(self.max_it):
             if not is_converged:
@@ -148,8 +153,7 @@ class EOM_CCSD:
                            + ctf.einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"],
                                         self.ccsd.t_T_abij, u_singles_n) \
                            + ctf.einsum("jkcb, abji, ck->ai", dict_t_V["ijab"],
-                                        self.ccsd.t_T_abij, u_singles_n) \
- \
+                                        self.ccsd.t_T_abij, u_singles_n)
         return t_delta_singles
 
     def update_doubles(self, t_fock_pq, dict_t_V, u_singles_n, u_doubles_n):

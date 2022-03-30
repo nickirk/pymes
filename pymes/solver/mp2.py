@@ -38,8 +38,7 @@ def solve(tEpsilon_i, tEpsilon_a, t_V_ijab, t_V_abij, levelShift=0., sp=0):
 
     for ind in range(len(inds)):
         if ind % num_proc == 0:
-            print_logging_info("Completed ", ind/len(inds)*100, " percent...", level=2)
-            print_logging_info("Current memory usage ", process.memory_info().rss / 1024. ** 2, " MB", level=2)
+            print_logging_info("Completed {:.2f} percent...".format(ind/len(inds)*100), level=2)
         global_ind = inds[ind]
         [a, b, i, j] = get_orb_inds(global_ind, [nv, nv, no, no])
         vals[ind] /= (epsilon_i[i] + epsilon_i[j] - epsilon_a[a] - epsilon_a[b] + levelShift)
