@@ -28,27 +28,29 @@ Author: Ke Liao <ke.liao.whu@gmail.com>
 
 class EOM_CCSD:
     def __init__(self, ccsd, n_excit=3):
-        '''
+        """
         EOM_CCSD takes in a CCSD object, because the T1, T2 and dressed
         integrals are needed.
-        '''
+        """
         self.algo_name = "EOM-CCSD"
         self.ccsd = ccsd
         self.n_excit = n_excit
         self.u_singles = []
         self.u_doubles = []
-        self.u_vecs = [self.u_singles, self.u_doubles]
         self.e_excit = np.zeros(n_excit)
+        self.max_dim = n_excit * 4
+        self.e_epsilon = 1.e-5
 
     def write_logging_info(self):
         return
 
     def solve(self, t_fock_pq, t_V_pqrs):
-        '''
+        """
         Solve for the requested number (n_excit) of excited states vectors and
-        energies. 
+        energies.
 
-        '''
+        """
+        time_init = time.time()
         dict_t_V = self.ccsd.partition_V(t_V_pqrs)
         t_fock_dressed_pq = self.ccsd.get_T1_dressed_fock(t_fock_pq,
                                                           self.ccsd.t_T_ai,
@@ -64,8 +66,9 @@ class EOM_CCSD:
         t_D_abij = ctf.tensor(self.ccsd.t_T_abij.shape)
         t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-                            - t_epsilon_a.i("a") - t_epsilon_a.i("b")
-        lowest_ex_ind = np.argsort(-t_D_ai.to_nparray().ravel())[:self.n_excit]
+                              - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+        D_ai = -t_D_ai.to_nparray().ravel()
+        lowest_ex_ind = np.argsort(D_ai)[:self.n_excit]
 
         for i in range(self.n_excit):
             A = np.zeros(t_D_ai.shape).ravel()
@@ -73,25 +76,77 @@ class EOM_CCSD:
             A = A.reshape(-1, no)
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor(t_D_abij.shape))
+
         # start iterative solver, arnoldi or davidson
         # need QR decomposition of the matrix made up of the states to ensure the orthogonality among them~~
         # u_singles, u_doubles = QR(u_singles, u_doubles)
         # in a first attempt, we don't need the QR decomposition
-
-
-
-        is_converged = False
         for i in range(self.max_it):
-            if not is_converged:
-                for n_e in range(self.n_excit):
-                    self.u_singles[n_e] += self.update_singles(t_fock_dressed_pq,
-                                                               dict_t_V_dressed, self.u_singles[n_e],
-                                                               self.u_doubles[n_e])
-                    self.u_doubles[n_e] += self.update_doubles(t_fock_dressed_pq,
-                                                               dict_t_V_dressed, self.u_singles[n_e],
-                                                               self.u_doubles[n_e])
+            time_iter_init = time.time()
+            subspace_dim = len(self.u_singles)
+            w_singles = [ctf.tensor(A.shape, dtype=A.dtype, sp=A.sp)] * subspace_dim
+            w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
+            B = np.zeros([subspace_dim, subspace_dim])
+            for l in range(subspace_dim):
+                w_singles[l] += self.update_singles(t_fock_dressed_pq,
+                                                      dict_t_V_dressed, self.u_singles[l],
+                                                      self.u_doubles[l])
+                w_doubles[l] += self.update_doubles(t_fock_dressed_pq,
+                                                      dict_t_V_dressed, self.u_singles[l],
+                                                      self.u_doubles[l])
+                # build Hamiltonian inside subspace
+                for j in range(l):
+                    B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                             + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
 
-        return self.e_excit, self.u_vecs
+           # diagnolise matrix B, find the lowest energies
+            e, v = np.linalg.eig(B)
+            lowest_ex_ind = e.argsort()[:self.n_excit]
+            e = e[lowest_ex_ind]
+            v = v[:, lowest_ex_ind]
+
+            # construct residuals
+            y_singles = ctf.tensor(w_singles[l].shape, dtype=w_singles[l].dtype, sp=w_singles.sp)
+            y_doubles = ctf.tensor(w_doubles[l].shape, dtype=w_doubles[l].dtype, sp=w_doubles.sp)
+            if subspace_dim >= self.max_dim:
+                for n in range(self.n_excit):
+                    y_singles.set_zero()
+                    y_doubles.set_zero()
+                    for l in range(subspace_dim):
+                        y_singles += self.u_singles[l] * v[l, n]
+                        y_doubles += self.u_doubles[l] * v[l, n]
+                    self.u_singles[n] = y_singles
+                    self.u_doubles[n] = y_doubles
+                self.u_singles = self.u_singles[:self.n_excit]
+                self.u_doubles = self.u_doubles[:self.n_excit]
+            else:
+                for n in range(self.n_excit):
+                    for l in range(subspace_dim):
+                        y_singles += w_singles[l] * v[l, n]
+                        y_doubles += w_doubles[l] * v[l, n]
+                        y_singles -= e[n] * self.u_singles[l] * v[l, n]
+                        y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
+                    self.u_singles.append(y_singles/(e[n]-D_ai[n]))
+                    self.u_doubles.append(y_doubles/(e[n]-D_ai[n]))
+
+            diff_e_norm = np.linalg.norm(self.e_excit - e)
+            if diff_e_norm < self.e_epsilon:
+                print_logging_info("Iterative solver converged.", level=1)
+                break
+            else:
+                print_logging_info("Iteration = ", i, level = 2)
+                print_logging_info("Norm of energy difference = ", diff_e_norm, level = 2)
+                print_logging_info("Excited states energies = ", e, level = 2)
+                print_logging_info("Took {.3f} seconds ".format(time.time()-time_iter_init), level=2)
+        print_logging_info("EOM-CCSD finished in {.3f} seconds".format(time.time()-time_init), level=1)
+        print_logging_info("Converged excited states energies = ", e, level=1)
+        self.e_excit = e
+
+        return self.e_excit
 
     def update_singles(self, t_fock_pq, dict_t_V, u_singles_n, u_doubles_n):
         """
