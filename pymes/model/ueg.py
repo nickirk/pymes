@@ -402,7 +402,7 @@ class UEG:
                                    .format(time.time() - startTime)
                                    + "the {}-{} out of {} orbitals" \
                                    .format(p, p + world.np() \
-                    if p + world.np() < nP else nP, nP), \
+                                   if p + world.np() < nP else nP, nP), \
                                    level=1)
                 for r in range(nP):
                     dIntK = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
@@ -419,7 +419,7 @@ class UEG:
                                intKS[2] + self.imax
                         if locS < len(self.basis_indices_map) and locS >= 0:
                             s = int(self.basis_indices_map[locS])
-                            if s < 0:
+                            if s < 0 or s >= nP:
                                 continue
                         else:
                             continue
@@ -433,18 +433,11 @@ class UEG:
                         elif is_rpa_approx:
                             # tc
                             if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r * 2].kp \
-                                        - self.basis_fns[s * 2].kp
-                                w = 4. * np.pi / dkSquare \
-                                    + uMat \
-                                    + dkSquare * correlator(dkSquare) \
-                                    - (rs_dk.dot(dKVec)) \
-                                    * correlator(dkSquare) \
-                                    - (self.n_ele - 2) * dkSquare \
+                                w = - (self.n_ele) * dkSquare \
                                     * correlator(dkSquare) ** 2 / self.Omega
                                 w = w / self.Omega
                             else:
-                                w = uMat / self.Omega
+                                w = 0.
                             indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
                             values.append(w)
                         elif is_only_2b:
@@ -494,11 +487,10 @@ class UEG:
                                     self.basis_fns[2 * p].kp, dKVec) \
                                     + 2. * self.contractP_KWithQ( \
                                     self.basis_fns[2 * r].kp, dKVec)
-                                w = w / self.Omega
                             else:
                                 w = (2. * self.contractP_KWithQ( \
                                     self.basis_fns[2 * r].kp, dKVec))
-                                w = w / self.Omega
+                            w = w / self.Omega
                             indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
                             values.append(w)
                         # exchange 1-3 are for test purpose only.
@@ -880,7 +872,8 @@ class UEG:
         mu = np.sqrt(4.*np.pi/rho)
         k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].kp
         k_fermi_square = k_fermi.dot(k_fermi)
-        delta_k_square = (2.*np.pi/self.L)**2
+        #delta_k_square = (2.*np.pi/self.L)**2
+        delta_k_square = k_fermi_square
         #int_k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].k
         #beta_square = kSquare / (k_fermi.dot(k_fermi))
 
