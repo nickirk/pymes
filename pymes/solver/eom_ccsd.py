@@ -1,9 +1,8 @@
 import time
-import numpy as np
+
 import ctf
-from ctf.core import *
-from pymes.solver import ccsd
-from pymes.mixer import diis
+import numpy as np
+
 from pymes.log import print_logging_info
 
 '''
@@ -51,7 +50,9 @@ class EOM_CCSD:
 
         """
         time_init = time.time()
-        dict_t_V = self.ccsd.partition_V(t_V_pqrs)
+        no = self.ccsd.no
+        dict_t_V = self.ccsd.partition_V(no, t_V_pqrs)
+        print(dict_t_V["iabj"])
         t_fock_dressed_pq = self.ccsd.get_T1_dressed_fock(t_fock_pq,
                                                           self.ccsd.t_T_ai,
                                                           dict_t_V)
@@ -59,7 +60,6 @@ class EOM_CCSD:
                                                       dict_t_V)
 
         # build guesses
-        no = self.ccsd.no
         t_epsilon_i = t_fock_pq.diagonal()[:no]
         t_epsilon_a = t_fock_pq.diagonal()[no:]
         t_D_ai = ctf.tensor(self.ccsd.t_T_ai.shape)
@@ -328,4 +328,4 @@ class EOM_CCSD:
         u_doubles_: list of ctf tensors, which are now orthogonalised
         """
 
-        return u_singles_, u_doubles_
+        return
