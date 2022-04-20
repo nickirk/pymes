@@ -5,21 +5,29 @@ import os, psutil
 
 from pymes.log import print_logging_info
 
-def solve(tEpsilon_i, tEpsilon_a, t_V_ijab, t_V_abij, levelShift=0., sp=0):
-    '''
+def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=0):
+    """
     mp2 algorithm
-    '''
+    Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
+    -------------
+    Parameters:
+       t_epsilon_i: 1D ctf tensor. The occupied orbital energies
+       t_epsilon_a: 1D ctf tensor. The unoccupied orbital energies
+       t_V_ijab: ctf tensor. oovv 2-body integrals
+       t_V_abij: ctf tensor. vvoo 2-body integrals
+       leve_shift: float.
+       sp: 0 or 1. Sparsity of ctf tensors
+       nv_part_size: integer. The partition size of the virtual index in calculating the MP2 energies, to save memory.
+                     The default value is 0, which means no partition is used. It will be set to nv in the algorithm.
+    """
+
     algoName = "mp2.solve"
     world = ctf.comm()
     timeMp2 = time.time()
     print_logging_info(algoName,level=0)
 
-    no = tEpsilon_i.size
-    nv = tEpsilon_a.size
-
-    #t_T_abij = t_V_abij.copy()
-    t_T_abij = ctf.tensor([nv,nv,no,no],dtype=t_V_abij.dtype,sp=t_V_abij.sp)
-
+    no = t_epsilon_i.size
+    nv = t_epsilon_a.size
 
     # the following ctf expression calcs the outer sum, as wanted.
     print_logging_info("Creating D_abij", level = 1)
@@ -29,8 +37,8 @@ def solve(tEpsilon_i, tEpsilon_a, t_V_ijab, t_V_abij, levelShift=0., sp=0):
     print_logging_info("Calculating T_abij", level = 1)
     inds, vals = t_V_abij.read_local_nnz()
     del t_V_abij
-    epsilon_i = tEpsilon_i.to_nparray()
-    epsilon_a = tEpsilon_a.to_nparray()
+    epsilon_i = t_epsilon_i.to_nparray()
+    epsilon_a = t_epsilon_a.to_nparray()
 
     print_logging_info("Looping through nnz in t_V_abij", level = 1)
     print_logging_info("Total nnz entries on rank 0 = ", len(inds), level = 1)
@@ -41,26 +49,38 @@ def solve(tEpsilon_i, tEpsilon_a, t_V_ijab, t_V_abij, levelShift=0., sp=0):
             print_logging_info("Completed {:.2f} percent...".format(ind/len(inds)*100), level=2)
         global_ind = inds[ind]
         [a, b, i, j] = get_orb_inds(global_ind, [nv, nv, no, no])
-        vals[ind] /= (epsilon_i[i] + epsilon_i[j] - epsilon_a[a] - epsilon_a[b] + levelShift)
+        vals[ind] /= (epsilon_i[i] + epsilon_i[j] - epsilon_a[a] - epsilon_a[b] + leve_shift)
 
+    del epsilon_i, t_epsilon_i
+    del epsilon_a, t_epsilon_a
+
+    t_T_abij = ctf.tensor([nv,nv,no,no], dtype=t_V_ijab.dtype, sp=t_V_ijab.sp)
     t_T_abij.write(inds, vals)
 
-    #t_T_abij.i("abij") << tEpsilon_i.i("i") + tEpsilon_i.i("j")-tEpsilon_a.i("a")-tEpsilon_a.i("b")
-    #t_D_abij = ctf.tensor([no,no,nv,nv],dtype=complex, sp=1)
-    #t_T_abij = 1./(t_T_abij+levelShift)
-    # why the ctf contraction is not used here?
-    # let's see if the ctf contraction does the same job
+    if nv_part_size == 0:
+        n_part = 1
+        nv_part_size = nv
+    else:
+        n_part = int(nv//nv_part_size) + 1
+    eDir = 0.
+    eExc = 0.
+    print_logging_info("Summing direct and exchange contributions", level=1)
+    print_logging_info("Partitioning T and V tensors", level=1)
+    for n in range(n_part):
+        n_lower = n * nv_part_size
+        if n_lower >= nv:
+            break
+        n_higher = (n + 1) * nv_part_size
+        if n_higher > nv:
+            n_higher = nv
+        print_logging_info("n_lower = ", n_lower, ", n_higher = ", n_higher, level = 2)
+        t_T_nmij = t_T_abij[n_lower:n_higher, :, :, :]
+        t_V_ijnm = t_V_ijab[:, :, n_lower:n_higher, :]
 
-    # the implementation below is memory heavy
-    #t_T_abij = ctf.einsum('abij,abij->abij', t_V_abij, t_T_abij)
-    #t_T_abij = t_V_abij / (t_T_abij + levelShift)
+        eDir += 2.0*ctf.einsum('abij, ijab->',t_T_nmij, t_V_ijnm)
+        eExc += -1.0*ctf.einsum('abij, jiab->',t_T_nmij, t_V_ijnm)
 
 
-
-    print_logging_info("Calculating direct energy", level = 1)
-    eDir  = 2.0*ctf.einsum('abij,ijab->',t_T_abij, t_V_ijab)
-    print_logging_info("Calculating exchange energy", level = 1)
-    eExc = -1.0*ctf.einsum('abij,ijba->',t_T_abij, t_V_ijab)
     print_logging_info("Direct contribution = {:.12f}".format(np.real(eDir)),\
                        level=1)
     print_logging_info("Exchange contribution = {:.12f}".format(np.real(eExc)),\
