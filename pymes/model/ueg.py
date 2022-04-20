@@ -83,20 +83,20 @@ class UEG:
 
         self.gamma = None
 
-    def is_k_in_basis(self, k):
+    def is_k_in_basis(self, ke):
         """
         Checks if the input k-vector is inside of the basis set
         defined by the kinetic energy cutoff or not.
 
         Parameters
         ----------
-        k: nparray of size 3
-            k-vector
+        ke: float, kinetic energy of this plane wave function, possibly shifted
 
         Returns:
         a bool
         """
-        if k.dot(k) <= self.cutoff:
+        kinetic_cutoff = self.cutoff * (2 * np.pi / self.L) ** 2 / 2.
+        if ke <= kinetic_cutoff:
             return True
         return False
 
@@ -104,7 +104,7 @@ class UEG:
         """ Member function of class UEG.
             Initialising a map between indices and the k-vectors.
             The map is stored in self.basis_indices_map.
-            This map will be used for fast lookup and manipunation of
+            This map will be used for fast lookup and manipulation of
             the k-vectors, for example in momentum conservation checkups.
 
         Modifies
@@ -123,7 +123,7 @@ class UEG:
             self.basis_indices_map[s] = i
 
     # --- Basis set ---
-    def init_single_basis(self, cutoff):
+    def init_single_basis(self, cutoff, k_shift=[0., 0., 0.]):
         """Create single-particle basis. Member function of class UEG
 
         Parameters
@@ -133,6 +133,8 @@ class UEG:
             single-particle basis.
             Only single-particle basis functions with a kinetic energy equal
             to or less than the cutoff are included as basis functions.
+        k_shift: 1D float array or list, a shift added to plane waves, in
+                 unit of 2pi/L
 
         Returns
         -------
@@ -144,17 +146,24 @@ class UEG:
 
         # Single particle basis within the desired energy cutoff.
         # cutoff = cutoff*(2*np.pi/self.L)**2
-        imax = int(np.ceil(np.sqrt(cutoff))) + 1
+        k_shift = np.array(k_shift)
+        kp_shift = k_shift * 2 * np.pi / self.L
+        imax = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1
+        delta_kp_square = kp_shift.dot(kp_shift)
         self.cutoff = cutoff
         self.imax = imax
+        # basis_fns = [planewave.BasisFunc(0, 0, 0, self.L, 1, k_shift), planewave.BasisFunc(0, 0, 0, self.L, -1, k_shift)]
         basis_fns = []
+
         for i in range(-imax, imax + 1):
             for j in range(-imax, imax + 1):
                 for k in range(-imax, imax + 1):
-                    bfn = planewave.BasisFunc(i, j, k, self.L, 1)
-                    if self.is_k_in_basis(bfn.k):
-                        basis_fns.append(planewave.BasisFunc(i, j, k, self.L, 1))
-                        basis_fns.append(planewave.BasisFunc(i, j, k, self.L, -1))
+                    # if i == j == k ==0:
+                    #    continue
+                    bfn = planewave.BasisFunc(i, j, k, self.L, 1, k_shift)
+                    if self.is_k_in_basis(bfn.kinetic):
+                        basis_fns.append(planewave.BasisFunc(i, j, k, self.L, 1, k_shift))
+                        basis_fns.append(planewave.BasisFunc(i, j, k, self.L, -1, k_shift))
         # Sort in ascending order of kinetic energy.  Note that python's .sort()
         # (since 2.3) is guaranteed to be stable.
         basis_fns.sort()
@@ -402,7 +411,7 @@ class UEG:
                                    .format(time.time() - startTime)
                                    + "the {}-{} out of {} orbitals" \
                                    .format(p, p + world.np() \
-                                   if p + world.np() < nP else nP, nP), \
+                    if p + world.np() < nP else nP, nP), \
                                    level=1)
                 for r in range(nP):
                     dIntK = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
@@ -869,13 +878,13 @@ class UEG:
         # gaskall correlator class and only initialize it once. For now I will
         # keep it here.
         rho = self.n_ele / self.Omega
-        mu = np.sqrt(4.*np.pi/rho)
+        mu = np.sqrt(4. * np.pi / rho)
         k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].kp
         k_fermi_square = k_fermi.dot(k_fermi)
-        #delta_k_square = (2.*np.pi/self.L)**2
+        # delta_k_square = (2.*np.pi/self.L)**2
         delta_k_square = k_fermi_square
-        #int_k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].k
-        #beta_square = kSquare / (k_fermi.dot(k_fermi))
+        # int_k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].k
+        # beta_square = kSquare / (k_fermi.dot(k_fermi))
 
         if self.gamma is not None:
             gamma = self.gamma
@@ -894,13 +903,13 @@ class UEG:
             if kSquare < k_cutoffSquare and kSquare > 1e-12:
                 result = mu / kSquare
             else:
-                #result = 4 * mu / kSquare ** 2
+                # result = 4 * mu / kSquare ** 2
                 result = 0.
         else:
             result = np.divide(mu, kSquare, out=np.zeros_like(kSquare),
                                where=(kSquare > 1e-12))
             result[kSquare > k_cutoffSquare] = 0.
-            #result += np.divide(4 * mu, kSquare ** 2,
+            # result += np.divide(4 * mu, kSquare ** 2,
             #                    out=np.zeros_like(kSquare),
             #                    where=(kSquare >= k_cutoffSquare))
         # there should be an overall - sign
@@ -975,7 +984,7 @@ class UEG:
             gamma = self.gamma
         # A corresponds to 1/gamma**2 in Gruneis paper
         A = np.sqrt(self.Omega / (4.0 * np.pi * self.n_ele))
-        A = 1./A * gamma
+        A = 1. / A * gamma
         # has to be - and divided by gamm to satisfy the cusp condition
         a = -4. * np.pi
         if self.k_cutoff is not None:
@@ -987,8 +996,7 @@ class UEG:
         if not multiply_by_k_square:
             # b = kSquare*(kSquare+gamma**2)
             b = (kSquare + A) * kSquare
-            result = np.divide(a, b, out=np.zeros_like(b), \
-                               where=np.abs(b) > k_cutoffDenom)
+            result = np.divide(a, b, out=np.zeros_like(b), where=np.abs(b) > k_cutoffDenom)
         else:
             if kSquare > k_cutoffSquare:
                 result = a / (kSquare + A)
@@ -1028,11 +1036,8 @@ class UEG:
         for p in range(0, nP, 1):
             for q in range(0, nP, 1):
                 for g in range(0, nG, 1):
-                    if ((basis[2 * p].k - basis[2 * q].k) \
-                        == overlap_basis[2 * g].k).all():
-                        GSquare = overlap_basis[2 * g].kp.dot( \
-                            overlap_basis[2 * g].kp)
+                    if ((basis[2 * p].k - basis[2 * q].k) == overlap_basis[2 * g].k).all():
+                        GSquare = overlap_basis[2 * g].kp.dot(overlap_basis[2 * g].kp)
                         if np.abs(GSquare) > 1e-12:
-                            gamma_pqG[p, q, g] = np.sqrt(4. * np.pi \
-                                                         / GSquare / self.Omega)
+                            gamma_pqG[p, q, g] = np.sqrt(4. * np.pi / GSquare / self.Omega)
         return gamma_pqG
