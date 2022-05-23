@@ -6,6 +6,7 @@ from pymes.solver import mp2, ccd
 from pymes.mixer import diis
 from pymes.log import print_logging_info
 from pymes.integral.partition import part_2_body_int
+from pymes.integral.partition import part_2_body_int
 
 einsum = partial(np.einsum, optimize=True)
 
