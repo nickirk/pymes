@@ -43,5 +43,3 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     print("Excited state energies = ", e_excit)
 #def test_ccsd_fno(fcidump_file="fcidump.no"):
 #    test_ccsd_energy(fcidump_file, ref_e=-0.01931436971985408)
-def main():
-    test_eom_ccsd_energy()

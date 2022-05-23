@@ -71,9 +71,9 @@ class EOM_CCSD:
         no = self.no
         t_epsilon_i = t_fock_pq.diagonal()[:no]
         t_epsilon_a = t_fock_pq.diagonal()[no:]
-        nv = t_epsilon_a.shape
+        nv = t_epsilon_a.shape[0]
         t_D_ai = ctf.tensor([nv, no])
-        t_D_abij = ctf.tensor(self.ccsd.t_T_abij.shape)
+        t_D_abij = ctf.tensor(t_T_abij.shape)
         t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
                               - t_epsilon_a.i("a") - t_epsilon_a.i("b")
@@ -92,10 +92,10 @@ class EOM_CCSD:
         # need QR decomposition of the matrix made up of the states to ensure the orthogonality among them~~
         # u_singles, u_doubles = QR(u_singles, u_doubles)
         # in a first attempt, we don't need the QR decomposition
-        for i in range(self.max_it):
+        for i in range(self.max_iter):
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
-            w_singles = [ctf.tensor(A.shape, dtype=A.dtype, sp=A.sp)] * subspace_dim
+            w_singles = [ctf.tensor(t_D_ai.shape, dtype=t_D_ai.dtype, sp=t_D_ai.sp)] * subspace_dim
             w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
@@ -121,8 +121,8 @@ class EOM_CCSD:
             v = v[:, lowest_ex_ind]
 
             # construct residuals
-            y_singles = ctf.tensor(w_singles[l].shape, dtype=w_singles[l].dtype, sp=w_singles.sp)
-            y_doubles = ctf.tensor(w_doubles[l].shape, dtype=w_doubles[l].dtype, sp=w_doubles.sp)
+            y_singles = ctf.tensor(w_singles[l].shape, dtype=w_singles[l].dtype, sp=w_singles[l].sp)
+            y_doubles = ctf.tensor(w_doubles[l].shape, dtype=w_doubles[l].dtype, sp=w_doubles[l].sp)
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -136,6 +136,8 @@ class EOM_CCSD:
                 self.u_doubles = self.u_doubles[:self.n_excit]
             else:
                 for n in range(self.n_excit):
+                    y_singles.set_zero()
+                    y_doubles.set_zero()
                     for l in range(subspace_dim):
                         y_singles += w_singles[l] * v[l, n]
                         y_doubles += w_doubles[l] * v[l, n]
@@ -152,7 +154,7 @@ class EOM_CCSD:
                 print_logging_info("Iteration = ", i, level = 2)
                 print_logging_info("Norm of energy difference = ", diff_e_norm, level = 2)
                 print_logging_info("Excited states energies = ", e, level = 2)
-                print_logging_info("Took {.3f} seconds ".format(time.time()-time_iter_init), level=2)
+                print_logging_info("Took {:.3f} seconds ".format(time.time()-time_iter_init), level=2)
         print_logging_info("EOM-CCSD finished in {.3f} seconds".format(time.time()-time_init), level=1)
         print_logging_info("Converged excited states energies = ", e, level=1)
         self.e_excit = e

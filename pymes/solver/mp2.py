@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import ctf
-import os, psutil
 
 from pymes.log import print_logging_info
 
@@ -31,7 +30,6 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
 
     # the following ctf expression calcs the outer sum, as wanted.
     print_logging_info("Creating D_abij", level = 1)
-    process = psutil.Process(os.getpid())
 
     # memory efficient implementation for sparse V_abij, validity for dense still need to be tested.
     print_logging_info("Calculating T_abij", level = 1)
