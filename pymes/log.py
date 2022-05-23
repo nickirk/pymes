@@ -2,7 +2,7 @@
 
 import ctf
 
-def print_title(title_name,sep_symbol,level=1):
+def print_title(title_name, sep_symbol="=", level=1):
     world=ctf.comm()
     if world.rank()  == 0:
         if level == 0:
