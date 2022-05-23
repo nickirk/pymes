@@ -74,7 +74,7 @@ class CCD:
         print_logging_info("Using Bruekner quasi-particle energy: ", self.is_bruekner,
                            level=1)
         print_logging_info("Iteration = 0", level=1)
-        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift,
+        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift,
                                     sp=sp)
         if amps is not None:
             t_T_abij = amps

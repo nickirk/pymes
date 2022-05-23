@@ -34,16 +34,12 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     # partition V integrals
     dict_t_V = part_2_body_int(no, t_V_pqrs)
     t_fock_dressed_pq = mycc.get_T1_dressed_fock(t_fock_pq, mycc.t_T_ai, dict_t_V)
-    dict_t_V_dressed = {}
-    print(dict_t_V.keys())
+
     dict_t_V_dressed= {}.fromkeys(dict_t_V.keys(), None)
-    print(dict_t_V_dressed.keys())
     dict_t_V_dressed.update({"ijka": None, "iabj": None})
-    print(dict_t_V_dressed.keys())
     dict_t_V_dressed = mycc.get_T1_dressed_V(mycc.t_T_ai, dict_t_V, dict_t_V_dressed)
-    print(dict_t_V_dressed.keys())
     eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=2)
-    e_excit,_ = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
+    e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
     print("Excited state energies = ", e_excit)
 #def test_ccsd_fno(fcidump_file="fcidump.no"):
 #    test_ccsd_energy(fcidump_file, ref_e=-0.01931436971985408)

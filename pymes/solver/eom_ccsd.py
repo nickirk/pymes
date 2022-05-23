@@ -2,7 +2,6 @@ import time
 import numpy as np
 import ctf
 
-from pymes.solver import ccsd
 from pymes.mixer import diis
 from pymes.log import print_logging_info, print_title
 from pymes.integral.partition import part_2_body_int
@@ -27,7 +26,6 @@ directory of pymes.
 Author: Ke Liao <ke.liao.whu@gmail.com>
 '''
 
-
 class EOM_CCSD:
     def __init__(self, no, n_excit=3):
         '''
@@ -39,10 +37,12 @@ class EOM_CCSD:
         # its member functions
         self.no = no
         self.n_excit = n_excit
-        self.u_singles = None
-        self.u_doubles = None
-        self.u_vecs = [self.u_singles, self.u_doubles]
+        self.u_singles = []
+        self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
+        self.max_dim = n_excit * 4
+        self.e_epsilon = 1.e-5
+
 
         self.max_iter = 50
 
@@ -67,27 +67,97 @@ class EOM_CCSD:
         """
         print_title("EOM-CCSD Solver", )
 
+        # build guesses
+        no = self.no
+        t_epsilon_i = t_fock_pq.diagonal()[:no]
+        t_epsilon_a = t_fock_pq.diagonal()[no:]
+        nv = t_epsilon_a.shape
+        t_D_ai = ctf.tensor([nv, no])
+        t_D_abij = ctf.tensor(self.ccsd.t_T_abij.shape)
+        t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
+        t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
+                              - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+        D_ai = -t_D_ai.to_nparray().ravel()
+        lowest_ex_ind = np.argsort(D_ai)[:self.n_excit]
+
         print_logging_info("Initialising u tensors...", level=1)
-        if self.u_singles is None:
-            nv = t_T_abij.shape[0]
-            self.u_singles = [ctf.tensor([nv, self.no], dtype=t_T_abij.dtype, sp=t_T_abij.sp)] * self.n_excit
-        if self.u_doubles is None:
-            self.u_doubles = [ctf.tensor(t_T_abij.shape, dtype=t_T_abij.dtype, sp=t_T_abij.sp)] * self.n_excit
+        for i in range(self.n_excit):
+            A = np.zeros(t_D_ai.shape).ravel()
+            A[lowest_ex_ind] = 1.
+            A = A.reshape(-1, no)
+            self.u_singles.append(ctf.astensor(A))
+            self.u_doubles.append(ctf.tensor(t_D_abij.shape))
+
         # start iterative solver, arnoldi or davidson
-        is_converged = False
-        print_logging_info("Starting iterative solver.", level=1)
-        for i in range(self.max_iter):
-            print_logging_info("Iter: ", i, level=2)
-            if not is_converged:
+        # need QR decomposition of the matrix made up of the states to ensure the orthogonality among them~~
+        # u_singles, u_doubles = QR(u_singles, u_doubles)
+        # in a first attempt, we don't need the QR decomposition
+        for i in range(self.max_it):
+            time_iter_init = time.time()
+            subspace_dim = len(self.u_singles)
+            w_singles = [ctf.tensor(A.shape, dtype=A.dtype, sp=A.sp)] * subspace_dim
+            w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
+            B = np.zeros([subspace_dim, subspace_dim])
+            for l in range(subspace_dim):
+                w_singles[l] += self.update_singles(t_fock_pq,
+                                                      dict_t_V, self.u_singles[l],
+                                                      self.u_doubles[l], t_T_abij)
+                w_doubles[l] += self.update_doubles(t_fock_pq,
+                                                      dict_t_V, self.u_singles[l],
+                                                      self.u_doubles[l], t_T_abij)
+                # build Hamiltonian inside subspace
+                for j in range(l):
+                    B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                             + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
+
+           # diagnolise matrix B, find the lowest energies
+            e, v = np.linalg.eig(B)
+            lowest_ex_ind = e.argsort()[:self.n_excit]
+            e = e[lowest_ex_ind]
+            v = v[:, lowest_ex_ind]
+
+            # construct residuals
+            y_singles = ctf.tensor(w_singles[l].shape, dtype=w_singles[l].dtype, sp=w_singles.sp)
+            y_doubles = ctf.tensor(w_doubles[l].shape, dtype=w_doubles[l].dtype, sp=w_doubles.sp)
+            if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
-                    print_logging_info("Updating the ", n, "-th state", level=3)
-                    self.u_singles[n] += self.update_singles(t_fock_pq, dict_t_V, self.u_singles[n],
-                                                       self.u_doubles[n], t_T_abij)
-                    self.u_doubles[n] += self.update_doubles(t_fock_pq, dict_t_V, self.u_singles[n],
-                                                          self.u_doubles[n], t_T_abij)
+                    y_singles.set_zero()
+                    y_doubles.set_zero()
+                    for l in range(subspace_dim):
+                        y_singles += self.u_singles[l] * v[l, n]
+                        y_doubles += self.u_doubles[l] * v[l, n]
+                    self.u_singles[n] = y_singles
+                    self.u_doubles[n] = y_doubles
+                self.u_singles = self.u_singles[:self.n_excit]
+                self.u_doubles = self.u_doubles[:self.n_excit]
+            else:
+                for n in range(self.n_excit):
+                    for l in range(subspace_dim):
+                        y_singles += w_singles[l] * v[l, n]
+                        y_doubles += w_doubles[l] * v[l, n]
+                        y_singles -= e[n] * self.u_singles[l] * v[l, n]
+                        y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
+                    self.u_singles.append(y_singles/(e[n]-D_ai[n]))
+                    self.u_doubles.append(y_doubles/(e[n]-D_ai[n]))
 
+            diff_e_norm = np.linalg.norm(self.e_excit - e)
+            if diff_e_norm < self.e_epsilon:
+                print_logging_info("Iterative solver converged.", level=1)
+                break
+            else:
+                print_logging_info("Iteration = ", i, level = 2)
+                print_logging_info("Norm of energy difference = ", diff_e_norm, level = 2)
+                print_logging_info("Excited states energies = ", e, level = 2)
+                print_logging_info("Took {.3f} seconds ".format(time.time()-time_iter_init), level=2)
+        print_logging_info("EOM-CCSD finished in {.3f} seconds".format(time.time()-time_init), level=1)
+        print_logging_info("Converged excited states energies = ", e, level=1)
+        self.e_excit = e
 
-        return self.e_excit, self.u_vecs
+        return self.e_excit
 
     def update_singles(self, t_fock_pq, dict_t_V, t_u_ai, t_u_abij, t_T_abij):
         """
@@ -103,7 +173,7 @@ class EOM_CCSD:
         t_T_abij: ctf tensor, the doubles amplitudes from ground state CCSD calculation
         Returns:
         --------
-        t_delta_u: ctf tensor, the change of the singles block of u
+        t_delta_singles: ctf tensor, the change of the singles block of u for the nth state
         """
 
         no = self.no
@@ -269,3 +339,21 @@ class EOM_CCSD:
                            + ctf.einsum("abcd, cdij -> abij", dict_t_V["abcd"], t_u_abij)
 
         return t_delta_doubles
+
+    def QR(self, u_singles, u_doubles):
+        """
+        This QR algorithm is designed to orthogonalize the states, in consideration of the ctf date structure
+        and aiming to minimize
+        the memory footprint. Each state consists of a singles and doubles block.
+        Parameters:
+        -----------
+        u_singles: list of ctf tensors, list of singles coefficients
+        u_doubles: list of ctf tensors, list of doubles coefficients
+
+        Returns:
+        --------
+        u_singles_: list of ctf tensors, which are now orthogonalised
+        u_doubles_: list of ctf tensors, which are now orthogonalised
+        """
+
+        return
