@@ -38,7 +38,7 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     dict_t_V_dressed= {}.fromkeys(dict_t_V.keys(), None)
     dict_t_V_dressed.update({"ijka": None, "iabj": None})
     dict_t_V_dressed = mycc.get_T1_dressed_V(mycc.t_T_ai, dict_t_V, dict_t_V_dressed)
-    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=2)
+    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=1)
     e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
     print("Excited state energies = ", e_excit)
 #def test_ccsd_fno(fcidump_file="fcidump.no"):

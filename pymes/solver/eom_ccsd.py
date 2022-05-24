@@ -6,7 +6,6 @@ from pymes.mixer import diis
 from pymes.log import print_logging_info, print_title
 from pymes.integral.partition import part_2_body_int
 
-
 '''
 EOM-CCSD implementation
 EOM-CCSD is used to calculate excitation energies of a system.
@@ -26,6 +25,7 @@ directory of pymes.
 Author: Ke Liao <ke.liao.whu@gmail.com>
 '''
 
+
 class EOM_CCSD:
     def __init__(self, no, n_excit=3):
         '''
@@ -42,7 +42,6 @@ class EOM_CCSD:
         self.e_excit = np.zeros(n_excit)
         self.max_dim = n_excit * 4
         self.e_epsilon = 1.e-5
-
 
         self.max_iter = 50
 
@@ -76,14 +75,14 @@ class EOM_CCSD:
         t_D_abij = ctf.tensor(t_T_abij.shape)
         t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-                              - t_epsilon_a.i("a") - t_epsilon_a.i("b")
-        D_ai = -t_D_ai.to_nparray().ravel()
+        - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+        D_ai = - t_D_ai.to_nparray().ravel()
         lowest_ex_ind = np.argsort(D_ai)[:self.n_excit]
 
         print_logging_info("Initialising u tensors...", level=1)
         for i in range(self.n_excit):
             A = np.zeros(t_D_ai.shape).ravel()
-            A[lowest_ex_ind] = 1.
+            A[lowest_ex_ind[i]] = 1.  # D_ai[lowest_ex_ind][i]
             A = A.reshape(-1, no)
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor(t_D_abij.shape))
@@ -100,29 +99,38 @@ class EOM_CCSD:
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
                 w_singles[l] += self.update_singles(t_fock_pq,
-                                                      dict_t_V, self.u_singles[l],
-                                                      self.u_doubles[l], t_T_abij)
+                                                    dict_t_V, self.u_singles[l],
+                                                    self.u_doubles[l], t_T_abij)
                 w_doubles[l] += self.update_doubles(t_fock_pq,
-                                                      dict_t_V, self.u_singles[l],
-                                                      self.u_doubles[l], t_T_abij)
+                                                    dict_t_V, self.u_singles[l],
+                                                    self.u_doubles[l], t_T_abij)
                 # build Hamiltonian inside subspace
+                print("Hu [", l, "] = \n", w_singles[l])
                 for j in range(l):
+                    print("u [", j, "] = \n", self.u_singles[j])
+                    ovlp_jl = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l])
+                    ovlp_lj = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j])
+                    print("Overlap ", j, l, ovlp_jl)
+                    print("Overlap ", l, j, ovlp_lj)
                     B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
-                             + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                              + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
                     B[l, j] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
                               + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
                 B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
                           + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
-
-           # diagnolise matrix B, find the lowest energies
+            print_logging_info("B matrix =\n", B)
+            # diagnolise matrix B, find the lowest energies
             e, v = np.linalg.eig(B)
             lowest_ex_ind = e.argsort()[:self.n_excit]
-            e = e[lowest_ex_ind]
-            v = v[:, lowest_ex_ind]
+            e_imag = np.imag(e[lowest_ex_ind])
+            e = np.real(e[lowest_ex_ind])
+            v_imag = np.imag(v[:, lowest_ex_ind])
+            v = np.real(v[:, lowest_ex_ind])
+            print("v = \n", v)
 
             # construct residuals
-            y_singles = ctf.tensor(w_singles[l].shape, dtype=w_singles[l].dtype, sp=w_singles[l].sp)
-            y_doubles = ctf.tensor(w_doubles[l].shape, dtype=w_doubles[l].dtype, sp=w_doubles[l].sp)
+            y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
+            y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -143,19 +151,22 @@ class EOM_CCSD:
                         y_doubles += w_doubles[l] * v[l, n]
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
-                    self.u_singles.append(y_singles/(e[n]-D_ai[n]))
-                    self.u_doubles.append(y_doubles/(e[n]-D_ai[n]))
+                    self.u_singles.append(y_singles / (e[n] - B[n, n]))
+                    self.u_doubles.append(y_doubles / (e[n] - B[n, n]))
+                    # self.u_singles.append(y_singles)
+                    # self.u_doubles.append(y_doubles)
 
             diff_e_norm = np.linalg.norm(self.e_excit - e)
             if diff_e_norm < self.e_epsilon:
                 print_logging_info("Iterative solver converged.", level=1)
                 break
             else:
-                print_logging_info("Iteration = ", i, level = 2)
-                print_logging_info("Norm of energy difference = ", diff_e_norm, level = 2)
-                print_logging_info("Excited states energies = ", e, level = 2)
-                print_logging_info("Took {:.3f} seconds ".format(time.time()-time_iter_init), level=2)
-        print_logging_info("EOM-CCSD finished in {.3f} seconds".format(time.time()-time_init), level=1)
+                print_logging_info("Iteration = ", i, level=2)
+                print_logging_info("Norm of energy difference = ", diff_e_norm, level=2)
+                print_logging_info("Excited states energies real part = ", e, level=2)
+                print_logging_info("Excited states energies imaginary part = ", e_imag, level=2)
+                print_logging_info("Took {:.3f} seconds ".format(time.time() - time_iter_init), level=2)
+        print_logging_info("EOM-CCSD finished in {.3f} seconds".format(time.time() - time_init), level=1)
         print_logging_info("Converged excited states energies = ", e, level=1)
         self.e_excit = e
 
@@ -333,7 +344,7 @@ class EOM_CCSD:
         t_delta_doubles.i("abij") << t_delta_doubles.i("baji")
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        t_delta_doubles +=  ctf.einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij) \
+        t_delta_doubles += ctf.einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij) \
                            + ctf.einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], t_T_abij,
                                         t_u_abij) \
                            + ctf.einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], t_T_abij,
