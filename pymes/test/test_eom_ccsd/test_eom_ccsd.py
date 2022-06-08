@@ -37,5 +37,11 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=1)
     e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
     print("Excited state energies = ", e_excit)
+
+def test_davidson():
+    nv = 3
+    no = 3
+    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=2)
+    eom_cc.test_davidson()
 #def test_ccsd_fno(fcidump_file="fcidump.no"):
 #    test_ccsd_energy(fcidump_file, ref_e=-0.01931436971985408)

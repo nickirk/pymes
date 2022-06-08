@@ -283,19 +283,31 @@ class EOM_CCSD:
         return t_delta_doubles
 
     def update_singles_test(self, fake_ham, t_u_ai, t_u_abij):
-        t_delta_singles = ctf.tensor(t_u_ai.shape)
+        no = self.no
+        nv = t_u_ai.shape[0]
         u_ai = t_u_ai.to_nparray().ravel()
         u_abij = t_u_abij.to_nparray().ravel()
-        delta_singles = np.dot(fake_ham[:no*nv, :no*nv], u_ai)
-        return t_delta_singles
+        u_vec = np.concatenate((u_ai, u_abij), axis=None)
+        delta_singles = np.dot(fake_ham, u_vec)[:no*nv]
+        delta_singles = delta_singles.reshape(-1, no)
+        return ctf.astensor(delta_singles)
 
     def update_doubles_test(self, fake_ham, t_u_ai, t_u_abij):
-        t_delta_doubles = ctf.tensor(t_u_abij.shape)
-        return t_delta_doubles
+        no = self.no
+        nv = t_u_ai.shape[0]
+        u_ai = t_u_ai.to_nparray().ravel()
+        u_abij = t_u_abij.to_nparray().ravel()
+        u_vec = np.concatenate((u_ai, u_abij), axis=None)
+        delta_doubles = np.dot(fake_ham, u_vec)[no*nv:]
+        delta_doubles = delta_doubles.reshape(nv, nv, no, no)
+        return ctf.astensor(delta_doubles)
 
     def construct_fake_ham(self, nv, no):
         dim = nv*no + nv**2*no**2
-        fake_ham = np.zeros([dim, dim])
+        fake_ham = np.diag(np.arange(dim)*1.5)
+        fake_ham += np.random.random([dim, dim])
+        fake_ham += fake_ham.T
+        fake_ham /= 2
         return fake_ham
 
     def test_davidson(self):
@@ -303,7 +315,17 @@ class EOM_CCSD:
         no = self.no
         ham = self.construct_fake_ham(nv, no)
         e_target, v_target = np.linalg.eig(ham)
+
         lowest_ex_ind_target = e_target.argsort()[:self.n_excit]
+        e_target = e_target[lowest_ex_ind_target]
+
+        print_logging_info("Initialising u tensors...", level=1)
+        for i in range(self.n_excit):
+            A = np.zeros(nv*no).ravel()
+            A[lowest_ex_ind_target[i]] = 1.
+            A = A.reshape(-1, no)
+            self.u_singles.append(ctf.astensor(A))
+            self.u_doubles.append(ctf.tensor([nv, nv, no, no]))
 
         for i in range(self.max_iter):
             time_iter_init = time.time()
@@ -335,8 +357,8 @@ class EOM_CCSD:
             v = np.real(v[:, lowest_ex_ind])
 
             # construct residuals
-            y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
-            y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
+            y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
+            y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -370,6 +392,7 @@ class EOM_CCSD:
                 print_logging_info("Norm of energy difference = ", diff_e_norm, level=2)
                 print_logging_info("Excited states energies real part = ", e, level=2)
                 print_logging_info("Excited states energies imaginary part = ", e_imag, level=2)
+                print_logging_info("Target energies = ", e_target, level=2)
                 print_logging_info("Took {:.3f} seconds ".format(time.time() - time_iter_init), level=2)
         print_logging_info("EOM-CCSD finished in {:.3f} seconds".format(time.time() - time_init), level=1)
         print_logging_info("Converged excited states energies = ", e, level=1)
