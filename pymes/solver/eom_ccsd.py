@@ -6,6 +6,7 @@ from pymes.mixer import diis
 from pymes.log import print_logging_info, print_title
 from pymes.integral.partition import part_2_body_int
 
+
 '''
 EOM-CCSD implementation
 EOM-CCSD is used to calculate excitation energies of a system.
@@ -24,7 +25,6 @@ directory of pymes.
 
 Author: Ke Liao <ke.liao.whu@gmail.com>
 '''
-
 
 class EOM_CCSD:
     def __init__(self, no, n_excit=3):
@@ -75,8 +75,8 @@ class EOM_CCSD:
         t_D_abij = ctf.tensor(t_T_abij.shape)
         t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-        - t_epsilon_a.i("a") - t_epsilon_a.i("b")
-        D_ai = - t_D_ai.to_nparray().ravel()
+                              - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+        D_ai = -t_D_ai.to_nparray().ravel()
         lowest_ex_ind = np.argsort(D_ai)[:self.n_excit]
 
         print_logging_info("Initialising u tensors...", level=1)
@@ -187,7 +187,7 @@ class EOM_CCSD:
         t_delta_singles += 2. * ctf.einsum("jb, baji->ai", t_fock_pq[:no, no:], t_u_abij)
         t_delta_singles += -1. * ctf.einsum("ji, aj -> ai", t_fock_pq[:no, :no], t_u_ai)
         t_delta_singles += -1. * ctf.einsum("jb, abji->ai", t_fock_pq[:no, no:], t_u_abij)
-        t_delta_singles += -1. * ctf.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
+        t_delta_singles += 1. * ctf.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
         # integral and t_u_ai products
         t_delta_singles += 2. * ctf.einsum("jabi, bj->ai", dict_t_V["iabj"], t_u_ai)
         t_delta_singles += -1. * ctf.einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
@@ -255,14 +255,14 @@ class EOM_CCSD:
         t_delta_doubles += +2. * ctf.einsum("kaci, cbkj -> abij", dict_t_V["iabj"], t_u_abij)
         t_delta_doubles += -2. * ctf.einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += -2. * ctf.einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * ctf.einsum("kldc, abkj, dcil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += -2. * ctf.einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("ki, abkj -> abij", t_fock_pq[:no, :no], t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("ac, cbij -> abij", t_fock_pq[no:, no:], t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, dcki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * ctf.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij) #cd exch
         t_delta_doubles += +1. * ctf.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)

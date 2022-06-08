@@ -5,7 +5,7 @@ from pymes.solver import ccsd, ccd, mp2, eom_ccsd
 from pymes.mean_field import hf
 from pymes.integral.partition import part_2_body_int
 
-def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.LiH", ref_e=None):
+def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=None):
     # known values
     hf_ref_e = -7.95197153899133
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
