@@ -334,10 +334,10 @@ class EOM_CCSD:
             w_doubles = [ctf.tensor([nv, nv, no, no])] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
-                w_singles[l] += self.update_singles_test(ham,
+                w_singles[l] = self.update_singles_test(ham,
                                                     self.u_singles[l],
                                                     self.u_doubles[l])
-                w_doubles[l] += self.update_doubles_test(ham,
+                w_doubles[l] = self.update_doubles_test(ham,
                                                     self.u_singles[l],
                                                     self.u_doubles[l])
                 # build Hamiltonian inside subspace
@@ -359,6 +359,8 @@ class EOM_CCSD:
             # construct residuals
             y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
             y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
+            u_singles_tmp = []
+            u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -366,10 +368,10 @@ class EOM_CCSD:
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
-                    self.u_singles[n] = y_singles
-                    self.u_doubles[n] = y_doubles
-                self.u_singles = self.u_singles[:self.n_excit]
-                self.u_doubles = self.u_doubles[:self.n_excit]
+                    u_singles_tmp.append(y_singles)
+                    u_doubles_tmp.append(y_doubles)
+                self.u_singles = u_singles_tmp
+                self.u_doubles = u_doubles_tmp
             else:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -379,8 +381,9 @@ class EOM_CCSD:
                         y_doubles += w_doubles[l] * v[l, n]
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
-                    self.u_singles.append(y_singles / (e[n] - ham[n,n]))
-                    self.u_doubles.append(y_doubles / (e[n] - ham[n,n]))
+                    diag_e_ind = lowest_ex_ind_target[n]
+                    self.u_singles.append(y_singles / (e[n] - ham[diag_e_ind, diag_e_ind]))
+                    self.u_doubles.append(y_doubles / (e[n] - ham[diag_e_ind, diag_e_ind]))
 
             diff_e_norm = np.linalg.norm(self.e_excit - e)
             self.e_excit = e
