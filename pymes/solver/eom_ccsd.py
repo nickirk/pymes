@@ -40,10 +40,10 @@ class EOM_CCSD:
         self.u_singles = []
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
-        self.max_dim = n_excit * 4
-        self.e_epsilon = 1.e-5
+        self.max_dim = n_excit * 5
+        self.e_epsilon = 1.e-8
 
-        self.max_iter = 50
+        self.max_iter = 200
 
     def write_logging_info(self):
         return
@@ -113,6 +113,7 @@ class EOM_CCSD:
                 B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
                           + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
             # diagnolise matrix B, find the lowest energies
+            e_old = self.e_excit
             e, v = np.linalg.eig(B)
             lowest_ex_ind = e.argsort()[:self.n_excit]
             e_imag = np.imag(e[lowest_ex_ind])
@@ -134,6 +135,7 @@ class EOM_CCSD:
                     self.u_doubles[n] = y_doubles
                 self.u_singles = self.u_singles[:self.n_excit]
                 self.u_doubles = self.u_doubles[:self.n_excit]
+                self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -304,8 +306,8 @@ class EOM_CCSD:
 
     def construct_fake_ham(self, nv, no):
         dim = nv*no + nv**2*no**2
-        fake_ham = np.diag(np.arange(dim)*1.5)
-        fake_ham += np.random.random([dim, dim])
+        fake_ham = np.diag(np.arange(dim)*4.)
+        fake_ham += (np.random.random([dim, dim])-0.5)*0.1
         fake_ham += fake_ham.T
         fake_ham /= 2
         return fake_ham
@@ -313,23 +315,28 @@ class EOM_CCSD:
     def test_davidson(self):
         nv = 6 - 2
         no = self.no
+        time_init = time.time()
         ham = self.construct_fake_ham(nv, no)
         e_target, v_target = np.linalg.eig(ham)
 
         lowest_ex_ind_target = e_target.argsort()[:self.n_excit]
         e_target = e_target[lowest_ex_ind_target]
+        v_target = v_target[lowest_ex_ind_target]
 
         print_logging_info("Initialising u tensors...", level=1)
         for i in range(self.n_excit):
             A = np.zeros(nv*no).ravel()
-            A[lowest_ex_ind_target[i]] = 1.
+            A[i] = 1.
+            A[i+1] = 0.1
             A = A.reshape(-1, no)
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor([nv, nv, no, no]))
 
+        diff_e_norm = np.inf
         for i in range(self.max_iter):
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
+            self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
             w_singles = [ctf.tensor([nv, no])] * subspace_dim
             w_doubles = [ctf.tensor([nv, nv, no, no])] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
@@ -372,6 +379,7 @@ class EOM_CCSD:
                     u_doubles_tmp.append(y_doubles)
                 self.u_singles = u_singles_tmp
                 self.u_doubles = u_doubles_tmp
+                self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -382,11 +390,12 @@ class EOM_CCSD:
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
                     diag_e_ind = lowest_ex_ind_target[n]
+                    diag_e_ind = n
                     self.u_singles.append(y_singles / (e[n] - ham[diag_e_ind, diag_e_ind]))
                     self.u_doubles.append(y_doubles / (e[n] - ham[diag_e_ind, diag_e_ind]))
-
-            diff_e_norm = np.linalg.norm(self.e_excit - e)
-            self.e_excit = e
+                    e_old = self.e_excit
+                diff_e_norm = np.linalg.norm(np.abs(self.e_excit - e))
+                self.e_excit = e
             if diff_e_norm < self.e_epsilon:
                 print_logging_info("Iterative solver converged.", level=1)
                 break
@@ -400,7 +409,7 @@ class EOM_CCSD:
         print_logging_info("EOM-CCSD finished in {:.3f} seconds".format(time.time() - time_init), level=1)
         print_logging_info("Converged excited states energies = ", e, level=1)
 
-        assert np.allclose(e, e_target)
+        assert np.allclose(e, e_target, atol=1e-6)
 
     def QR(self, u_singles, u_doubles):
         """
@@ -417,5 +426,19 @@ class EOM_CCSD:
         u_singles_: list of ctf tensors, which are now orthogonalised
         u_doubles_: list of ctf tensors, which are now orthogonalised
         """
+        no = self.no
+        nv = self.u_singles[0].shape[0]
+        subspace_len = len(u_singles)
+        subspace_matrix = ctf.tensor([no*nv+nv**2*no**2, subspace_len])
+        for i in range(subspace_len):
+            subspace_matrix[:no*nv, i] = u_singles[i].ravel()
+            subspace_matrix[no*nv:, i] = u_doubles[i].ravel()
+        subspace_matrix = subspace_matrix.to_nparray()
+        Q, R = np.linalg.qr(subspace_matrix)
 
-        return
+        for i in range(subspace_len):
+            u_singles[i] = Q[:no*nv, i]
+            u_singles[i] = ctf.astensor(u_singles[i].reshape(nv, no))
+            u_doubles[i] = Q[no*nv:, i]
+            u_doubles[i] = ctf.astensor(u_doubles[i].reshape(nv, nv, no, no))
+        return u_singles, u_doubles
