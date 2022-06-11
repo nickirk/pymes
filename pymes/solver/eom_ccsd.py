@@ -94,14 +94,15 @@ class EOM_CCSD:
         for i in range(self.max_iter):
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
+            self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
             w_singles = [ctf.tensor(t_D_ai.shape, dtype=t_D_ai.dtype, sp=t_D_ai.sp)] * subspace_dim
             w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
-                w_singles[l] += self.update_singles(t_fock_pq,
-                                                    dict_t_V, self.u_singles[l],
-                                                    self.u_doubles[l], t_T_abij)
-                w_doubles[l] += self.update_doubles(t_fock_pq,
+                w_singles[l] = self.update_singles(t_fock_pq,
+                                                   dict_t_V, self.u_singles[l],
+                                                   self.u_doubles[l], t_T_abij)
+                w_doubles[l] = self.update_doubles(t_fock_pq,
                                                     dict_t_V, self.u_singles[l],
                                                     self.u_doubles[l], t_T_abij)
                 # build Hamiltonian inside subspace
@@ -124,6 +125,8 @@ class EOM_CCSD:
             # construct residuals
             y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
             y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
+            u_singles_tmp = []
+            u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
                     y_singles.set_zero()
@@ -131,10 +134,10 @@ class EOM_CCSD:
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
-                    self.u_singles[n] = y_singles
-                    self.u_doubles[n] = y_doubles
-                self.u_singles = self.u_singles[:self.n_excit]
-                self.u_doubles = self.u_doubles[:self.n_excit]
+                    u_singles_tmp.append(y_singles)
+                    u_doubles_tmp.append(y_doubles)
+                self.u_singles = u_singles_tmp
+                self.u_doubles = u_doubles_tmp
                 self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
@@ -147,6 +150,7 @@ class EOM_CCSD:
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
                     self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind[n]]))
                     self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind[n]]))
+                    e_old = self.e_excit
                     # self.u_singles.append(y_singles)
                     # self.u_doubles.append(y_doubles)
 
