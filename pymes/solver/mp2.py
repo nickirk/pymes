@@ -4,7 +4,7 @@ import ctf
 
 from pymes.log import print_logging_info
 
-def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=0):
+def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None):
     """
     mp2 algorithm
     Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
@@ -55,7 +55,7 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
     t_T_abij = ctf.tensor([nv,nv,no,no], dtype=t_V_ijab.dtype, sp=t_V_ijab.sp)
     t_T_abij.write(inds, vals)
 
-    if nv_part_size == 0:
+    if nv_part_size is None:
         n_part = 1
         nv_part_size = nv
     else:
