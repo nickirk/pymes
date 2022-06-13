@@ -5,7 +5,7 @@ from pymes.solver import ccsd, ccd, mp2, eom_ccsd
 from pymes.mean_field import hf
 from pymes.integral.partition import part_2_body_int
 
-def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=None):
+def test_eom_ccsd_energy(fcidump_file="/Users/keliao/Work/project/tc-eom-cc/FCIDUMP.LiH.ccpvdz", ref_e=None):
     # known values
     hf_ref_e = -7.95197153899133
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
@@ -22,6 +22,7 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     # CCSD energies
     t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
     mycc = ccsd.CCSD(no)
+    mycc.delta_e = 1e-11
     ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs)["ccsd e"]
 
 
@@ -34,7 +35,7 @@ def test_eom_ccsd_energy(fcidump_file="../test_ccsd/FCIDUMP.LiH.bare", ref_e=Non
     dict_t_V_dressed= {}.fromkeys(dict_t_V.keys(), None)
     dict_t_V_dressed.update({"ijka": None, "iabj": None})
     dict_t_V_dressed = mycc.get_T1_dressed_V(mycc.t_T_ai, dict_t_V, dict_t_V_dressed)
-    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=1)
+    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=2)
     e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
     print("Excited state energies = ", e_excit)
 

@@ -150,14 +150,14 @@ class EOM_CCSD:
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
                     self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind[n]]))
                     self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind[n]]))
-                    e_old = self.e_excit
-                    # self.u_singles.append(y_singles)
-                    # self.u_doubles.append(y_doubles)
-
-            diff_e_norm = np.linalg.norm(self.e_excit - e)
-            self.e_excit = e
+                e_old = self.e_excit
+                diff_e_norm = np.linalg.norm(self.e_excit - e)
+                self.e_excit = e
             if diff_e_norm < self.e_epsilon:
                 print_logging_info("Iterative solver converged.", level=1)
+                print_logging_info("Norm of energy difference = ", diff_e_norm, level=2)
+                print_logging_info("Excited states energies real part = ", e, level=2)
+                print_logging_info("Excited states energies imaginary part = ", e_imag, level=2)
                 break
             else:
                 print_logging_info("Iteration = ", i, level=1)
