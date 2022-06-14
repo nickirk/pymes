@@ -437,12 +437,13 @@ class EOM_CCSD:
         for i in range(subspace_len):
             subspace_matrix[:no*nv, i] = u_singles[i].ravel()
             subspace_matrix[no*nv:, i] = u_doubles[i].ravel()
-        subspace_matrix = subspace_matrix.to_nparray()
-        Q, R = np.linalg.qr(subspace_matrix)
+        Q, R = ctf.qr(subspace_matrix)
+        #subspace_matrix = subspace_matrix.to_nparray()
+        #Q, R = np.linalg.qr(subspace_matrix)
 
         for i in range(subspace_len):
             u_singles[i] = Q[:no*nv, i]
-            u_singles[i] = ctf.astensor(u_singles[i].reshape(nv, no))
+            u_singles[i] = u_singles[i].reshape(nv, no)
             u_doubles[i] = Q[no*nv:, i]
-            u_doubles[i] = ctf.astensor(u_doubles[i].reshape(nv, nv, no, no))
+            u_doubles[i] = u_doubles[i].reshape(nv, nv, no, no)
         return u_singles, u_doubles
