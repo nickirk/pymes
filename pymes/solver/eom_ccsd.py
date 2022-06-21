@@ -28,19 +28,13 @@ Author: Ke Liao <ke.liao.whu@gmail.com>
 
 class EOM_CCSD:
     def __init__(self, no, n_excit=3):
-        '''
-        EOM_CCSD takes in a CCSD object, because the T1, T2 and dressed
-        integrals are needed.
-        '''
         self.algo_name = "EOM-CCSD"
-        # the ground state CCSD solver instance, which shall not be changed in this class and
-        # its member functions
         self.no = no
         self.n_excit = n_excit
         self.u_singles = []
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
-        self.max_dim = n_excit * 5
+        self.max_dim = n_excit * 4
         self.e_epsilon = 1.e-10
 
         self.max_iter = 200
@@ -77,12 +71,12 @@ class EOM_CCSD:
         t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
                               - t_epsilon_a.i("a") - t_epsilon_a.i("b")
         D_ai = -t_D_ai.to_nparray().ravel()
-        lowest_ex_ind = np.argsort(D_ai)[:self.n_excit]
+        lowest_ex_ind_init = np.argsort(D_ai)[:self.n_excit]
 
         print_logging_info("Initialising u tensors...", level=1)
         for i in range(self.n_excit):
             A = np.zeros(t_D_ai.shape).ravel()
-            A[lowest_ex_ind[i]] = 1.
+            A[lowest_ex_ind_init[i]] = 1.
             A = A.reshape(-1, no)
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor(t_D_abij.shape))
@@ -123,14 +117,12 @@ class EOM_CCSD:
             v = np.real(v[:, lowest_ex_ind])
 
             # construct residuals
-            y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
-            y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
             u_singles_tmp = []
             u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
-                    y_singles.set_zero()
-                    y_doubles.set_zero()
+                    y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
+                    y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
@@ -141,15 +133,15 @@ class EOM_CCSD:
                 self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
-                    y_singles.set_zero()
-                    y_doubles.set_zero()
+                    y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
+                    y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
                     for l in range(subspace_dim):
                         y_singles += w_singles[l] * v[l, n]
                         y_doubles += w_doubles[l] * v[l, n]
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
-                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind[n]]))
-                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind[n]]))
+                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind_init[n]]))
+                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind_init[n]]))
                 e_old = self.e_excit
                 diff_e_norm = np.linalg.norm(self.e_excit - e)
                 self.e_excit = e
@@ -199,7 +191,7 @@ class EOM_CCSD:
         t_delta_singles += -1. * ctf.einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
         # integral and t_u_abij products
         t_delta_singles += -2. * ctf.einsum("jkib, abjk->ai", dict_t_V["ijka"], t_u_abij)
-        t_delta_singles += +2. * ctf.einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
+        t_delta_singles += 2. * ctf.einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
         t_delta_singles += ctf.einsum("jkib, bajk->ai", dict_t_V["ijka"], t_u_abij)
         t_delta_singles += -1. * ctf.einsum("jacb, bcji->ai", dict_t_V["iabc"], t_u_abij)
         # integral, T and t_u_ai products
@@ -368,14 +360,12 @@ class EOM_CCSD:
             v = np.real(v[:, lowest_ex_ind])
 
             # construct residuals
-            y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
-            y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
             u_singles_tmp = []
             u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
-                    y_singles.set_zero()
-                    y_doubles.set_zero()
+                    y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
+                    y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
@@ -386,8 +376,8 @@ class EOM_CCSD:
                 self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
-                    y_singles.set_zero()
-                    y_doubles.set_zero()
+                    y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
+                    y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
                     for l in range(subspace_dim):
                         y_singles += w_singles[l] * v[l, n]
                         y_doubles += w_doubles[l] * v[l, n]

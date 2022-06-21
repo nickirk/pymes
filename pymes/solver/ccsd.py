@@ -417,7 +417,9 @@ class CCSD(ccd.CCD):
             dict_t_V_dressed["ijka"] = t_V_ijka_dressed
 
         if "ijak" in dict_t_V_dressed:
-            dict_t_V_dressed["ijak"] = ctf.einsum("ijka -> ijak", t_V_ijka_dressed)
+            t_V_ijka_dressed = dict_t_V["ijak"].copy()
+            t_V_ijka_dressed += 1.0 * ctf.einsum("ijab, bk -> ijak", dict_t_V["ijab"], t_T_ai)
+            dict_t_V_dressed["ijak"] = t_V_ijka_dressed
 
         # t_V_iajb
         if "iajb" in dict_t_V_dressed:

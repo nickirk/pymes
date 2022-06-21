@@ -5,9 +5,11 @@ from pymes.solver import ccsd, ccd, mp2, eom_ccsd
 from pymes.mean_field import hf
 from pymes.integral.partition import part_2_body_int
 
-def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.LiH.sto6g", ref_e=None):
+def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.HF.augccpvdz",
+                         ref_e={"hf_e": -100.017027694409, "ccsd_e": -0.222001880893871}):
     # known values
-    hf_ref_e = -7.95197153899132
+    #hf_ref_e = -7.95197478868981
+    hf_ref_e = ref_e["hf_e"]
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
 
     t_V_pqrs = ctf.astensor(V_pqrs)
@@ -22,9 +24,12 @@ def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.LiH.sto6g", ref_e=None):
     # CCSD energies
     t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
     mycc = ccsd.CCSD(no)
-    mycc.delta_e = 1e-10
+    mycc.delta_e = 1e-9
     ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs)["ccsd e"]
-    ccsd_e_ref = -0.02035412476830058
+    #ccsd_e_ref = -0.02035412476830058
+    #ccsd_e_ref = -0.02035251845411305
+    ccsd_e_ref = ref_e["ccsd_e"]
+    assert np.isclose(ccsd_e, ccsd_e_ref)
 
     # construct a EOM-CCSD instance
     # current formulation requires the singles dressed fock and V tensors
@@ -35,15 +40,17 @@ def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.LiH.sto6g", ref_e=None):
     dict_t_V_dressed= {}.fromkeys(dict_t_V.keys(), None)
     dict_t_V_dressed.update({"ijka": None, "iabj": None})
     dict_t_V_dressed = mycc.get_T1_dressed_V(mycc.t_T_ai, dict_t_V, dict_t_V_dressed)
-    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=1)
+    n_e = 1
+    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=n_e)
     e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, mycc.t_T_abij)
     print("Excited state energies = ", e_excit)
-    e_excit_ref = [0.1333648997481215, 0.1841464947563311]
+    e_excit_ref = np.asarray([0.1333705757546808, 0.1841464947563311])
+    assert np.allclose(e_excit, e_excit_ref[:n_e])
 
 def test_davidson():
-    nv = 3
-    no = 3
-    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=2)
+    nv = 4
+    no = 4
+    eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=3)
     eom_cc.test_davidson()
 #def test_ccsd_fno(fcidump_file="fcidump.no"):
 #    test_ccsd_energy(fcidump_file, ref_e=-0.01931436971985408)
