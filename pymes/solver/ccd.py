@@ -235,16 +235,16 @@ class CCD:
             t_Ex_abij -= ctf.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
             t_Ex_abij += ctf.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
-        t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
+        #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
 
         ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
-        # t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
+        #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
-        # t_Ex_abij.i("abij") << t_Ex_abij.i("abij") + t_Ex_abij.i("baji")
+        t_Ex_abij.i("abij") << t_Ex_abij.i("baji")
         # print_logging_info(test_Ex_abij - t_Ex_abij)
-        t_R_abij += t_Ex_abij + t_Ex_baji
-        # t_R_abij += t_Ex_baji
+        #t_R_abij += t_Ex_abij + t_Ex_baji
+        t_R_abij += t_Ex_abij
 
         return t_R_abij
 

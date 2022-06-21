@@ -24,7 +24,7 @@ def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.HF.augccpvdz",
     # CCSD energies
     t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
     mycc = ccsd.CCSD(no)
-    mycc.delta_e = 1e-9
+    mycc.delta_e = 1e-11
     ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs)["ccsd e"]
     #ccsd_e_ref = -0.02035412476830058
     #ccsd_e_ref = -0.02035251845411305
