@@ -5,11 +5,11 @@ from pymes.solver import ccsd, ccd, mp2, eom_ccsd
 from pymes.mean_field import hf
 from pymes.integral.partition import part_2_body_int
 
-def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.HF.augccpvdz",
+def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.LiH.sto6g",
                          ref_e={"hf_e": -100.017027694409, "ccsd_e": -0.222001880893871}):
     # known values
-    #hf_ref_e = -7.95197478868981
-    hf_ref_e = ref_e["hf_e"]
+    hf_ref_e = -7.95197478868981
+    #hf_ref_e = ref_e["hf_e"]
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
 
     t_V_pqrs = ctf.astensor(V_pqrs)
@@ -27,8 +27,8 @@ def test_eom_ccsd_energy(fcidump_file="./FCIDUMP.HF.augccpvdz",
     mycc.delta_e = 1e-11
     ccsd_e = mycc.solve(t_fock_pq, t_V_pqrs)["ccsd e"]
     #ccsd_e_ref = -0.02035412476830058
-    #ccsd_e_ref = -0.02035251845411305
-    ccsd_e_ref = ref_e["ccsd_e"]
+    ccsd_e_ref = -0.02035251845411305
+    #ccsd_e_ref = ref_e["ccsd_e"]
     assert np.isclose(ccsd_e, ccsd_e_ref)
 
     # construct a EOM-CCSD instance
