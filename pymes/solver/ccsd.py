@@ -273,9 +273,9 @@ class CCSD(ccd.CCD):
         t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("jb, bi, aj->ai", t_fock_pq[:no, no:], t_T_ai, t_T_ai)
 
         t_tilde_fock_pq[no:, :no] += 2.0 * ctf.einsum("bj, jabi->ai", t_T_ai, dict_t_V['iabj'])
-        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("bj, jkbi, ak->ai", t_T_ai, dict_t_V['ijak'], t_T_ai)
-        t_tilde_fock_pq[no:, :no] += 1.0 * ctf.einsum("bj, jabc, ci->ai", t_T_ai, dict_t_V['iabc'], t_T_ai)
-        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("bj, jkbc, ci, ak->ai", t_T_ai, dict_t_V['ijab'], t_T_ai, t_T_ai)
+        t_tilde_fock_pq[no:, :no] += -2.0 * ctf.einsum("bj, jkbi, ak->ai", t_T_ai, dict_t_V['ijak'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += 2.0 * ctf.einsum("bj, jabc, ci->ai", t_T_ai, dict_t_V['iabc'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += -2.0 * ctf.einsum("bj, jkbc, ci, ak->ai", t_T_ai, dict_t_V['ijab'], t_T_ai, t_T_ai)
 
         t_tilde_fock_pq[no:, :no] -= 1.0 * ctf.einsum("bj, jaib->ai", t_T_ai, dict_t_V['iajb'])
         t_tilde_fock_pq[no:, :no] -= -1.0 * ctf.einsum("bj, jkib, ak->ai", t_T_ai, dict_t_V['ijka'], t_T_ai)
