@@ -265,65 +265,36 @@ class CCSD(ccd.CCD):
         # t_V_iajb, t_V_ijka 
         #
         # dressed f^i_a block
-        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, jabi->ia", t_T_ai,
-                                                      dict_t_V['iabj']) \
-                                     - 1.0 * ctf.einsum("bj, jiab->ia", t_T_ai,
-                                                        dict_t_V['ijab'])
+        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, jabi->ia", t_T_ai, dict_t_V['iabj'])
+        t_tilde_fock_pq[:no, no:] += -1.0 * ctf.einsum("bj, jiab->ia", t_T_ai, dict_t_V['ijab'])
         # dressed f^a_i
-        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("ji, aj->ai", t_fock_pq[:no, :no],
-                                                       t_T_ai) \
-                                     + 1.0 * ctf.einsum("ab, bi->ai", t_fock_pq[no:, no:],
-                                                        t_T_ai) \
-                                     - 1.0 * ctf.einsum("jb, bi, aj->ai", t_fock_pq[:no, no:],
-                                                        t_T_ai, t_T_ai)
+        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("ji, aj->ai", t_fock_pq[:no, :no], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += 1.0 * ctf.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("jb, bi, aj->ai", t_fock_pq[:no, no:], t_T_ai, t_T_ai)
 
-        t_tilde_fock_pq[no:, :no] += 2.0 * (ctf.einsum("bj, jabi->ai", t_T_ai,
-                                                       dict_t_V['iabj']) \
-                                            - 1.0 * ctf.einsum("bj, jkbi, ak->ai", t_T_ai,
-                                                               dict_t_V['ijak'], t_T_ai) \
-                                            + 1.0 * ctf.einsum("bj, jabc, ci->ai", t_T_ai,
-                                                               dict_t_V['iabc'], t_T_ai) \
-                                            - 1.0 * ctf.einsum("bj, jkbc, ci, ak->ai", t_T_ai,
-                                                               dict_t_V['ijab'], t_T_ai, t_T_ai))
+        t_tilde_fock_pq[no:, :no] += 2.0 * ctf.einsum("bj, jabi->ai", t_T_ai, dict_t_V['iabj'])
+        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("bj, jkbi, ak->ai", t_T_ai, dict_t_V['ijak'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += 1.0 * ctf.einsum("bj, jabc, ci->ai", t_T_ai, dict_t_V['iabc'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("bj, jkbc, ci, ak->ai", t_T_ai, dict_t_V['ijab'], t_T_ai, t_T_ai)
 
-        t_tilde_fock_pq[no:, :no] -= 1.0 * ctf.einsum("bj, jaib->ai", t_T_ai,
-                                                      dict_t_V['iajb']) \
-                                     - 1.0 * ctf.einsum("bj, jkib, ak->ai", t_T_ai,
-                                                        dict_t_V['ijka'], t_T_ai) \
-                                     + 1.0 * ctf.einsum("bj, jacb, ci->ai", t_T_ai,
-                                                        dict_t_V['iabc'], t_T_ai) \
-                                     - 1.0 * ctf.einsum("bj, jkcb, ci, ak->ai", t_T_ai,
-                                                        dict_t_V['ijab'], t_T_ai, t_T_ai)
+        t_tilde_fock_pq[no:, :no] -= 1.0 * ctf.einsum("bj, jaib->ai", t_T_ai, dict_t_V['iajb'])
+        t_tilde_fock_pq[no:, :no] -= -1.0 * ctf.einsum("bj, jkib, ak->ai", t_T_ai, dict_t_V['ijka'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] -= 1.0 * ctf.einsum("bj, jacb, ci->ai", t_T_ai, dict_t_V['iabc'], t_T_ai)
+        t_tilde_fock_pq[no:, :no] -= -1.0 * ctf.einsum("bj, jkcb, ci, ak->ai", t_T_ai, dict_t_V['ijab'], t_T_ai, t_T_ai)
 
         # dressed f^i_j block
-        t_tilde_fock_pq[:no, :no] += 2.0 * ctf.einsum("ck, kicj->ij", t_T_ai,
-                                                      dict_t_V['ijak']) \
-                                     - 1.0 * ctf.einsum("ck, kijc->ij", t_T_ai,
-                                                        dict_t_V['ijka']) \
-                                     + 1.0 * ctf.einsum("ib, bj->ij",
-                                                        t_fock_pq[:no, no:],
-                                                        t_T_ai) \
-                                     + 2.0 * ctf.einsum("ck, kicb, bj->ij", t_T_ai,
-                                                        dict_t_V['ijab'],
-                                                        t_T_ai) \
-                                     - 1.0 * ctf.einsum("ck, kibc, bj->ij", t_T_ai,
-                                                        dict_t_V['ijab'],
-                                                        t_T_ai)
+        t_tilde_fock_pq[:no, :no] += 2.0 * ctf.einsum("ck, kicj->ij", t_T_ai, dict_t_V['ijak'])
+        t_tilde_fock_pq[:no, :no] += -1.0 * ctf.einsum("ck, kijc->ij", t_T_ai, dict_t_V['ijka'])
+        t_tilde_fock_pq[:no, :no] += 1.0 * ctf.einsum("ib, bj->ij", t_fock_pq[:no, no:], t_T_ai)
+        t_tilde_fock_pq[:no, :no] += 2.0 * ctf.einsum("ck, kicb, bj->ij", t_T_ai, dict_t_V['ijab'], t_T_ai)
+        t_tilde_fock_pq[:no, :no] += -1.0 * ctf.einsum("ck, kibc, bj->ij", t_T_ai, dict_t_V['ijab'], t_T_ai)
 
         # dressed f^a_b block
-        t_tilde_fock_pq[no:, no:] += 2.0 * ctf.einsum("ci, iacb->ab", t_T_ai,
-                                                      dict_t_V['iabc']) \
-                                     - 1.0 * ctf.einsum("ci, iabc->ab", t_T_ai,
-                                                        dict_t_V['iabc']) \
-                                     - 1.0 * ctf.einsum("ib, ai->ab",
-                                                        t_fock_pq[:no, no:],
-                                                        t_T_ai) \
-                                     - 2.0 * ctf.einsum("ck, klcb, al->ab", t_T_ai,
-                                                        dict_t_V['ijab'],
-                                                        t_T_ai) \
-                                     + 1.0 * ctf.einsum("ck, kibc, ai->ab", t_T_ai,
-                                                        dict_t_V['ijab'],
-                                                        t_T_ai)
+        t_tilde_fock_pq[no:, no:] += 2.0 * ctf.einsum("ci, iacb->ab", t_T_ai, dict_t_V['iabc'])
+        t_tilde_fock_pq[no:, no:] += -1.0 * ctf.einsum("ci, iabc->ab", t_T_ai, dict_t_V['iabc'])
+        t_tilde_fock_pq[no:, no:] += -1.0 * ctf.einsum("ib, ai->ab", t_fock_pq[:no, no:], t_T_ai)
+        t_tilde_fock_pq[no:, no:] += -2.0 * ctf.einsum("ck, klcb, al->ab", t_T_ai, dict_t_V['ijab'], t_T_ai)
+        t_tilde_fock_pq[no:, no:] += 1.0 * ctf.einsum("ck, kibc, ai->ab", t_T_ai, dict_t_V['ijab'], t_T_ai)
 
         return t_tilde_fock_pq
 

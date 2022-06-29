@@ -34,7 +34,7 @@ class EOM_CCSD:
         self.u_singles = []
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
-        self.max_dim = n_excit * 4
+        self.max_dim = n_excit * 6
         self.e_epsilon = 1.e-10
 
         self.max_iter = 200
@@ -260,7 +260,7 @@ class EOM_CCSD:
         t_delta_doubles += -1. * ctf.einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij) #cd exch
+        t_delta_doubles += +1. * ctf.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
         t_delta_doubles += -1. * ctf.einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
         t_delta_doubles += +1. * ctf.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
@@ -323,7 +323,6 @@ class EOM_CCSD:
         for i in range(self.n_excit):
             A = np.zeros(nv*no).ravel()
             A[i] = 1.
-            A[i+1] = 0.1
             A = A.reshape(-1, no)
             self.u_singles.append(ctf.astensor(A))
             self.u_doubles.append(ctf.tensor([nv, nv, no, no]))
@@ -428,8 +427,6 @@ class EOM_CCSD:
             subspace_matrix[:no*nv, i] = u_singles[i].ravel()
             subspace_matrix[no*nv:, i] = u_doubles[i].ravel()
         Q, R = ctf.qr(subspace_matrix)
-        #subspace_matrix = subspace_matrix.to_nparray()
-        #Q, R = np.linalg.qr(subspace_matrix)
 
         for i in range(subspace_len):
             u_singles[i] = Q[:no*nv, i]
