@@ -42,7 +42,7 @@ class EOM_CCSD:
     def write_logging_info(self):
         return
 
-    def solve(self, t_fock_pq, dict_t_V, t_T_abij):
+    def solve(self, t_fock_dressed_pq, dict_t_V_dressed, t_fock_pq, t_T_abij):
         """
         Solve for the requested number (n_excit) of excited states vectors and
         energies.
@@ -52,7 +52,7 @@ class EOM_CCSD:
             t_fock_pq: ctf tensor, (singles dressed) fock matrix
             dict_t_V: dict of ctf tensors, (singles dressed) two-body integrals
             t_T_abij: ctf tensor, the doubles amplitudes from a ground state CCSD calculation
-                For EOM-CCSD, t_T_abij should be singles dressed.
+                For EOM-CCSD, t_T_abij should be singles dressed. ??
                 For EOM-MP2, t_T_abij is the original doubles amplitude
         Returns:
             e_exit: numpy array of size n_excit
@@ -93,12 +93,12 @@ class EOM_CCSD:
             w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
-                w_singles[l] = self.update_singles(t_fock_pq,
-                                                   dict_t_V, self.u_singles[l],
+                w_singles[l] = self.update_singles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, self.u_singles[l],
                                                    self.u_doubles[l], t_T_abij)
-                w_doubles[l] = self.update_doubles(t_fock_pq,
-                                                    dict_t_V, self.u_singles[l],
-                                                    self.u_doubles[l], t_T_abij)
+                w_doubles[l] = self.update_doubles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, self.u_singles[l],
+                                                   self.u_doubles[l], t_T_abij)
                 # build Hamiltonian inside subspace
                 for j in range(l):
                     B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
@@ -140,8 +140,8 @@ class EOM_CCSD:
                         y_doubles += w_doubles[l] * v[l, n]
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
-                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind_init[n]]))
-                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind_init[n]]))
+                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-3))
+                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-3))
                 e_old = self.e_excit
                 diff_e_norm = np.linalg.norm(self.e_excit - e)
                 self.e_excit = e

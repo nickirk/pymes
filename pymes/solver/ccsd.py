@@ -265,7 +265,7 @@ class CCSD(ccd.CCD):
         # t_V_iajb, t_V_ijka 
         #
         # dressed f^i_a block
-        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, jabi->ia", t_T_ai, dict_t_V['iabj'])
+        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, ijab->ia", t_T_ai, dict_t_V['ijab'])
         t_tilde_fock_pq[:no, no:] += -1.0 * ctf.einsum("bj, jiab->ia", t_T_ai, dict_t_V['ijab'])
         # dressed f^a_i
         t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("ji, aj->ai", t_fock_pq[:no, :no], t_T_ai)
@@ -373,9 +373,9 @@ class CCSD(ccd.CCD):
             dict_t_V_dressed["ijka"] = t_V_ijka_dressed
 
         if "ijak" in dict_t_V_dressed:
-            t_V_ijka_dressed = dict_t_V["ijak"].copy()
-            t_V_ijka_dressed += ctf.einsum("ijab, bk -> ijak", dict_t_V["ijab"], t_T_ai)
-            dict_t_V_dressed["ijak"] = t_V_ijka_dressed
+            t_V_ijak_dressed = dict_t_V["ijak"].copy()
+            t_V_ijak_dressed += ctf.einsum("ijab, bk -> ijak", dict_t_V["ijab"], t_T_ai)
+            dict_t_V_dressed["ijak"] = t_V_ijak_dressed
 
         # t_V_iajb
         if "iajb" in dict_t_V_dressed:
@@ -424,10 +424,9 @@ class CCSD(ccd.CCD):
         # t_V_abcd
         if "abcd" in dict_t_V_dressed:
             t_V_abcd_dressed = dict_t_V["abcd"].copy()
-            t_V_abcd_dressed += - ctf.einsum("jbcd, aj -> abcd", dict_t_V['iabc'], t_T_ai) \
-                                - ctf.einsum("aicd, bi -> abcd", dict_t_V['aibc'], t_T_ai) \
-                                + ctf.einsum("jicd, aj, bi -> abcd", dict_t_V['ijab'], t_T_ai,
-                                             t_T_ai)
+            t_V_abcd_dressed += -1.0 * ctf.einsum("jbcd, aj -> abcd", dict_t_V['iabc'], t_T_ai)
+            t_V_abcd_dressed += -1.0 * ctf.einsum("aicd, bi -> abcd", dict_t_V['aibc'], t_T_ai)
+            t_V_abcd_dressed += 1.0 * ctf.einsum("jicd, aj, bi -> abcd", dict_t_V['ijab'], t_T_ai, t_T_ai)
             dict_t_V_dressed["abcd"] = t_V_abcd_dressed
 
         return dict_t_V_dressed
