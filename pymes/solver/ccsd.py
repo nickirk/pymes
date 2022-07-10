@@ -400,25 +400,25 @@ class CCSD(ccd.CCD):
 
         if "abic" in dict_t_V_dressed:
             t_V_abic_dressed = dict_t_V["abic"].copy()
-            t_V_abic_dressed += -ctf.einsum("jbic, aj -> abic", dict_t_V["iajb"], t_T_ai)
+            t_V_abic_dressed += -1.0 * ctf.einsum("jbic, aj -> abic", dict_t_V["iajb"], t_T_ai)
             t_V_abic_dressed += ctf.einsum("abdc, di -> abic", dict_t_V["abcd"], t_T_ai)
-            t_V_abic_dressed += -ctf.einsum("jbdc, aj, di -> abic", dict_t_V["iabc"], t_T_ai, t_T_ai)
-            t_V_abic_dressed += -ctf.einsum("ajic, bj -> abic", dict_t_V["aijb"], t_T_ai)
+            t_V_abic_dressed += -1.0 * ctf.einsum("jbdc, aj, di -> abic", dict_t_V["iabc"], t_T_ai, t_T_ai)
+            t_V_abic_dressed += -1.0 * ctf.einsum("ajic, bj -> abic", dict_t_V["aijb"], t_T_ai)
             t_V_abic_dressed += ctf.einsum("kjic, ak, bj -> abic", dict_t_V["ijka"], t_T_ai, t_T_ai)
-            t_V_abic_dressed += -ctf.einsum("ajdc, di, bj -> abic", dict_t_V["aibc"], t_T_ai, t_T_ai)
+            t_V_abic_dressed += -1.0 * ctf.einsum("ajdc, di, bj -> abic", dict_t_V["aibc"], t_T_ai, t_T_ai)
             t_V_abic_dressed += ctf.einsum("kjdc, ak, di, bj -> abic", dict_t_V["ijab"], t_T_ai, t_T_ai, t_T_ai)
             dict_t_V_dressed["abic"] = t_V_abic_dressed
 
         # t_V_iajk or t_V_aijk
         if "iajk" in dict_t_V_dressed:
             t_V_iajk_dressed = dict_t_V["iajk"].copy()
-            t_V_iajk_dressed += -ctf.einsum("iljk, al -> iajk", dict_t_V["klij"], t_T_ai)
+            t_V_iajk_dressed += -1.0 * ctf.einsum("iljk, al -> iajk", dict_t_V["klij"], t_T_ai)
             t_V_iajk_dressed += ctf.einsum("iajb, bk -> iajk", dict_t_V["iajb"], t_T_ai)
-            t_V_iajk_dressed += -ctf.einsum("iljb, al, bk -> iajk", dict_t_V["ijka"], t_T_ai, t_T_ai)
+            t_V_iajk_dressed += -1.0 * ctf.einsum("iljb, al, bk -> iajk", dict_t_V["ijka"], t_T_ai, t_T_ai)
             t_V_iajk_dressed += ctf.einsum("iabk, bj -> iajk", dict_t_V["iabj"], t_T_ai)
-            t_V_iajk_dressed += -ctf.einsum("ilbk, bj, al -> iajk", dict_t_V["ijak"], t_T_ai, t_T_ai)
+            t_V_iajk_dressed += -1.0 * ctf.einsum("ilbk, bj, al -> iajk", dict_t_V["ijak"], t_T_ai, t_T_ai)
             t_V_iajk_dressed += ctf.einsum("iabc, bj, ck -> iajk", dict_t_V["iabc"], t_T_ai, t_T_ai)
-            t_V_iajk_dressed += -ctf.einsum("ilbc, bj, al, ck -> iajk", dict_t_V["ijab"], t_T_ai, t_T_ai, t_T_ai)
+            t_V_iajk_dressed += -1.0 * ctf.einsum("ilbc, bj, al, ck -> iajk", dict_t_V["ijab"], t_T_ai, t_T_ai, t_T_ai)
             dict_t_V_dressed["iajk"] = t_V_iajk_dressed
 
         # t_V_abcd

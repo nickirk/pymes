@@ -34,10 +34,10 @@ class EOM_CCSD:
         self.u_singles = []
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
-        self.max_dim = n_excit * 6
-        self.e_epsilon = 1.e-10
+        self.max_dim = n_excit * 8
+        self.e_epsilon = 1.e-12
 
-        self.max_iter = 200
+        self.max_iter = 500
 
     def write_logging_info(self):
         return
@@ -147,18 +147,22 @@ class EOM_CCSD:
                 self.e_excit = e
             if diff_e_norm < self.e_epsilon:
                 print_logging_info("Iterative solver converged.", level=1)
-                print_logging_info("Norm of energy difference = ", diff_e_norm, level=2)
-                print_logging_info("Excited states energies real part = ", e, level=2)
+                print_logging_info("Norm of energy difference = {:.12f}".format(diff_e_norm), level=2)
+                for r in range(self.n_excit):
+                    print_logging_info("Excited state {:d} energy = {:.12f}".format(r, e[r]), level=2)
                 print_logging_info("Excited states energies imaginary part = ", e_imag, level=2)
                 break
             else:
                 print_logging_info("Iteration = ", i, level=1)
                 print_logging_info("Norm of energy difference = ", diff_e_norm, level=2)
-                print_logging_info("Excited states energies real part = ", e, level=2)
+                for r in range(self.n_excit):
+                    print_logging_info("Excited state {:d} energy = {:.12f}".format(r, e[r]), level=2)
                 print_logging_info("Excited states energies imaginary part = ", e_imag, level=2)
                 print_logging_info("Took {:.3f} seconds ".format(time.time() - time_iter_init), level=2)
         print_logging_info("EOM-CCSD finished in {:.3f} seconds".format(time.time() - time_init), level=1)
-        print_logging_info("Converged excited states energies = ", e, level=1)
+        print_logging_info("Converged excited states energies:", level=1)
+        for r in range(self.n_excit):
+            print_logging_info("Excited state {:d} energy = {:.12f}".format(r, e[r]), level=2)
 
         return self.e_excit
 
@@ -230,8 +234,8 @@ class EOM_CCSD:
         t_delta_doubles += - 2. * ctf.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
         t_delta_doubles += + 2. * ctf.einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
         t_delta_doubles += + 2. * ctf.einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], dict_t_V["abij"], t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], dict_t_V["abij"], t_u_ai)
+        t_delta_doubles += - 1. * ctf.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * ctf.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
         t_delta_doubles += + 1. * ctf.einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
         t_delta_doubles += + 1. * ctf.einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
         t_delta_doubles += + 1. * ctf.einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
@@ -309,7 +313,7 @@ class EOM_CCSD:
         return fake_ham
 
     def test_davidson(self):
-        nv = 6 - 2
+        nv = 15
         no = self.no
         time_init = time.time()
         ham = self.construct_fake_ham(nv, no)
