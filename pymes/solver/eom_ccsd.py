@@ -35,9 +35,9 @@ class EOM_CCSD:
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
         self.max_dim = n_excit * 8
-        self.e_epsilon = 1.e-12
+        self.e_epsilon = 1.e-8
 
-        self.max_iter = 500
+        self.max_iter = 200
 
     def write_logging_info(self):
         return

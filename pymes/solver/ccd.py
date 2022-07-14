@@ -223,7 +223,7 @@ class CCD:
                                            t_tilde_T_abij, t_V_ijab)
 
         t_Ex_abij = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
-        t_Ex_baji = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
+        #t_Ex_baji = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
 
         t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
             - t_X_ki.i("ki") * t_T_abij.i("abkj") \

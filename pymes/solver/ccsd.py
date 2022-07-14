@@ -33,6 +33,7 @@ class CCSD(ccd.CCD):
         self.delta = 1.0
         # convergence criterion for energy difference
         self.delta_e = delta_e
+        self.debug_level = 1
 
         if self.is_diis:
             self.mixer = diis.DIIS(dim_space=6)
@@ -123,7 +124,7 @@ class CCSD(ccd.CCD):
         print_logging_info("Iteration = 0", level=1)
 
         e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, dict_t_V["ijab"], dict_t_V["abij"], level_shift,
-                                    sp=sp)
+                                    sp=sp, debug_level=self.debug_level)
         t_T_ai = ctf.tensor([nv, no], dtype=t_T_abij.dtype, sp=sp)
         t_T_ai.set_zero()
         if amps is not None:

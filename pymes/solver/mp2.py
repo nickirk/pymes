@@ -4,7 +4,7 @@ import ctf
 
 from pymes.log import print_logging_info
 
-def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None):
+def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None, **kwargs):
     """
     mp2 algorithm
     Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
@@ -25,14 +25,19 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
     timeMp2 = time.time()
     print_logging_info(algoName,level=0)
 
+    if "debug_level" in kwargs:
+        debug_level = kwargs["debug_level"]
+    else:
+        debug_level = 3
+
     no = t_epsilon_i.size
     nv = t_epsilon_a.size
 
     # the following ctf expression calcs the outer sum, as wanted.
-    print_logging_info("Creating D_abij", level = 1)
+    print_logging_info("Creating D_abij", level = 1, debug_level=debug_level)
 
     # memory efficient implementation for sparse V_abij, validity for dense still need to be tested.
-    print_logging_info("Calculating T_abij", level = 1)
+    print_logging_info("Calculating T_abij", level = 1, debug_level=debug_level)
     inds, vals = t_V_abij.read_local_nnz()
     del t_V_abij
     epsilon_i = t_epsilon_i.to_nparray()
@@ -44,7 +49,7 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
 
     for ind in range(len(inds)):
         if ind % num_proc == 0:
-            print_logging_info("Completed {:.2f} percent...".format(ind/len(inds)*100), level=2)
+            print_logging_info("Completed {:.2f} percent...".format(ind/len(inds)*100), level=2, debug_level=debug_level)
         global_ind = inds[ind]
         [a, b, i, j] = get_orb_inds(global_ind, [nv, nv, no, no])
         vals[ind] /= (epsilon_i[i] + epsilon_i[j] - epsilon_a[a] - epsilon_a[b] + leve_shift)
