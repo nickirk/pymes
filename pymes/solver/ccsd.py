@@ -167,18 +167,10 @@ class CCSD(ccd.CCD):
             t_R_ai = self.get_singles_residual(t_fock_pq, t_T_ai, t_T_abij,
                                                dict_t_V)
 
-            t_V_klij_dressed = dict_t_V_dressed['klij']
-            t_V_ijab_dressed = dict_t_V_dressed['ijab']
-            t_V_abij_dressed = dict_t_V_dressed['abij']
-            t_V_iajb_dressed = dict_t_V_dressed['iajb']
-            t_V_iabj_dressed = dict_t_V_dressed['iabj']
-            t_V_abcd_dressed = dict_t_V_dressed['abcd']
 
             t_R_abij = self.get_doubles_residual(
                 t_fock_pq, t_T_abij,
-                t_V_klij_dressed, t_V_ijab_dressed,
-                t_V_abij_dressed, t_V_iajb_dressed,
-                t_V_iabj_dressed, t_V_abcd_dressed
+                dict_t_V_dressed
             )
 
             t_delta_T_ai = ctf.einsum('ai,ai->ai', t_R_ai, t_D_ai)
@@ -450,14 +442,19 @@ class CCSD(ccd.CCD):
 
     def get_doubles_residual(self,
                              t_fock_pq, t_T_abij,
-                             t_V_klij, t_V_ijab,
-                             t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd
+                             dict_t_V_dressed
                              ):
         """
         Computes the residuals for the doubles amplitudes.
         """
         algo_name = "ccsd.get_doubles_residual"
         # return ccd's get_residual function
+        t_V_klij = dict_t_V_dressed['klij']
+        t_V_ijab = dict_t_V_dressed['ijab']
+        t_V_abij = dict_t_V_dressed['abij']
+        t_V_iajb = dict_t_V_dressed['iajb']
+        t_V_iabj = dict_t_V_dressed['iabj']
+        t_V_abcd = dict_t_V_dressed['abcd']
         return self.get_residual(t_fock_pq, t_T_abij, t_V_klij,
                                  t_V_ijab, t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd)
 

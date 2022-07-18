@@ -42,7 +42,7 @@ class EOM_CCSD:
     def write_logging_info(self):
         return
 
-    def solve(self, t_fock_dressed_pq, dict_t_V_dressed, t_fock_pq, t_T_abij):
+    def solve(self, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
         """
         Solve for the requested number (n_excit) of excited states vectors and
         energies.
@@ -62,8 +62,8 @@ class EOM_CCSD:
         time_init = time.time()
         # build guesses
         no = self.no
-        t_epsilon_i = t_fock_pq.diagonal()[:no]
-        t_epsilon_a = t_fock_pq.diagonal()[no:]
+        t_epsilon_i = t_fock_dressed_pq.diagonal()[:no]
+        t_epsilon_a = t_fock_dressed_pq.diagonal()[no:]
         nv = t_epsilon_a.shape[0]
         t_D_ai = ctf.tensor([nv, no])
         t_D_abij = ctf.tensor(t_T_abij.shape)
@@ -140,8 +140,8 @@ class EOM_CCSD:
                         y_doubles += w_doubles[l] * v[l, n]
                         y_singles -= e[n] * self.u_singles[l] * v[l, n]
                         y_doubles -= e[n] * self.u_doubles[l] * v[l, n]
-                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-3))
-                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-3))
+                    self.u_singles.append(y_singles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-5))
+                    self.u_doubles.append(y_doubles / (e[n] - D_ai[lowest_ex_ind_init[n]] + 1e-5))
                 e_old = self.e_excit
                 diff_e_norm = np.linalg.norm(self.e_excit - e)
                 self.e_excit = e
