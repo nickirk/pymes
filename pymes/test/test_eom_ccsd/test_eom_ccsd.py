@@ -56,9 +56,13 @@ def driver(fcidump_file="./FCIDUMP.H2.sto6g", ref_e={"hf_e": -0.891589185800039,
 
 
 def test_davidson():
-    nv = 8
-    no = 4
+    nv = 10
+    no = 10
     eom_cc = eom_ccsd.EOM_CCSD(no, n_excit=3)
     eom_cc.test_davidson()
-#def test_ccsd_fno(fcidump_file="fcidump.no"):
-#    test_ccsd_energy(fcidump_file, ref_e=-0.01931436971985408)
+
+def main():
+    test_davidson()
+
+if __name__ == "__main__":
+    main()
