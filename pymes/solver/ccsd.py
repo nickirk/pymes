@@ -258,7 +258,7 @@ class CCSD(ccd.CCD):
         # t_V_iajb, t_V_ijka 
         #
         # dressed f^i_a block
-        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, jabi->ia", t_T_ai, dict_t_V['iabj'])
+        t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, ijab->ia", t_T_ai, dict_t_V['ijab'])
         t_tilde_fock_pq[:no, no:] += -1.0 * ctf.einsum("bj, jiab->ia", t_T_ai, dict_t_V['ijab'])
         # dressed f^a_i
         t_tilde_fock_pq[no:, :no] += -1.0 * ctf.einsum("ji, aj->ai", t_fock_pq[:no, :no], t_T_ai)
