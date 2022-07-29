@@ -94,6 +94,7 @@ def read(fcidump_file="FCIDUMP", is_tc=False):
         sys.exit(1)
 
     print_logging_info("Reading " + fcidump_file + "...", level=1)
+    print_logging_info("Using TC integrals: ", is_tc, level=2)
 
     e_core = 0.
 
@@ -148,6 +149,7 @@ def read(fcidump_file="FCIDUMP", is_tc=False):
                     V_pqrs[r - 1, s - 1, p - 1, q - 1] = integral
                     V_pqrs[p - 1, s - 1, r - 1, q - 1] = integral
                 else:
+                    V_pqrs[q - 1, p - 1, s - 1, r - 1] = integral
                     V_pqrs[p - 1, q - 1, r - 1, s - 1] = integral
 
             if p == q == r == s == 0:
@@ -158,8 +160,8 @@ def read(fcidump_file="FCIDUMP", is_tc=False):
 
             if p != 0 and r != 0 and q == s == 0:
                 # the 1-body integral is still symmetric tc or non-tc
-                h_pq[p - 1, r - 1] = integral
                 h_pq[r - 1, p - 1] = integral
+                h_pq[p - 1, r - 1] = integral
 
 
     return n_elec, n_orb, e_core, epsilon_p, h_pq, V_pqrs

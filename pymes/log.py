@@ -2,8 +2,10 @@
 
 import ctf
 
-def print_title(title_name,sep_symbol,level=1):
+def print_title(title_name, sep_symbol="=", level=1, debug_level=3):
     world=ctf.comm()
+    if level > debug_level:
+        return
     if world.rank()  == 0:
         if level == 0:
             level = 1
@@ -23,6 +25,13 @@ def print_logging_info(*args,**kwargs):
     level = 0
     if "level" in kwargs:
         level = kwargs["level"]
+
+    if "debug_level" in kwargs:
+        debug_level = kwargs["debug_level"]
+    else:
+        debug_level = 3
+    if level > debug_level:
+        return
     if world.rank() == 0:
         print("    "*level+''.join(str(i) for i in args))
     return
