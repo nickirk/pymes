@@ -1,6 +1,25 @@
 # PyMES
 
 **Py**thon package for **M**any-**E**lectron **S**imulations (PyMES)
+PyMES package implements many-electron methods, such as MP2, 
+CCD/DCD, CCSD/DCSD for ground states, and EOM-CCSD for excited states, using
+the CTF library for automatic tensor contractions. 
+
+Key features:
+  1. Handling non-hermitian Hamiltonians, such as transcorrelated Hamiltonian;
+  2. MPI and OMP parallelisation thanks to CTF;
+  3. Treating simple model system like 3D uniform electron gas, as well as interface to popular electronic method packages via FCIDUMP.
+
+
+# Installation
+
+### Dependancies
+- numpy
+- scipy
+- h5py
+- Cython
+- CTF
+- pytest (test purpose, not needed for running the code)
 
 # Building
 
@@ -21,7 +40,8 @@ source ~/.bashrc
 ```
 
 
-But PyMES depends on the Cyclops Tensor Framework (CTF). Therefore, you need to build the CTF before using pymes.
+But PyMES depends on the Cyclops Tensor Framework (CTF). Therefore, 
+you need to build the CTF before using pymes.
 
 ## Building CTF
 Building instructions can be found at https://github.com/cyclops-community/ctf.  
@@ -36,8 +56,10 @@ Run the configure script to check if all necessary libraries etc. can be found.
 ```
 ./path/to/ctf/source/code/configure --install-dir=/path/to/install/dir
 ```
-**Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH and dont worry if the configure script is not finding the static BLAS and LAPACK libraries.  
-**Tip:** If you use the --install-dir option (because you dont have sudo) it may be necessary to export the path to the libraries in your bash as
+**Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH.  
+**Tip:** If you use the --install-dir option, it is necessary to export 
+the path to the libraries in your bash as
+
 ```
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/install/dir/lib
 ```
@@ -47,7 +69,8 @@ Now we can build ctf with
 ```
 make python -j [as many cores as you want to dedicate]
 ```
-**Tip:** It may be necessary to make some changes in the /path/to/ctf/source/code/Makefile. For example changing the python command to python3, if cython is only available in your python3.  
+**Tip:** It may be necessary to make some changes in the /path/to/ctf/source/code/Makefile. 
+For example changing the python command to python3, if cython is only available in your python3.  
 
 Test your CTF installation with
 ```
@@ -58,19 +81,16 @@ If that works, pip install ctf with
 ```
 make python_install
 ```
-**Tip:** If you dont have sudo, it may also be necessary to add to the pip install command in the Makefile the ```--user``` flag.  
-**Tip:** It also may be that pip somehow messes the ctf libs up while copying. Then copy and overwrite yourself with
-```
-cp /path/to/your/build/directory/ctf/lib_python/ctf/*.so /home/$USER/.local/lib/python3.6/site-packages/ctf/.
-```
-
+**Tip:** If you don't have sudo, it may also be necessary to add to the pip install command in the Makefile the ```--user``` flag.  
 
 
 # For developers
 
-## Test
+## Testing
 
-For each functionality added, a test file or an example file on how to use it should be added under the *test* directory. For now, the test files serve the purpose of showing examples. In the future, they should also serve as unit tests, where standard and correct results should be supplied and be compared to each running results.
+For each functionality added, a test file or an example file on how to use it should be added under the *test* directory. 
+For now, the test files serve the purpose of showing examples. In the future, they should also serve as unit tests, 
+where standard and correct results should be supplied and be compared to each running results.
 
 ## Naming style
 
@@ -78,9 +98,21 @@ We follow the convention explained in wikipedia
 
 > Python and Ruby
 >
-> [Python](https://en.wikipedia.org/wiki/Python_(programming_language)) and [Ruby](https://en.wikipedia.org/wiki/Ruby_(programming_language)) both recommend `UpperCamelCase` for class names, `CAPITALIZED_WITH_UNDERSCORES` for constants, and `lowercase_separated_by_underscores` for other names.
+> [Python](https://en.wikipedia.org/wiki/Python_(programming_language)) and [Ruby](https://en.wikipedia.org/wiki/Ruby_(programming_language)) 
+> both recommend `UpperCamelCase` for class names, 
+> `CAPITALIZED_WITH_UNDERSCORES` for constants, and 
+> `lowercase_separated_by_underscores` for other names.
 >
-> In Python, if a name is intended to be "[private](https://en.wikipedia.org/wiki/Private_member)", it is prefixed by an underscore. Private variables are enforced in Python only by convention. Names can also be suffixed with an underscore to prevent conflict with Python keywords. Prefixing with double underscores changes behaviour in classes with regard to [name mangling](https://en.wikipedia.org/wiki/Name_mangling#Python). Prefixing *and* suffixing with double underscores are reserved for "magic names" which fulfill special behaviour in Python objects.[[39\]](https://en.wikipedia.org/wiki/Naming_convention_(programming)#cite_note-pep8-39)
+> In Python, if a name is intended to be "[private](https://en.wikipedia.org/wiki/Private_member)", 
+> it is prefixed by an underscore. Private variables are enforced in Python only by convention. 
+> Names can also be suffixed with an underscore to prevent conflict with Python keywords. 
+> Prefixing with double underscores changes behaviour in classes with 
+> regard to [name mangling](https://en.wikipedia.org/wiki/Name_mangling#Python). 
+> Prefixing *and* suffixing with double underscores are reserved for "magic names" which fulfill special 
+> behaviour in Python objects.[[39\]](https://en.wikipedia.org/wiki/Naming_convention_(programming)#cite_note-pep8-39)
 
-Some old codes need to be refactored to fulfil the naming conventions. But newly added code should follow these conventions. 
+Some old codes need to be refactored to fulfil the naming conventions. 
+But newly added code should follow these conventions. 
+
+**Long and self-explanatory** names are favored over short and clean ones.
 

@@ -252,11 +252,7 @@ class CCSD(ccd.CCD):
         no = self.no
 
         t_tilde_fock_pq = t_fock_pq.copy()
-        # needed undressed t_V tensors
-        # t_V_iabj, t_V_ijab
-        # t_V_ijak, t_V_iabc
-        # t_V_iajb, t_V_ijka 
-        #
+
         # dressed f^i_a block
         t_tilde_fock_pq[:no, no:] += 2.0 * ctf.einsum("bj, ijab->ia", t_T_ai, dict_t_V['ijab'])
         t_tilde_fock_pq[:no, no:] += -1.0 * ctf.einsum("bj, jiab->ia", t_T_ai, dict_t_V['ijab'])

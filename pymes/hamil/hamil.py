@@ -4,6 +4,8 @@ hamil
 
 Base classes and functions for generating and interacting with Hamiltonian
 matrices.
+
+This class is only used for UEG model.
 '''
 
 # copyright (c) 2012 James Spencer.
