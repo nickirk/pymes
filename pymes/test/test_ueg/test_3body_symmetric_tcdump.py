@@ -2,14 +2,10 @@
 
 import time
 import numpy as np
-import sys
 
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
 
 import ctf
-from ctf.core import *
 
-import pymes
 from pymes.model import ueg
 from pymes.util import tcdump
 
@@ -101,7 +97,7 @@ def main(nel, cutoff,rs, gamma, kc, tc):
         print("Successfully asserted the 2nd and 3rd pair of indices are symmetric")
 
     print("Writing 3-body integrals into TCDUMP")
-    tcdump.write2Tcdump(tV_sym_opqrst)
+    tcdump.write(tV_sym_opqrst)
 
 
 

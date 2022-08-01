@@ -2,17 +2,12 @@
 
 import time
 import numpy as np
-import sys
 
 
 import ctf
-from ctf.core import *
 
-import pymes
 from pymes.model import ueg
 
-## Script for generating plane wave basis
-## hamiltonian integrals for unifrom electron gas
 
 ##############################################################################
 #   1. ctf tensors starts with a lower case t

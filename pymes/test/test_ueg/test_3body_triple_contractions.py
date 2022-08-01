@@ -2,14 +2,10 @@
 
 import time
 import numpy as np
-import sys
 
-sys.path.append("/home/liao/Work/Research/TCSolids/scripts/")
 
 import ctf
-from ctf.core import *
 
-import pymes
 from pymes.model import ueg
 
 

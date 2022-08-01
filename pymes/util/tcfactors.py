@@ -1,8 +1,3 @@
-import ctf
-from ctf.core import *
-import numpy as np
-from numpy.core.numeric import full
-import itertools
 import h5py
 
 from pymes.log import print_logging_info

@@ -2,13 +2,10 @@
 
 import time
 import numpy as np
-import sys
 
 
 import ctf
-from ctf.core import *
 
-import pymes
 from pymes.model import ueg
 from pymes.log import print_logging_info
 

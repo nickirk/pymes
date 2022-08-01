@@ -1,3 +1,6 @@
 [submodule "lib/ctf"]
 	path = lib/ctf
 	url = git@github.com:cyclops-community/ctf.git
+[submodule "pymes/lib/ctf"]
+	path = pymes/lib/ctf
+	url = git@github.com:cyclops-community/ctf.git

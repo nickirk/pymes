@@ -1,12 +1,8 @@
 import ctf
-from ctf.core import *
 import numpy as np
-from numpy.core.numeric import full
-import itertools
 
 from pymes.log import print_logging_info
 from pymes.util import tcdump
-from pymes.integral import contraction
 
 def test_read_write(file_name="TCDUMP.H2.tc"):
     t_V_orpsqt = tcdump.read(file_name, sp=0)
