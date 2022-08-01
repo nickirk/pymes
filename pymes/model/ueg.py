@@ -198,8 +198,8 @@ class UEG:
         start_time = time.time()
 
 
-        if self.basis_fns == None:
-            raise ValueError(algoName, "basis_fns not initialised")
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
         if correlator is None:
             self.correlator = self.trunc
             print_logging_info("No correlator given.", level=1)
@@ -208,7 +208,7 @@ class UEG:
         else:
             self.correlator = correlator
         if self.basis_indices_map is None:
-            raise ValueError(algoName, "basis_indices_map not initialised")
+            raise ValueError(algo_name, "Basis indices map not initialized!")
 
         print_logging_info(algo_name)
         print_logging_info("Using TC method", level=1)
