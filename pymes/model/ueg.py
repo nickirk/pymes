@@ -93,6 +93,7 @@ class UEG:
         ke: float, kinetic energy of this plane wave function, possibly shifted
 
         Returns:
+        --------
         a bool
         """
         kinetic_cutoff = self.cutoff * (2 * np.pi / self.L) ** 2 / 2.
@@ -114,11 +115,11 @@ class UEG:
                 size = product of numbers of k-points in x, y, z directions
         """
 
-        numKInEachDir = self.imax * 2 + 1
-        self.basis_indices_map = -1 * np.ones(numKInEachDir ** 3).astype(int)
+        num_k_in_each_dir = self.imax * 2 + 1
+        self.basis_indices_map = -1 * np.ones(num_k_in_each_dir ** 3).astype(int)
         for i in range(int(len(self.basis_fns) / 2)):
-            s = numKInEachDir ** 2 * (self.basis_fns[i * 2].k[0] + self.imax) + \
-                numKInEachDir * (self.basis_fns[i * 2].k[1] + self.imax) + \
+            s = num_k_in_each_dir ** 2 * (self.basis_fns[i * 2].k[0] + self.imax) + \
+                num_k_in_each_dir * (self.basis_fns[i * 2].k[1] + self.imax) + \
                 self.basis_fns[i * 2].k[2] + self.imax
             self.basis_indices_map[s] = i
 
@@ -129,7 +130,7 @@ class UEG:
         Parameters
         ----------
         cutoff: float,
-            energy cutoff, in units of `2*(2\pi/L)^2`, defining the
+            energy cutoff, in units of `2*(2pi/L)^2`, defining the
             single-particle basis.
             Only single-particle basis functions with a kinetic energy equal
             to or less than the cutoff are included as basis functions.
@@ -149,23 +150,18 @@ class UEG:
         k_shift = np.array(k_shift)
         kp_shift = k_shift * 2 * np.pi / self.L
         imax = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1
-        delta_kp_square = kp_shift.dot(kp_shift)
         self.cutoff = cutoff
         self.imax = imax
-        # basis_fns = [planewave.BasisFunc(0, 0, 0, self.L, 1, k_shift), planewave.BasisFunc(0, 0, 0, self.L, -1, k_shift)]
         basis_fns = []
 
         for i in range(-imax, imax + 1):
             for j in range(-imax, imax + 1):
                 for k in range(-imax, imax + 1):
-                    # if i == j == k ==0:
-                    #    continue
                     bfn = planewave.BasisFunc(i, j, k, self.L, 1, k_shift)
                     if self.is_k_in_basis(bfn.kinetic):
                         basis_fns.append(planewave.BasisFunc(i, j, k, self.L, 1, k_shift))
                         basis_fns.append(planewave.BasisFunc(i, j, k, self.L, -1, k_shift))
-        # Sort in ascending order of kinetic energy.  Note that python's .sort()
-        # (since 2.3) is guaranteed to be stable.
+
         basis_fns.sort()
         basis_fns = tuple(basis_fns)
         self.basis_fns = basis_fns
@@ -196,15 +192,15 @@ class UEG:
             where nP: int, is the number of spatial orbitals.
         """
 
-        algoName = "UEG.eval_3b_integrals"
-        print_logging_info(algoName, level=0)
-        startTime = time.time()
+        algo_name = "UEG.eval_3b_integrals"
+        print_logging_info(algo_name, level=0)
+        start_time = time.time()
 
         world = ctf.comm()
         rank = world.rank()
 
-        if self.basis_fns == None:
-            raise BasisSetNotInitialized(algoName)
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
         if correlator is None:
             self.correlator = self.trunc
             print_logging_info("No correlator given.", level=1)
@@ -213,9 +209,9 @@ class UEG:
         else:
             self.correlator = correlator
         if self.basis_indices_map is None:
-            raise BasisFuncIndicesMapNotInitialised(algoName)
+            raise ValueError(algo_name, "Basis indices map not initialized!")
 
-        print_logging_info(algoName)
+        print_logging_info(algo_name)
         print_logging_info("Using TC method", level=1)
         print_logging_info("Using correlator:", correlator.__name__, level=1)
         print_logging_info("k_cutoff in correlator:", self.k_cutoff, level=1)
@@ -227,72 +223,64 @@ class UEG:
 
         # due to the momentum conservation, only 5 indices are free.
         # implementation follow closely the get_lmat_ueg in NECI
-        numKInEachDir = self.imax * 2 + 1
+        num_k_in_each_dir = self.imax * 2 + 1
 
         for o in range(nP):
             if (o) % world.np() == rank:
-                print_logging_info("Elapsed time = {:.3f} s: " \
-                                   .format(time.time() - startTime) + \
-                                   "calculating the {}-{} out of {} orbitals" \
-                                   .format(o, o + world.np() \
-                                       if o + world.np() < nP else nP, nP), \
+                print_logging_info("Elapsed time = {:.3f} s: "
+                                   .format(time.time() - start_time) +
+                                   "calculating the {}-{} out of {} orbitals"
+                                   .format(o, o + world.np()
+                                   if o + world.np() < nP else nP, nP),
                                    level=1)
                 for r in range(nP):
-                    kIntVec1 = self.basis_fns[2 * r].k - self.basis_fns[2 * o].k
+                    k_int_vec1 = self.basis_fns[2 * r].k - self.basis_fns[2 * o].k
                     for p in range(nP):
                         for s in range(nP):
-                            kIntVec2 = self.basis_fns[2 * p].k - self.basis_fns[2 * s].k
+                            k_int_vec2 = self.basis_fns[2 * p].k - self.basis_fns[2 * s].k
                             for q in range(nP):
-                                tIntVec = -kIntVec1 + kIntVec2 + self.basis_fns[2 * q].k
-                                locT = numKInEachDir ** 2 * (tIntVec[0] + self.imax) + \
-                                       numKInEachDir * (tIntVec[1] + self.imax) + \
-                                       tIntVec[2] + self.imax
-                                if locT < len(self.basis_indices_map) and locT >= 0:
+                                t_int_vec = -k_int_vec1 + k_int_vec2 + self.basis_fns[2 * q].k
+                                locT = num_k_in_each_dir ** 2 * (t_int_vec[0] + self.imax) + \
+                                       num_k_in_each_dir * (t_int_vec[1] + self.imax) + \
+                                       t_int_vec[2] + self.imax
+                                if len(self.basis_indices_map) > locT >= 0:
                                     t = int(self.basis_indices_map[locT])
                                     if t < 0:
                                         continue
                                 else:
                                     continue
 
-                                kVec1 = 2.0 * np.pi / self.L * kIntVec1
-                                kVec2 = 2.0 * np.pi / self.L * kIntVec2
-                                # kVec3 = -2.0*np.pi/self.L*(self.basis_fns[2*q].k-self.basis_fns[2*t].k)
+                                k_vec1 = 2.0 * np.pi / self.L * k_int_vec1
+                                k_vec2 = 2.0 * np.pi / self.L * k_int_vec2
 
-                                w12 = self.correlator(kVec1.dot(kVec1)) \
-                                      * self.correlator(kVec2.dot(kVec2)) \
-                                      * kVec1.dot(kVec2)
-                                # w13 = self.correlator(kVec1.dot(kVec1))\
-                                #        * self.correlator(kVec3.dot(kVec3))\
-                                #        * kVec1.dot(kVec3)
-                                # w23 = self.correlator(kVec2.dot(kVec2))\
-                                #        * self.correlator(kVec3.dot(kVec3))\
-                                #        * kVec2.dot(kVec3)
-                                # w = (w12+w13+w23) / self.Omega**2
+                                w12 = self.correlator(k_vec1.dot(k_vec1)) \
+                                      * self.correlator(k_vec2.dot(k_vec2)) \
+                                      * k_vec1.dot(k_vec2)
                                 w = -(w12) / 2. / self.Omega ** 2
                                 index = o * nP ** 5 + p * nP ** 4 + q * nP ** 3 + r * nP ** 2 + s * nP + t
 
                                 values.append(w)
                                 indices.append(index)
                                 if index >= nP ** 6:
-                                    raise ("Index exceeds size of the tensor")
+                                    raise "Index exceeds size of the tensor"
 
         t_V_opqrst.write(indices, values)
 
-        print_logging_info("{:.3f} s spent on ".format(time.time() - startTime) + algoName, \
+        print_logging_info("{:.3f} s spent on ".format(time.time() - start_time) + algo_name, \
                            level=1)
 
         return t_V_opqrst
 
     def eval_2b_integrals(self, correlator=None,
-                          is_rpa_approx=False, \
-                          is_only_2b=False, \
-                          is_only_non_hermi_2b=False, \
-                          is_only_hermi_2b=False, \
-                          is_effect_2b=False, \
-                          is_exchange_1=False, \
-                          is_exchange_2=False, \
-                          is_exchange_3=False, \
-                          dtype=np.float64, \
+                          is_rpa_approx=False,
+                          is_only_2b=False,
+                          is_only_non_hermi_2b=False,
+                          is_only_hermi_2b=False,
+                          is_effect_2b=False,
+                          is_exchange_1=False,
+                          is_exchange_2=False,
+                          is_exchange_3=False,
+                          dtype=np.float64,
                           sp=1):
         """Member function of class UEG. This function evaluates 2-body
         integrals within the transcorrelation framework. The 2-body integrals
@@ -345,194 +333,192 @@ class UEG:
         Returns
         -------
         t_V_pqrs: tensor
-            of size [nP, nP, nP, nP], by default, CTF tensor
+            of size [n_p, n_p, n_p, n_p], by default, CTF tensor
         """
 
         world = ctf.comm()
-        algoName = "UEG.eval_2b_integrals"
-        startTime = time.time()
+        algo_name = "UEG.eval_2b_integrals"
+        start_time = time.time()
 
         rank = world.rank()
-        print_logging_info(algoName, level=0)
+        print_logging_info(algo_name, level=0)
 
-        if self.basis_fns == None:
-            raise BasisSetNotInitialized(algoName)
+        if self.basis_fns is None:
+            raise algo_name + ": Basis functions not initialized!"
 
         if correlator is not None:
             self.correlator = correlator
             print_logging_info("Using TC method", level=1)
-            print_logging_info("Using correlator: ", correlator.__name__, \
+            print_logging_info("Using correlator: ", correlator.__name__,
                                level=1)
             if self.k_cutoff is not None:
-                print_logging_info("k_cutoff in correlator = {:.8f}".format( \
+                print_logging_info("k_cutoff in correlator = {:.8f}".format(
                     self.k_cutoff), level=1)
             if self.gamma is not None:
-                print_logging_info("Gamma in correlator = {:.8f}".format( \
+                print_logging_info("Gamma in correlator = {:.8f}".format(
                     self.gamma), level=1)
 
             if is_only_2b:
-                print_logging_info("Including only pure 2-body terms: ", \
+                print_logging_info("Including only pure 2-body terms: ",
                                    is_only_2b, level=1)
             if is_rpa_approx:
-                print_logging_info("Including only RPA approximation for ", \
+                print_logging_info("Including only RPA approximation for ",
                                    "3-body: ", is_rpa_approx, level=1)
             if is_effect_2b:
-                print_logging_info("Including effective 2-body terms from ", \
+                print_logging_info("Including effective 2-body terms from ",
                                    "3-body: ", is_effect_2b, level=1)
             if is_exchange_1:
-                print_logging_info("Using only 1. exchange type 2-body from ", \
+                print_logging_info("Using only 1. exchange type 2-body from ",
                                    "3-body: ", is_exchange_1, level=1)
             if is_exchange_2:
-                print_logging_info("Using only 2. exchange type 2-body from ", \
+                print_logging_info("Using only 2. exchange type 2-body from ",
                                    "3-body: ", is_exchange_2, level=1)
 
             if is_exchange_3:
-                print_logging_info("Using only 3. exchange type 2-body from ", \
+                print_logging_info("Using only 3. exchange type 2-body from ",
                                    "3-body: ", is_exchange_3, level=1)
             # Just for testing, not used in production
             if is_only_non_hermi_2b:
-                print_logging_info("Including only non-hermitian 2-body ", \
+                print_logging_info("Including only non-hermitian 2-body ",
                                    "terms: ", is_only_non_hermi_2b, level=1)
 
             if is_only_hermi_2b:
-                print_logging_info("Including only hermitian 2-body terms: ", \
+                print_logging_info("Including only hermitian 2-body terms: ",
                                    is_only_non_hermi_2b, level=1)
 
-        nP = int(len(self.basis_fns) / 2)
-        t_V_pqrs = ctf.tensor([nP, nP, nP, nP], dtype=dtype, sp=sp)
+        n_p = int(len(self.basis_fns) / 2)
+        t_V_pqrs = ctf.tensor([n_p, n_p, n_p, n_p], dtype=dtype, sp=sp)
         indices = []
         values = []
 
-        numKInEachDir = self.imax * 2 + 1
+        num_k_in_each_dir = self.imax * 2 + 1
 
-        for p in range(nP):
+        for p in range(n_p):
             if (p) % world.np() == rank:
-                print_logging_info("Elapsed time = {:.3f} s: calculating " \
-                                   .format(time.time() - startTime)
-                                   + "the {}-{} out of {} orbitals" \
-                                   .format(p, p + world.np() \
-                    if p + world.np() < nP else nP, nP), \
+                print_logging_info("Elapsed time = {:.3f} s: calculating "
+                                   .format(time.time() - start_time)
+                                   + "the {}-{} out of {} orbitals"
+                                   .format(p, p + world.np()
+                if p + world.np() < n_p else n_p, n_p),
                                    level=1)
-                for r in range(nP):
-                    dIntK = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
-                    dKVec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
-                    uMat = 0.
+                for r in range(n_p):
+                    d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
+                    d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
+                    u_mat = 0.
                     if correlator is not None:
-                        uMat = self.sumNablaUSquare(dKVec)
+                        u_mat = self.sumNablaUSquare(d_k_vec)
 
-                    for q in range(nP):
-                        intKS = self.basis_fns[q * 2].k - dIntK
-                        # if self.is_k_in_basis(intKS):
-                        locS = numKInEachDir ** 2 * (intKS[0] + self.imax) + \
-                               numKInEachDir * (intKS[1] + self.imax) + \
-                               intKS[2] + self.imax
-                        if locS < len(self.basis_indices_map) and locS >= 0:
-                            s = int(self.basis_indices_map[locS])
-                            if s < 0 or s >= nP:
+                    for q in range(n_p):
+                        int_ks = self.basis_fns[q * 2].k - d_int_k
+                        # if self.is_k_in_basis(int_ks):
+                        loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax) + \
+                                num_k_in_each_dir * (int_ks[1] + self.imax) + \
+                                int_ks[2] + self.imax
+                        if len(self.basis_indices_map) > loc_s >= 0:
+                            s = int(self.basis_indices_map[loc_s])
+                            if s < 0 or s >= n_p:
                                 continue
                         else:
                             continue
 
-                        dkSquare = dKVec.dot(dKVec)
+                        dk_square = d_k_vec.dot(d_k_vec)
                         if correlator is None:
-                            if np.abs(dkSquare) > 0.:
-                                w = 4. * np.pi / dkSquare / self.Omega
-                                indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            if np.abs(dk_square) > 0.:
+                                w = 4. * np.pi / dk_square / self.Omega
+                                indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                                 values.append(w)
                         elif is_rpa_approx:
                             # tc
-                            if np.abs(dkSquare) > 0.:
-                                w = - (self.n_ele) * dkSquare \
-                                    * correlator(dkSquare) ** 2 / self.Omega
+                            if np.abs(dk_square) > 0.:
+                                w = - (self.n_ele) * dk_square \
+                                    * correlator(dk_square) ** 2 / self.Omega
                                 w = w / self.Omega
                             else:
                                 w = 0.
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_only_2b:
-                            if np.abs(dkSquare) > 0.:
+                            if np.abs(dk_square) > 0.:
                                 rs_dk = self.basis_fns[r * 2].kp \
                                         - self.basis_fns[s * 2].kp
-                                w = 4. * np.pi / dkSquare \
-                                    + uMat \
-                                    + dkSquare * correlator(dkSquare) \
-                                    - (rs_dk.dot(dKVec)) \
-                                    * correlator(dkSquare)
+                                w = 4. * np.pi / dk_square \
+                                    + u_mat \
+                                    + dk_square * correlator(dk_square) \
+                                    - (rs_dk.dot(d_k_vec)) \
+                                    * correlator(dk_square)
                                 w = w / self.Omega
                             else:
-                                w = uMat / self.Omega
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                                w = u_mat / self.Omega
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_only_hermi_2b:
-                            if np.abs(dkSquare) > 0.:
-                                rs_dk = self.basis_fns[r * 2].kp \
-                                        - self.basis_fns[s * 2].kp
-                                w = 4. * np.pi / dkSquare \
-                                    + uMat \
-                                    + dkSquare * correlator(dkSquare)
+                            if np.abs(dk_square) > 0.:
+                                w = 4. * np.pi / dk_square \
+                                    + u_mat \
+                                    + dk_square * correlator(dk_square)
                                 w = w / self.Omega
                             else:
-                                w = uMat / self.Omega
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                                w = u_mat / self.Omega
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_only_non_hermi_2b:
                             w = 0.
-                            if np.abs(dkSquare) > 0.:
+                            if np.abs(dk_square) > 0.:
                                 rs_dk = self.basis_fns[r * 2].kp \
                                         - self.basis_fns[s * 2].kp
-                                w = 4. * np.pi / dkSquare \
-                                    - (rs_dk.dot(dKVec)) * correlator(dkSquare)
+                                w = 4. * np.pi / dk_square \
+                                    - (rs_dk.dot(d_k_vec)) * correlator(dk_square)
                                 w = w / self.Omega
 
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_effect_2b:
-                            if np.abs(dkSquare) > 0.:
-                                w = - (self.n_ele) * dkSquare \
-                                    * correlator(dkSquare) ** 2 / self.Omega \
-                                    + 2. * self.contractExchange3Body( \
-                                    self.basis_fns[2 * r].kp, dKVec) \
-                                    - 2. * self.contractExchange3Body( \
-                                    self.basis_fns[2 * p].kp, dKVec) \
-                                    + 2. * self.contractP_KWithQ( \
-                                    self.basis_fns[2 * r].kp, dKVec)
+                            if np.abs(dk_square) > 0.:
+                                w = - (self.n_ele) * dk_square \
+                                    * correlator(dk_square) ** 2 / self.Omega \
+                                    + 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * r].kp, d_k_vec) \
+                                    - 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * p].kp, d_k_vec) \
+                                    + 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
                             else:
-                                w = (2. * self.contractP_KWithQ( \
-                                    self.basis_fns[2 * r].kp, dKVec))
+                                w = (2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec))
                             w = w / self.Omega
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         # exchange 1-3 are for test purpose only.
                         elif is_exchange_1:
-                            if np.abs(dkSquare) > 0.:
-                                w = + 2. * self.contractExchange3Body( \
-                                    self.basis_fns[2 * r].kp, dKVec)
+                            if np.abs(dk_square) > 0.:
+                                w = + 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
                                 w = w / self.Omega
                             else:
                                 w = 0.
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_exchange_2:
-                            if np.abs(dkSquare) > 0.:
-                                w = - 2. * self.contractExchange3Body( \
-                                    self.basis_fns[2 * p].kp, dKVec)
+                            if np.abs(dk_square) > 0.:
+                                w = - 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * p].kp, d_k_vec)
                                 w = w / self.Omega
                             else:
                                 w = 0.
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
                         elif is_exchange_3:
-                            if np.abs(dkSquare) > 0.:
-                                w = + 2. * self.contractP_KWithQ( \
-                                    self.basis_fns[2 * r].kp, dKVec)
+                            if np.abs(dk_square) > 0.:
+                                w = + 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
                                 w = w / self.Omega
                             else:
-                                w = + 2. * self.contractP_KWithQ( \
-                                    self.basis_fns[2 * r].kp, dKVec)
+                                w = + 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
                                 w = w / self.Omega
-                            indices.append(nP ** 3 * p + nP ** 2 * q + nP * r + s)
+                            indices.append(n_p ** 3 * p + n_p ** 2 * q + n_p * r + s)
                             values.append(w)
-                            # t_V_pqrs[p,q,r,s] = 4.*np.pi/dkSquare/sys.Omega
+                            # t_V_pqrs[p,q,r,s] = 4.*np.pi/dk_square/sys.Omega
         t_V_pqrs.write(indices, values)
 
         if is_effect_2b:
@@ -544,17 +530,17 @@ class UEG:
             t_V_pqrs = t_V_sym_pqrs
 
         print_logging_info("{:.3f} s spent on ".format(time.time() \
-                                                       - startTime) \
-                           + algoName, level=1)
+                                                       - start_time) \
+                           + algo_name, level=1)
         return t_V_pqrs
 
-    def contractExchange3Body(self, pVec, kVec):
+    def contract_exchange_3_body(self, p_vec, kVec):
         """ Member function of class UEG. Calculate the 1st and 2nd types of
         single exchange type contractions in the 3-body integrals.
 
         Parameters
         ----------
-        pVec: nparray of float dtype, size 3
+        p_vec: nparray of float dtype, size 3
         kVec: nparray of float dtype, size 3
             momentum transfer
 
@@ -563,12 +549,12 @@ class UEG:
         result: float
         """
 
-        pPrim = np.array([self.basis_fns[i * 2].kp for i in \
+        p_prim = np.array([self.basis_fns[i * 2].kp for i in \
                           range(int(self.n_ele / 2))])
-        pVec = pVec - pPrim
+        p_vec = p_vec - p_prim
         kVecSquare = np.einsum("i,i->", kVec, kVec)
-        pVecSquare = np.einsum("ni,ni->n", pVec, pVec)
-        pVecDotKVec = np.einsum("ni,i->n", pVec, kVec)
+        pVecSquare = np.einsum("ni,ni->n", p_vec, p_vec)
+        pVecDotKVec = np.einsum("ni,i->n", p_vec, kVec)
         result = pVecDotKVec * self.correlator(kVecSquare) \
                  * self.correlator(pVecSquare)
         result = np.einsum("n->", result) / self.Omega

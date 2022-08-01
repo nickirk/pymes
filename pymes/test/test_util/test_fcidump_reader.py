@@ -10,7 +10,7 @@ from pymes.util.fcidump import read, write
 
 def test_tc_fcidump_reader():
     print_logging_info("Testing tc-FCIDUMP reader...")
-    n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("./test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
+    n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("../test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
 
 
     t_V_pqrs = ctf.astensor(V_pqrs)
@@ -50,7 +50,7 @@ def test_tc_fcidump_reader():
     print_logging_info("All tests passed!")
 
 def test_fcidump_write():
-    n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("./test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
+    n_elec, n_orb, e_core, epsilon, h, V_pqrs = read("../test_tc_ccsd/FCIDUMP.LiH.tc", is_tc=True)
     no = n_elec // 2
     write(ctf.astensor(V_pqrs), ctf.astensor(h), no, e_core, file="fcidump.w")
     n_elec_r, n_orb_r, e_core_r, epsilon_r, h_r, V_pqrs_r = read("./fcidump.w", is_tc=True)

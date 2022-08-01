@@ -1,10 +1,5 @@
 #!/usr/bin/python3
-        
-        
 
-# this script runs get_force.sh script to get HF forces and MP2 forces
-# and use them to update atom positions in POSCAR file.
-# Stops when the total forces on every atom is smaller than some criteria
 import os
 import sys
 import numpy as np
