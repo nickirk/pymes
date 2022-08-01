@@ -38,9 +38,6 @@ PyMES depends on the C++ Cyclops Tensor Framework (CTF) library. Therefore,
 you need to build the CTF before using pymes.
 
 ## Building CTF
-**Some legacy parts of the code still relies on CTF library, which will be removed in the future, as the library is not 
-constantly well maintained. Newly added modules like scf do not have this dependency.**
-
 Building instructions can be found at https://github.com/cyclops-community/ctf.  
 Because of popular demand we outline the steps and some useful tips in the following.  
 
