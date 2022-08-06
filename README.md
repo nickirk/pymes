@@ -145,3 +145,6 @@ you use PyMES:
 Towards efficient and accurate ab initio solutions to periodic systems via transcorrelation and coupled cluster theory,
 Ke Liao, Thomas Schraivogel, Hongjun Luo, Daniel Kats, Ali Alavi,
 Physical Review Research **3** 033072 (2021)
+
+# Contributors
+Ke Liao, Thomas Schraivogel, Evelin Christlmaier
