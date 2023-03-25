@@ -146,5 +146,10 @@ Towards efficient and accurate ab initio solutions to periodic systems via trans
 Ke Liao, Thomas Schraivogel, Hongjun Luo, Daniel Kats, Ali Alavi,
 Physical Review Research **3** 033072 (2021)
 
+Density Matrix Renormalization Group for Transcorrelated Hamiltonians: Ground and Excited States in Molecules,
+Ke Liao, Huanchen Zhai, Evelin Martine Christlmaier, Thomas Schraivogel, Pablo López Ríos, Daniel Kats, Ali Alavi,
+Journal of Chemical Theory and Computation (2023)
+https://doi.org/10.1021/acs.jctc.2c01207
+
 # Contributors
 Ke Liao, Thomas Schraivogel, Evelin Christlmaier
