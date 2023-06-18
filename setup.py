@@ -7,6 +7,7 @@ setup(
     install_requires=[
         'numpy',
         'scipy',
+        'spglib',
         # add any other necessary libraries here
     ],
     package_data={
