@@ -4,6 +4,8 @@ from pymes.solver import  ccd, ccsd
 from pymes.mean_field import hf
 
 
+
+
 def test_ccsd_energy(fcidump_file="./pymes/test/test_ccsd/FCIDUMP.LiH.321g", ref_e={"hf_e": -7.92958534362757, "ccsd_e": -0.01908832712812761,
                                                              "ccd_e": -0.01830250126018896}):
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
