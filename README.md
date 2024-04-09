@@ -144,7 +144,7 @@ you use PyMES:
 
 Towards efficient and accurate ab initio solutions to periodic systems via transcorrelation and coupled cluster theory,
 Ke Liao, Thomas Schraivogel, Hongjun Luo, Daniel Kats, Ali Alavi,
-Physical Review Research **3** 033072 (2021)
+Physical Review Research **3** 033072 (2021) https://doi.org/10.1103/PhysRevResearch.3.033072
 
 Density Matrix Renormalization Group for Transcorrelated Hamiltonians: Ground and Excited States in Molecules,
 Ke Liao, Huanchen Zhai, Evelin Martine Christlmaier, Thomas Schraivogel, Pablo López Ríos, Daniel Kats, Ali Alavi,
