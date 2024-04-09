@@ -152,4 +152,4 @@ Journal of Chemical Theory and Computation (2023)
 https://doi.org/10.1021/acs.jctc.2c01207
 
 # Contributors
-Ke Liao, Thomas Schraivogel, Evelin Christlmaier
+Ke Liao, Thomas Schraivogel, Evelin Christlmaier, Daniel Kats
