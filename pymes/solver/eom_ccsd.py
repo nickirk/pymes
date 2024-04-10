@@ -89,8 +89,8 @@ class EOM_CCSD:
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
             self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
-            w_singles = [ctf.tensor(t_D_ai.shape, dtype=t_D_ai.dtype, sp=t_D_ai.sp)] * subspace_dim
-            w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp)] * subspace_dim
+            w_singles = [ctf.tensor(t_D_ai.shape, dtype=t_D_ai.dtype, sp=t_D_ai.sp) for _ in range(subspace_dim)]
+            w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp) for _ in range(subspace_dim)]
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
                 w_singles[l] = self.update_singles(t_fock_dressed_pq,
