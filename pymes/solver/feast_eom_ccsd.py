@@ -110,24 +110,24 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             w_singles = [ctf.zeros(self.u_singles[0].shape)] * self.n_trial
             w_doubles = [ctf.zeros(self.u_doubles[0].shape)] * self.n_trial
             for i in range(self.n_trial):
-                w_singles[l] = self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, self.Q_singles[l],
-                                                   self.Q_doubles[l], t_T_abij)
-                w_doubles[l] = self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, self.Q_singles[l],
-                                                   self.Q_doubles[l], t_T_abij)
+                w_singles[i] = self.update_singles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, self.Q_singles[i],
+                                                   self.Q_doubles[i], t_T_abij)
+                w_doubles[i] = self.update_doubles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, self.Q_singles[i],
+                                                   self.Q_doubles[i], t_T_abij)
                 for j in range(i):
-                    H_proj[j, i] = ctf.einsum("ai, ai->", self.Q_singles[j], w_singles[l]) \
-                              + ctf.einsum("abij, abij->", self.Q_doubles[j], w_doubles[l])
-                    H_proj[i, j] = ctf.einsum("ai, ai->", self.Q_singles[l], w_singles[j]) \
-                              + ctf.einsum("abij, abij->", self.Q_doubles[l], w_doubles[j])
-                    B[i, j] = ctf.einsum("ai, ai->", self.Q_singles[l], self.Q_singles[j]) \
-                                + ctf.einsum("abij, abij->", self.Q_doubles[l], self.Q_doubles[j])
+                    H_proj[j, i] = ctf.einsum("ai, ai->", self.Q_singles[j], w_singles[i]) \
+                              + ctf.einsum("abij, abij->", self.Q_doubles[j], w_doubles[i])
+                    H_proj[i, j] = ctf.einsum("ai, ai->", self.Q_singles[i], w_singles[j]) \
+                              + ctf.einsum("abij, abij->", self.Q_doubles[i], w_doubles[j])
+                    B[i, j] = ctf.einsum("ai, ai->", self.Q_singles[i], self.Q_singles[j]) \
+                                + ctf.einsum("abij, abij->", self.Q_doubles[i], self.Q_doubles[j])
                     B[j, i] = B[i, j]
-                H_proj[l, l] = ctf.einsum("ai, ai->", self.Q_singles[l], w_singles[l]) \
-                          + ctf.einsum("abij, abij->", self.Q_doubles[l], w_doubles[l])
-                B[l, l] = ctf.einsum("ai, ai->", self.Q_singles[l], self.Q_singles[l]) \
-                            + ctf.einsum("abij, abij->", self.Q_doubles[l], self.Q_doubles[l])
+                H_proj[l, l] = ctf.einsum("ai, ai->", self.Q_singles[i], w_singles[i]) \
+                          + ctf.einsum("abij, abij->", self.Q_doubles[i], w_doubles[i])
+                B[l, l] = ctf.einsum("ai, ai->", self.Q_singles[i], self.Q_singles[i]) \
+                            + ctf.einsum("abij, abij->", self.Q_doubles[i], self.Q_doubles[i])
             # solve the eigenvalue problem
 
             eigvals, eigvecs = eig(H_proj, B)
