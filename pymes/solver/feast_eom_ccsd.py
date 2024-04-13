@@ -84,6 +84,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         for l in range(self.n_trial):
             self.u_singles.append(0.5-ctf.astensor(np.random.rand(*t_D_ai.shape)))
             self.u_doubles.append(0.5-ctf.astensor(np.random.rand(*t_D_abij.shape)))
+        #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
         # gauss-legrendre quadrature
         x, w = get_gauss_legendre_quadrature(8) 
@@ -96,18 +97,18 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             self.Q_singles = [ctf.tensor(t_D_ai.shape, dtype=float) for _ in  range(self.n_trial)]
             self.Q_doubles = [ctf.tensor(t_D_abij.shape, dtype=float) for _ in  range(self.n_trial)]
             time_iter_init = time.time()
-            self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
+            #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
             # solve for the linear system (z-H)Q = Y at z = z_e
             for e in range(len(z)):
-                print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
+                #print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
                 Qe_singles, Qe_doubles = self._solve_linear(z[e], self.u_singles, self.u_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
                 #Qe_singles_conj, Qe_doubles_conj = self._solve_linear(np.conj(z[e]), self.u_singles, self.u_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
                 for l in range(self.n_trial):
                     self.Q_singles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles[l])
                     self.Q_doubles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles[l])
 
-            self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
+            #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
             H_proj = np.zeros((self.n_trial, self.n_trial))
             B = np.zeros((self.n_trial, self.n_trial))
@@ -133,7 +134,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                 B[i, i] = ctf.einsum("ai, ai->", self.Q_singles[i], self.Q_singles[i]) \
                             + ctf.einsum("abij, abij->", self.Q_doubles[i], self.Q_doubles[i])
             # solve the eigenvalue problem
-
             eigvals, eigvecs = eig(H_proj, B)
 
             # update u_singles and u_doubles
@@ -169,7 +169,14 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         """
         Qe_singles = [ctf.zeros(u_singles[0].shape, dtype=complex) for _ in range(self.n_trial)]
         Qe_doubles = [ctf.zeros(u_doubles[0].shape, dtype=complex) for _ in range(self.n_trial)]
-        for i in range(100):
+        t_D_ai = ctf.tensor(u_singles[0].shape, dtype=float)
+        epsilons_a = t_fock_dressed_pq.diagonal()[self.no:]
+        epsilons_i = t_fock_dressed_pq.diagonal()[:self.no]
+        t_D_ai.i("ai") << epsilons_a.i("a") - epsilons_i.i("i") 
+        t_D_abij = ctf.tensor(u_doubles[0].shape, dtype=float)
+        t_D_abij.i("abij") <<  epsilons_a.i("a") + epsilons_a.i("b")\
+                               -epsilons_i.i("i") - epsilons_i.i("j")  
+        for i in range(300):
             norm_singles = 0
             norm_doubles = 0
             for l in range(len(u_singles)):
@@ -187,8 +194,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                                                    Qe_doubles[l], t_T_abij)
                 delta_doubles -= u_doubles[l]
 
-                Qe_singles[l] += 0.01 * delta_singles 
-                Qe_doubles[l] += 0.01 * delta_doubles 
+                Qe_singles[l] -= 0.1 * delta_singles / (ze - t_D_ai-0.11)
+                Qe_doubles[l] -= 0.1 * delta_doubles / (ze - t_D_abij-0.11)
 
                 # check convergence
                 norm_singles += np.linalg.norm(delta_singles.to_nparray())
@@ -205,7 +212,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         """
         Solve the EOM-CCSD equations using the non-Hermitian FEAST algorithm.
         """
-        print_title("FEAST-EOM-CCSD Solver")
+        print_title("FEAST-EOM-CCSD Solver Test")
         time_init = time.time()
         no = self.no
 
@@ -235,7 +242,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             self.Q_singles = [ctf.tensor(s_shape, dtype=float) for _ in  range(self.n_trial)]
             self.Q_doubles = [ctf.tensor(d_shape, dtype=float) for _ in  range(self.n_trial)]
             time_iter_init = time.time()
-            self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
+            #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
             # solve for the linear system (z-H)Q = Y at z = z_e
             for e in range(len(z)):
@@ -245,7 +252,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                 for l in range(self.n_trial):
                     self.Q_singles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles[l])
                     self.Q_doubles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles[l])
-
+            #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
             H_proj = np.zeros((self.n_trial, self.n_trial))
             B = np.zeros((self.n_trial, self.n_trial))
@@ -275,15 +282,26 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             eigvals, eigvecs = eig(H_proj, B)
 
             # update u_singles and u_doubles
+            self.u_singles = []
+            self.u_doubles = []
+            # check the number of eigenvalues in the energy window
+            valid_eig = np.where(np.in1d(eigvals[eigvals < self.e_c + self.e_r], eigvals[eigvals > self.e_c - self.e_r]))[0]
+            print(eigvals)
+            #if len(valid_eig) == 0:
+            #    valid_eig = np.arange(self.n_trial)
+
             for l in range(self.n_trial):
-                self.u_singles[l] = ctf.zeros(self.u_singles[0].shape)
-                self.u_doubles[l] = ctf.zeros(self.u_doubles[0].shape)
+                u_singles = ctf.tensor(s_shape, dtype=float)
+                u_doubles = ctf.tensor(d_shape, dtype=float)
                 for i in range(self.n_trial):
-                    self.u_singles[l] += np.real(eigvecs[i, l]) * self.Q_singles[i]
-                    self.u_doubles[l] += np.real(eigvecs[i, l]) * self.Q_doubles[i]
+                    u_singles += np.real(eigvecs[i, l]) * self.Q_singles[i]
+                    u_doubles += np.real(eigvecs[i, l]) * self.Q_doubles[i]
+                self.u_singles.append(u_singles)
+                self.u_doubles.append(u_doubles)
+            
             
             # check convergence
-            e_norm = np.linalg.norm(eigvals)
+            e_norm = np.linalg.norm(eigvals[valid_eig])
             if np.abs(e_norm - e_norm_prev) < self.tol:
                 break
             else:
@@ -305,11 +323,30 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         """
         Qe_singles = [ctf.zeros(u_singles[0].shape, dtype=complex) for _ in range(self.n_trial)]
         Qe_doubles = [ctf.zeros(u_doubles[0].shape, dtype=complex) for _ in range(self.n_trial)]
+        Qe_singles_ref = [ctf.zeros(u_singles[0].shape, dtype=complex) for _ in range(self.n_trial)]
+        Qe_doubles_ref = [ctf.zeros(u_doubles[0].shape, dtype=complex) for _ in range(self.n_trial)]
+        # combine u_singles and u_doubles to Y 
+        nv = u_singles[0].shape[0]
+        no = u_singles[0].shape[1]
+        Y = np.zeros([self.n_trial, nv*no+nv*nv*no*no], dtype=complex) 
+        for l in range(self.n_trial):
+            Y[l, :] = np.concatenate((u_singles[l].to_nparray().flatten(), u_doubles[l].to_nparray().flatten()))
+        
+        Q_e = np.linalg.solve(ze*np.diag(np.ones(ham.shape[0])) - ham, Y.T).T 
+        for l in range(self.n_trial):
+            Qe_singles_ref[l] = ctf.astensor(Q_e[l][:nv*no].reshape(nv, no), dtype=complex)
+            Qe_doubles_ref[l] = ctf.astensor(Q_e[l][nv*no:].reshape(nv, nv, no, no), dtype=complex)
         for i in range(100):
             norm_singles = 0
             norm_doubles = 0
             for l in range(len(u_singles)):
-                delta_singles = ctf.zeros(u_singles[0].shape, dtype=complex)
+                #X = np.concatenate((Qe_singles[l].to_nparray().flatten(), Qe_doubles[l].to_nparray().flatten()))
+                #Hx = (ze*np.diag(np.ones(ham.shape[0])) - ham).dot(X)
+                #Hx -= Y[l]
+                ##Hx /= -(ze*np.ones(len(Hx)) - ham.diagonal())
+                #delta_singles = ctf.astensor(Hx[:nv*no].reshape(nv, no), dtype=complex)
+                #delta_doubles = ctf.astensor(Hx[nv*no:].reshape(nv, nv, no, no), dtype=complex)
+                delta_singles = ctf.tensor(u_singles[0].shape, dtype=complex)
                 delta_singles = ze * Qe_singles[l]
                 delta_singles -= self.update_singles_test(ham,
                                                    Qe_singles[l],
@@ -323,8 +360,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                                                    Qe_doubles[l])
                 delta_doubles -= u_doubles[l]
 
-                Qe_singles[l] += 0.001 * delta_singles 
-                Qe_doubles[l] += 0.001 * delta_doubles 
+                Qe_singles[l] -= 0.03 * (delta_singles/(ze - ham.diagonal()[:nv*no].reshape(nv, no))) 
+                Qe_doubles[l] -= 0.03 * (delta_doubles/(ze - ham.diagonal()[nv*no:].reshape(nv*nv*no*no).reshape(nv, nv, no, no)))
 
                 # check convergence
                 norm_singles += np.linalg.norm(delta_singles.to_nparray())
