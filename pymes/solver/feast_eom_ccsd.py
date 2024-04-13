@@ -107,6 +107,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                     self.Q_singles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles[l])
                     self.Q_doubles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles[l])
 
+            self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
             H_proj = np.zeros((self.n_trial, self.n_trial))
             B = np.zeros((self.n_trial, self.n_trial))
@@ -168,7 +169,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         """
         Qe_singles = [ctf.zeros(u_singles[0].shape, dtype=complex) for _ in range(self.n_trial)]
         Qe_doubles = [ctf.zeros(u_doubles[0].shape, dtype=complex) for _ in range(self.n_trial)]
-        for i in range(50):
+        for i in range(100):
             norm_singles = 0
             norm_doubles = 0
             for l in range(len(u_singles)):
