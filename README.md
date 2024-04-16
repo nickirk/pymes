@@ -28,40 +28,34 @@ explanations to the issues you experience when you do so.
 - spglib
 - pytest (test purpose, not needed for running the code)
 
-## Building
-
-PyMES does not need to be build, just add the following line to your .bashrc or .zshrc file
+PyMES can be installed by pip 
 
 ```bash
-export PYTHONPATH=/the/directory/containing/pymes:$PYTHONPATH
-```
-For example, if your pymes is stored at "~/scripts/pymes", then you do the following:
-```bash
-export PYTHONPATH=~/scripts:$PYTHONPATH
+pip install ./
 ```
 
-and source your ~/.bashrc or ~/.zshrc file.
-
-```bash
-source ~/.bashrc
-```
-
-
-But PyMES depends on the Cyclops Tensor Framework (CTF). Therefore, 
+PyMES depends on the C++ Cyclops Tensor Framework (CTF) library. Therefore, 
 you need to build the CTF before using pymes.
 
 ## Building CTF
 Building instructions can be found at https://github.com/cyclops-community/ctf.  
 Because of popular demand we outline the steps and some useful tips in the following.  
-First clone the git repo and create a separate build directory.
+
+First, pull the ctf lib source using
+
+```bash
+cd pymes/lib
+git submodule init
+git submodule update
 ```
-git clone https://github.com/cyclops-community/ctf
-mkdir /path/to/your/build/directory/ctf
-cd /path/to/your/build/directory/ctf
+Now you should see that the ctf directory contain the source files. Then
+```bash
+cd ctf
 ```
+
 Run the configure script to check if all necessary libraries etc. can be found.
 ```
-./path/to/ctf/source/code/configure --install-dir=/path/to/install/dir
+./configure --install-dir=/path/to/install/dir
 ```
 **Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH.  
 **Tip:** If you use the --install-dir option, it is necessary to export 
@@ -74,10 +68,21 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/install/dir/lib
 
 Now we can build ctf with
 ```
-make python -j [as many cores as you want to dedicate]
+make -j 8
+make python -j 8
 ```
-**Tip:** It may be necessary to make some changes in the /path/to/ctf/source/code/Makefile. 
-For example changing the python command to python3, if cython is only available in your python3.  
+**Tip:** It may be necessary to make some changes in the `Makefile`. 
+For example changing the `python` command to `python3` on line 121 
+```MakeFile
+LDFLAGS="-L$(BDIR)/lib_shared" python3 setup.py build_ext -j4 --force -b $(BDIR)/lib_python/ -t $(BDIR)/lib_python/; \
+```
+and the `pip` to `pip3` on line 133
+```MakeFile
+pip3 install --force --user -b $(BDIR)/lib_python/ . --upgrade; \
+```
+, if cython is only available in your
+`python3` or when you `make python -j 8` it
+complains that it cannot find `python`.  
 
 Test your CTF installation with
 ```
