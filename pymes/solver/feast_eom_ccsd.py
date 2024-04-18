@@ -96,17 +96,21 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         for iter in range(self.max_iter):
             self.Q_singles = [ctf.tensor(t_D_ai.shape, dtype=float) for _ in  range(self.n_trial)]
             self.Q_doubles = [ctf.tensor(t_D_abij.shape, dtype=float) for _ in  range(self.n_trial)]
+
             time_iter_init = time.time()
             #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
             # solve for the linear system (z-H)Q = Y at z = z_e
             for e in range(len(z)):
-                #print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-                Qe_singles, Qe_doubles = self._solve_linear(z[e], self.u_singles, self.u_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
-                #Qe_singles_conj, Qe_doubles_conj = self._solve_linear(np.conj(z[e]), self.u_singles, self.u_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+                print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
                 for l in range(self.n_trial):
-                    self.Q_singles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles[l])
-                    self.Q_doubles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles[l])
+                    Qe_singles, Qe_doubles = self._solve_linear(l, z[e], t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+                    self.Q_singles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
+                    self.Q_doubles[l] -= w[e]/2 * ctf.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
+            
+            # normalize the trial vectors
+            for l in range(self.n_trial):
+                self.Q_singles[l], self.Q_doubles[l] = normalize_amps(self.Q_singles[l], self.Q_doubles[l])
 
             #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
@@ -162,50 +166,108 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         return eigvals
         
 
-    def _solve_linear(self, ze, u_singles, u_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
+    def _solve_linear(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
         """
         Solve the linear system (z-H)Q = Y.
+        Default algorithm is BiCGSTAB unconditioned.
+
+        Parameters
+        ----------
+        l : int, trial vector index
         ze : complex
+            The shift value.
+        t_fock_dressed_pq : ctf.tensor, shape (norb, norb), dtype=float, dressed Fock matrix
+        dict_t_V_dressed : dict, dressed two-body integrals
+        t_T_abij : ctf.tensor, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
+
+
+        Returns
+        -------
+        Qe_singles : dtype=ctf.tensor, single excitation vectors
+        Qe_doubles : dtype=ctf.tensor, double excitation vectors
         """
-        Qe_singles = [ctf.zeros(u_singles[0].shape, dtype=complex) for _ in range(self.n_trial)]
-        Qe_doubles = [ctf.zeros(u_doubles[0].shape, dtype=complex) for _ in range(self.n_trial)]
-        t_D_ai = ctf.tensor(u_singles[0].shape, dtype=float)
+
+        Qe_singles = ctf.zeros(self.u_singles[0].shape, dtype=complex)
+        Qe_doubles = ctf.zeros(self.u_doubles[0].shape, dtype=complex)
+        t_D_ai = ctf.tensor(self.u_singles[0].shape, dtype=float)
         epsilons_a = t_fock_dressed_pq.diagonal()[self.no:]
         epsilons_i = t_fock_dressed_pq.diagonal()[:self.no]
         t_D_ai.i("ai") << epsilons_a.i("a") - epsilons_i.i("i") 
-        t_D_abij = ctf.tensor(u_doubles[0].shape, dtype=float)
+        t_D_abij = ctf.tensor(self.u_doubles[0].shape, dtype=float)
         t_D_abij.i("abij") <<  epsilons_a.i("a") + epsilons_a.i("b")\
                                -epsilons_i.i("i") - epsilons_i.i("j")  
-        for i in range(300):
-            norm_singles = 0
-            norm_doubles = 0
-            for l in range(len(u_singles)):
-                delta_singles = ctf.zeros(u_singles[0].shape, dtype=complex)
-                delta_singles = ze * Qe_singles[l]
-                delta_singles -= self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, Qe_singles[l],
-                                                   Qe_doubles[l], t_T_abij)
-                delta_singles -= u_singles[l]
-                
-                delta_doubles = ctf.tensor(u_doubles[0].shape, dtype=complex)
-                delta_doubles = ze * Qe_doubles[l]
-                delta_doubles -= self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, Qe_singles[l],
-                                                   Qe_doubles[l], t_T_abij)
-                delta_doubles -= u_doubles[l]
 
-                Qe_singles[l] -= 0.1 * delta_singles / (ze - t_D_ai-0.11)
-                Qe_doubles[l] -= 0.1 * delta_doubles / (ze - t_D_abij-0.11)
-
-                # check convergence
-                norm_singles += np.linalg.norm(delta_singles.to_nparray())
-                norm_doubles += np.linalg.norm(delta_doubles.to_nparray())
-
-            if norm_singles + norm_doubles < self.tol:
+        def _get_residual(trial_singles, trial_doubles):
+            """
+            Get the residual of the linear system (z-H)Q = Y
+            for the l-th trial vector.
+            """
+            delta_singles = ctf.zeros(self.u_singles[0].shape, dtype=complex) 
+            delta_doubles = ctf.zeros(self.u_doubles[0].shape, dtype=complex) 
+            delta_singles += self.u_singles[l]
+            delta_singles -= ze * trial_singles[l]
+            delta_singles += self.update_singles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
+            
+            delta_doubles = ctf.tensor(self.u_doubles[0].shape, dtype=complex)
+            delta_doubles += self.u_doubles[l]
+            delta_doubles -= ze * trial_doubles[l]
+            delta_doubles += self.update_doubles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
+            return delta_singles, delta_doubles
+        
+        delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
+        rho = ctf.einsum("ai, ai->", ctf.conj(delta_singles), delta_singles)
+        rho += ctf.einsum("abij, abij->", ctf.conj(delta_doubles), delta_doubles)
+        p_singles = delta_singles.copy()
+        p_doubles = delta_doubles.copy()
+        r0_singles = delta_singles.copy()
+        r0_doubles = delta_doubles.copy()
+        r_singles = delta_singles.copy()
+        r_doubles = delta_doubles.copy()
+        for i in range(150):
+            v_singles, v_doubles = _get_residual(p_singles, p_doubles)
+            alpha = ctf.einsum("ai, ai->", ctf.conj(r0_singles), v_singles)
+            alpha += ctf.einsum("abij, abij->", ctf.conj(r0_doubles), v_doubles)
+            alpha = rho / alpha
+            h_singles = Qe_singles + alpha * p_singles 
+            h_doubles = Qe_doubles + alpha * p_doubles
+            s_singles = r_singles - alpha * v_singles
+            s_doubles = r_doubles - alpha * v_doubles
+            s_norm = ctf.einsum("ai, ai->", ctf.conj(s_singles), s_singles)
+            s_norm += ctf.einsum("abij, abij->", ctf.conj(s_doubles), s_doubles)
+            if np.abs(s_norm) < 1e-8:
+                print_logging_info(f"i = {i}, converged for s_norm", level=2)
+                Qe_singles = h_singles
+                Qe_doubles = h_doubles
+                break
+            t_singles, t_doubles = _get_residual(s_singles, s_doubles)
+            omega = ctf.einsum("ai, ai->", ctf.conj(t_singles), s_singles)
+            omega += ctf.einsum("abij, abij->", ctf.conj(t_doubles), s_doubles)
+            t_norm = ctf.einsum("ai, ai->", ctf.conj(t_singles), t_singles)
+            t_norm += ctf.einsum("abij, abij->", ctf.conj(t_doubles), t_doubles)
+            omega /= t_norm
+            Qe_singles = h_singles + omega * s_singles
+            Qe_doubles = h_doubles + omega * s_doubles
+            r_singles = s_singles - omega * t_singles
+            r_doubles = s_doubles - omega * t_doubles
+            r_norm = ctf.einsum("ai, ai->", ctf.conj(r_singles), r_singles)
+            r_norm += ctf.einsum("abij, abij->", ctf.conj(r_doubles), r_doubles)
+            if np.abs(r_norm) < 1e-8:
+                print_logging_info(f"i = {i}, converged for r_norm", level=2)
                 break
             #else:
-        print_logging_info(f"|Delta Singles|: {norm_singles}, |Delta Doubles|: {norm_doubles}", level=2)
-
+            #    print_logging_info(f"i = {i}, r_norm: {np.abs(r_norm)}, s_norm: {np.abs(s_norm)}", level=2)
+            # update rho and save the previous values
+            rho_old = rho
+            rho = ctf.einsum("ai, ai->", ctf.conj(r0_singles), r_singles)
+            rho += ctf.einsum("abij, abij->", ctf.conj(r0_doubles), r_doubles)
+            beta = (rho/rho_old) * (alpha/omega)
+            p_singles = r_singles + beta * (p_singles - omega * v_singles)
+            p_doubles = r_doubles + beta * (p_doubles - omega * v_doubles)
+        print_logging_info(f"Linear Solver: l = {l}, tot_iter = {i}, s_norm = {np.abs(s_norm)}, r_norm = {np.abs(r_norm)}", level=2)
         return Qe_singles, Qe_doubles
 
     def solve_test(self, nv):
@@ -360,8 +422,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                                                    Qe_doubles[l])
                 delta_doubles -= u_doubles[l]
 
-                Qe_singles[l] -= 0.03 * (delta_singles/(ze - ham.diagonal()[:nv*no].reshape(nv, no))) 
-                Qe_doubles[l] -= 0.03 * (delta_doubles/(ze - ham.diagonal()[nv*no:].reshape(nv*nv*no*no).reshape(nv, nv, no, no)))
+                Qe_singles[l] -= 0.1 * (delta_singles/(ze - ham.diagonal()[:nv*no].reshape(nv, no))) 
+                Qe_doubles[l] -= 0.1 * (delta_doubles/(ze - ham.diagonal()[nv*no:].reshape(nv*nv*no*no).reshape(nv, nv, no, no)))
 
                 # check convergence
                 norm_singles += np.linalg.norm(delta_singles.to_nparray())
@@ -393,3 +455,10 @@ def get_gauss_legendre_quadrature(n):
     """
     x, w = np.polynomial.legendre.leggauss(n)
     return x, w
+
+def normalize_amps(u_singles, u_doubles):
+    norm_singles = ctf.einsum("ai, ai ->", u_singles, u_singles)
+    norm_doubles = ctf.einsum("abij, abij ->", u_doubles, u_doubles)
+    u_singles /= np.sqrt(norm_singles + norm_doubles)
+    u_doubles /= np.sqrt(norm_singles + norm_doubles)
+    return u_singles, u_doubles
