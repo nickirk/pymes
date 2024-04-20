@@ -47,13 +47,18 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         self.e_r = e_r
         # size of trial space (number of vectors)
         self.n_trial = n_trial
+        self.n_excit = 2 
 
         self.max_iter = max_iter
         self.tol = tol
+        self.linear_solver = "BICGSTAB"
 
         # stored u vectors
         self.u_singles = []
         self.u_doubles = []
+
+        self.eigvals = np.array([self.e_c - self.e_r, self.e_c + self.e_r])
+        self.eigvecs = None
 
     def dump_log(self):
         """
@@ -73,21 +78,23 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         t_epsilon_i = t_fock_dressed_pq.diagonal()[:no]
         t_epsilon_a = t_fock_dressed_pq.diagonal()[no:]
         nv = t_epsilon_a.shape[0]
-        t_D_ai = np.zeros([nv, no])
-        t_D_abij = np.zeros(t_T_abij.shape)
+        diag_ai = self.get_diag_singles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
+        diag_abij = self.get_diag_doubles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
         #t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
         #t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
         #                      - t_epsilon_a.i("a") - t_epsilon_a.i("b")
 
         print_logging_info("Initialising u tensors...", level=1)
-        for l in range(self.n_trial):
-            self.u_singles.append(0.5-(np.random.rand(*t_D_ai.shape)))
+        for l in range(self.n_excit):
+            self.u_singles.append((0.5-(np.random.rand(*diag_ai.shape))))
             #self.u_doubles.append(0.5-(np.random.rand(*t_D_abij.shape)))
-            self.u_doubles.append(np.zeros(t_D_abij.shape))
+            self.u_doubles.append((0.5-(np.random.rand(*diag_abij.shape)))*0.0)
+        self.u_singles[0][3, 1] = 1.
+        self.u_singles[1][1, 1] = 1.
         #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
         # normalize the trial vectors
-        for l in range(self.n_trial):
+        for l in range(len(self.u_singles)):
             self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
         # gauss-legrendre quadrature
         x, w = get_gauss_legendre_quadrature(8) 
@@ -97,19 +104,22 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         # start iteratons
         e_norm_prev = 1e10
         for iter in range(self.max_iter):
-            self.Q_singles = [np.zeros(t_D_ai.shape, dtype=float) for _ in  range(self.n_trial)]
-            self.Q_doubles = [np.zeros(t_D_abij.shape, dtype=float) for _ in  range(self.n_trial)]
+            self.Q_singles = [np.zeros(diag_ai.shape, dtype=float) for _ in  range(len(self.u_singles))]
+            self.Q_doubles = [np.zeros(diag_abij.shape, dtype=float) for _ in  range(len(self.u_doubles))]
 
             time_iter_init = time.time()
             # normalize the trial vectors
-            for l in range(self.n_trial):
+            for l in range(len(self.u_singles)):
                 self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
 
             # solve for the linear system (z-H)Q = Y at z = z_e
             for e in range(len(z)):
                 print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-                for l in range(self.n_trial):
-                    Qe_singles, Qe_doubles = self._solve_linear(l, z[e], t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+                for l in range(len(self.u_singles)):
+                    if self.linear_solver.upper() == "BICGSTAB":
+                        Qe_singles, Qe_doubles = self._bicgstab(l, z[e], t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+                    else:
+                        Qe_singles, Qe_doubles = self._jacobi(l, z[e], diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
                     self.Q_singles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
                     self.Q_doubles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
             
@@ -119,11 +129,11 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
             #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
-            H_proj = np.zeros((self.n_trial, self.n_trial))
-            B = np.zeros((self.n_trial, self.n_trial))
-            w_singles = [np.zeros(self.u_singles[0].shape) for _ in range(self.n_trial)]
-            w_doubles = [np.zeros(self.u_doubles[0].shape) for _ in range(self.n_trial)]
-            for i in range(self.n_trial):
+            H_proj = np.zeros((len(self.u_singles), len(self.u_singles)))
+            B = np.zeros((len(self.u_singles), len(self.u_singles)))
+            w_singles = [np.zeros(self.u_singles[0].shape) for _ in range(len(self.u_singles))]
+            w_doubles = [np.zeros(self.u_doubles[0].shape) for _ in range(len(self.u_doubles))]
+            for i in range(len(self.u_singles)):
                 w_singles[i] = self.update_singles(t_fock_dressed_pq,
                                                    dict_t_V_dressed, ctf.astensor(self.Q_singles[i]),
                                                    ctf.astensor(self.Q_doubles[i]), t_T_abij).to_nparray()
@@ -143,22 +153,30 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                 B[i, i] = np.tensordot(self.Q_singles[i], self.Q_singles[i], axes=2) \
                             + np.tensordot(self.Q_doubles[i], self.Q_doubles[i], axes=4)
             # solve the eigenvalue problem
-            eigvals, eigvecs = eig(H_proj, B)
+            self.eigvals, self.eigvecs = eig(H_proj, B)
 
-            # update u_singles and u_doubles
-            for l in range(self.n_trial):
-                self.u_singles[l] = np.zeros(self.u_singles[0].shape)
-                self.u_doubles[l] = np.zeros(self.u_doubles[0].shape)
-                for i in range(self.n_trial):
-                    self.u_singles[l] += np.real(eigvecs[i, l]) * self.Q_singles[i]
-                    self.u_doubles[l] += np.real(eigvecs[i, l]) * self.Q_doubles[i]
+            # update u_singles and u_doubles and to the trial vectors
+            if len(self.u_singles) < self.n_trial:
+                for l in range(len(self.eigvals)):
+                    new_singles = np.zeros(self.u_singles[0].shape, dtype=float)
+                    new_doubles = np.zeros(self.u_doubles[0].shape, dtype=float)
+                    for i in range(len(self.eigvals)):
+                        new_singles += np.real(self.eigvecs[i, l]) * self.Q_singles[i]
+                        new_doubles += np.real(self.eigvecs[i, l]) * self.Q_doubles[i]
+                    self.u_singles.append(new_singles)
+                    self.u_doubles.append(new_doubles)
+            else:
+                for l in range(len(self.eigvals)):
+                    for i in range(len(self.eigvals)):
+                        self.u_singles[l] += np.real(self.eigvecs[i, l]) * self.Q_singles[i]
+                        self.u_doubles[l] += np.real(self.eigvecs[i, l]) * self.Q_doubles[i]
             
             # check convergence
-            e_norm = np.linalg.norm(eigvals)
+            e_norm = np.linalg.norm(self.eigvals)
             if np.abs(e_norm - e_norm_prev) < self.tol:
                 break
             else:
-                print_logging_info(f"Iter = {iter}, Eigenvalues: {eigvals}", level=1)
+                print_logging_info(f"Iter = {iter}, Eigenvalues: {self.eigvals}", level=1)
                 print_logging_info(f"Norm of eigenvalues: {e_norm}, Difference: {np.abs(e_norm - e_norm_prev)}", level=1)
 
             e_norm_prev = e_norm
@@ -166,12 +184,62 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         time_end = time.time()
         print_logging_info(f"FEAST-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
-        self.e_excit = eigvals
+        self.e_excit = self.eigvals
 
-        return eigvals
+        return self.eigvals
+
+    def _jacobi(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
+        """
+        Solve the linear system (z-H)Qe = Y.
+        Parameters
+        ----------
+        l : int, trial vector index
+        ze : complex
+            The shift value.
+        diag_ai : np.ndarray, shape (nv, no), dtype=float, diagonal elements of the singles dressed H matrix
+        diag_abij : np.ndarray, shape (nv, nv, no, no), dtype=float, diagonal elements of the doubles dressed H matrix
+        t_fock_dressed_pq : np.ndarray, shape (norb, norb), dtype=float, dressed Fock matrix
+        dict_t_V_dressed : dict, dressed two-body integrals 
+        t_T_abij : np.ndarray, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
+        """
+        Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
+        Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+
+        def _get_residual(trial_singles, trial_doubles):
+            """
+            Get the residual of the linear system (z-H)Q = Y
+            for the l-th trial vector.
+            """
+            delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
+            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
+            delta_singles += self.u_singles[l]
+            delta_singles -= ze * trial_singles
+            delta_singles += self.update_singles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            
+            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+            delta_doubles += self.u_doubles[l]
+            delta_doubles -= ze * trial_doubles
+            delta_doubles += self.update_doubles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            return delta_singles, delta_doubles
+        
+        for iter in range(100):
+            delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
+            # preconditioner for the Jacobi method
+            delta_singles /= (ze-diag_ai)
+            delta_doubles /= (ze-diag_abij)
+            Qe_singles += 0.01 * delta_singles 
+            Qe_doubles += 0.01 * delta_doubles 
+        print_logging_info(f"iter = {iter}, norm of delta_singles = {np.linalg.norm(delta_singles)}, norm of delta_doubles = {np.linalg.norm(delta_doubles)}", level=2)
+        
+        return Qe_singles, Qe_doubles
+
         
 
-    def _solve_linear(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
+    def _bicgstab(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
         """
         Solve the linear system (z-H)Q = Y.
         Default algorithm is BiCGSTAB unconditioned.
@@ -210,14 +278,14 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
             delta_singles += self.u_singles[l]
-            delta_singles -= ze * trial_singles[l]
+            delta_singles -= ze * trial_singles
             delta_singles += self.update_singles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
                                                ctf.astensor(trial_doubles), t_T_abij).to_nparray()
             
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
             delta_doubles += self.u_doubles[l]
-            delta_doubles -= ze * trial_doubles[l]
+            delta_doubles -= ze * trial_doubles
             delta_doubles += self.update_doubles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
                                                ctf.astensor(trial_doubles), t_T_abij).to_nparray()
@@ -232,7 +300,9 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         r0_doubles = delta_doubles.copy()
         r_singles = delta_singles.copy()
         r_doubles = delta_doubles.copy()
-        for i in range(300):
+        r_norm = 0.
+        s_norm = 0.
+        for i in range(100):
             v_singles, v_doubles = _get_residual(p_singles, p_doubles)
             alpha = np.tensordot(np.conj(r0_singles), v_singles, axes=2)
             alpha += np.tensordot(np.conj(r0_doubles), v_doubles, axes=4)
@@ -383,6 +453,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         self.e_excit = eigvals
 
         return eigvals
+
     def _solve_linear_test(self, ze, u_singles, u_doubles, ham):
         """
         Solve the linear system (z-H)Q = Y.
