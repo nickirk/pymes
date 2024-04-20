@@ -166,6 +166,72 @@ class EOM_CCSD:
 
         return self.e_excit
 
+    def get_diag_singles(self, t_fock_pq, dict_t_V, t_T_abij):
+        """
+        Get the diagonal elements of the singles block of the similarity-transformed Hamiltonian.
+
+        """
+        no = self.no
+        nv = t_fock_pq.shape[0] - no
+        diag_singles = ctf.tensor([nv, no], dtype=t_fock_pq.dtype, sp=t_fock_pq.sp)
+
+        # integral and t_u_ai products
+        diag_singles.i("ai") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
+        diag_singles.i("ai") << 2. * dict_t_V["iabj"].i("iaai") - 1. * dict_t_V["iajb"].i("iaia")
+        # integral, T and t_u_ai products
+        diag_singles += 4. * ctf.einsum("jiba, baji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles.i("ai") << -2. * ctf.einsum("jkba, bajk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles.i("ai") << -2. * ctf.einsum("jibc, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += -2. * ctf.einsum("jiba, abji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles += -2. * ctf.einsum("jiab, baji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles.i("ai") << +1. * ctf.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles.i("ai") << +1. * ctf.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += +1. * ctf.einsum("jiab, abji->ai", dict_t_V["ijab"], t_T_abij)
+
+        return diag_singles
+    
+    def get_diag_doubles(self, t_fock_pq, dict_t_V, t_T_abij):
+        """
+        Get the diagonal elements of the doubles block of the similarity-transformed Hamiltonian.
+        """
+        no = self.no
+        nv = t_fock_pq.shape[0] - no
+        diag_doubles = ctf.tensor([nv, nv, no, no], dtype=t_fock_pq.dtype, sp=t_fock_pq.sp)
+
+        # add those involving P(ijab,jiba) and from t_u_abij, in total 22 terms
+        diag_doubles.i("abij") << +4. * ctf.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << -2. * ctf.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles.i("abij") << -2. * ctf.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles.i("abij") << -2. * ctf.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << +2. * dict_t_V["iabj"].i("iaai")
+        diag_doubles.i("abij") << -2. * ctf.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << -2. * ctf.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << -2. * ctf.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij).i("abj")
+        diag_doubles.i("abij") << -2. * ctf.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles.i("abij") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
+        diag_doubles.i("abij") << -1. * ctf.einsum("iaia -> ai", dict_t_V["iajb"]).i("ai")
+        diag_doubles.i("abij") << -1. * ctf.einsum("ibib -> bi", dict_t_V["iajb"]).i("bi")
+        diag_doubles.i("abij") << +1. * ctf.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << -1. * dict_t_V["iabj"].i("iaai")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij).i("aij")
+        diag_doubles.i("abij") << +1. * ctf.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij).i("aj")
+        diag_doubles.i("abij") << +1. * ctf.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+
+        # add exchange contributions
+        diag_doubles.i("abij") << diag_doubles.i("baji")
+        # after adding exchanging indices contribution from P(ijab, jiba),
+        # now add all terms that don't involve P(ijab,jiba)
+        diag_doubles.i("abij") << ctf.einsum("ijij-> ij", dict_t_V["klij"]).i("ij")
+        diag_doubles.i("abij") << ctf.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij).i("ab")
+        diag_doubles.i("abij") << ctf.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles.i("abij") << dict_t_V["abcd"].i("abab")
+
+        return diag_doubles
+
     def update_singles(self, t_fock_pq, dict_t_V, t_u_ai, t_u_abij, t_T_abij):
         """
         Calculate the matrix-vector product between similarity-transformed H and u vector for the singles
@@ -291,7 +357,7 @@ class EOM_CCSD:
         u_abij = t_u_abij.to_nparray().ravel()
         u_vec = np.concatenate((u_ai, u_abij), axis=None)
         delta_singles = np.dot(fake_ham, u_vec)[:no*nv]
-        delta_singles = delta_singles.reshape(-1, no)
+        delta_singles = delta_singles.reshape(nv, no)
         return ctf.astensor(delta_singles)
 
     def update_doubles_test(self, fake_ham, t_u_ai, t_u_abij):
@@ -311,9 +377,10 @@ class EOM_CCSD:
         fake_ham += fake_ham.T
         fake_ham /= 2
         return fake_ham
+    
 
     def test_davidson(self):
-        nv = 15
+        nv = 5
         no = self.no
         time_init = time.time()
         ham = self.construct_fake_ham(nv, no)
@@ -428,9 +495,10 @@ class EOM_CCSD:
         subspace_len = len(u_singles)
         subspace_matrix = ctf.tensor([no*nv+nv**2*no**2, subspace_len])
         for i in range(subspace_len):
-            subspace_matrix[:no*nv, i] = u_singles[i].ravel()
-            subspace_matrix[no*nv:, i] = u_doubles[i].ravel()
-        Q, R = ctf.qr(subspace_matrix)
+            subspace_matrix[:no*nv, i] = u_singles[i].to_nparray().ravel()
+            subspace_matrix[no*nv:, i] = u_doubles[i].to_nparray().ravel()
+        Q, R = np.linalg.qr(subspace_matrix.to_nparray())
+        Q = ctf.astensor(Q)
 
         for i in range(subspace_len):
             u_singles[i] = Q[:no*nv, i]
