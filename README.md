@@ -84,16 +84,17 @@ pip3 install --force --user -b $(BDIR)/lib_python/ . --upgrade; \
 `python3` or when you `make python -j 8` it
 complains that it cannot find `python`.  
 
-Test your CTF installation with
-```
-make python_test
-```
-
 If that works, pip install ctf with
 ```
 make python_install
 ```
 **Tip:** If you don't have sudo, it may also be necessary to add to the pip install command in the Makefile the ```--user``` flag.  
+
+Now try to import 'ctf' in python
+```python3
+import ctf
+```
+to see if any errors appear. 
 
 ## Running
 For example, run test_ccsd.py with 5 processes under test_ccsd with
