@@ -64,11 +64,11 @@ def main(nel, cutoff,rs, gamma, kc, rpa,efftive2b):
     if world.rank() == 0:
         print("kCutoff=",sys.kCutoff)
     if rpa:
-        tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=True,only2Body=False, sp=1)
+        tV_pqrs = sys.eval_2b_integrals(correlator=sys.trunc,is_rpa_approx=True,is_only_2b=False, sp=1)
     elif efftive2b:
-        tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=False,effective2Body=True, sp=1)
+        tV_pqrs = sys.eval_2b_integrals(correlator=sys.trunc,is_rpa_approx=False,is_effect_2b=True, sp=1)
     else:
-        tV_pqrs = sys.eval2BodyIntegrals(correlator=sys.trunc,rpaApprox=False,only2Body=True, sp=1)
+        tV_pqrs = sys.eval_2b_integrals(correlator=sys.trunc,is_rpa_approx=False,is_only_2b=True, sp=1)
 
     if world.rank() == 0:
         print("%f.3 seconds spent on evaluating Coulomb integrals" % (time.time()-timeCoulInt))
