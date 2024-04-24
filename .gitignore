@@ -1,1 +1,4 @@
 pymes/lib/ctf/*
+*.pyc
+*.dat
+ctf
