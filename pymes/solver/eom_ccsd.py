@@ -34,7 +34,7 @@ class EOM_CCSD:
         self.u_singles = []
         self.u_doubles = []
         self.e_excit = np.zeros(n_excit)
-        self.max_dim = n_excit * 8
+        self.max_dim = n_excit * 4
         self.e_epsilon = 1.e-8
 
         self.max_iter = 200
