@@ -176,7 +176,10 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
 
     print_logging_info("Starting MP2")
 
-    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, t_V_pqrs)
+    t_V_abij = t_V_pqrs[no:,no:,:no,:no]
+    t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
+
+    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, t_V_abij=t_V_abij, t_V_ijab=t_V_ijab)
     ccd_e = 0.
     dcd_e = 0.
 
@@ -221,7 +224,7 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
         0.01309416, 0.01309416, 0.01309416, 0.01309416, 0.01309416, 0.01309416,
         0.01309416, 0.01309416, 0.01309416, 0.01309416, 0.01309416, 0.01309416,
         0.01309416, 0.01309416, 0.01309416])
-    assert np.sum(np.abs(contr_from_doubly_contra_3b - known_doubly_contr_3b)) < 1.e-8
+    assert np.allclose(contr_from_doubly_contra_3b, known_doubly_contr_3b)
     assert np.abs(mp2_e - -0.327226965969) < 1.e-8
     assert np.abs(ccd_e - -0.256670836708) < 1.e-8
 
