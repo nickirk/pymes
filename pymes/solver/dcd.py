@@ -1,10 +1,10 @@
 import time
 
-from ctf.core import *
 from pymes.solver import ccd
+import ctf
 
 
-def solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
+def solve(t_fock_pq, t_V_pqrs, level_shift=0., sp=0, \
           is_dcd=True, max_iter=100, is_diis=True, amps=None, is_bruekner=False, \
           epsilon_e=1e-8):
     '''
@@ -16,8 +16,7 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, level_shift=0., sp=0, \
     '''
     algo_name = "dcd.solve"
     time_dcd = time.time()
-    return ccd.solve(t_epsilon_i, \
-                     t_epsilon_a, \
+    return ccd.solve(t_fock_pq, \
                      t_V_pqrs, \
                      level_shift=level_shift,\
                      sp=sp, \
