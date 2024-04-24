@@ -105,12 +105,12 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     tV_ijkl = tV_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
+    tEpsilon_i = hf.calc_occ_orb_e(kinetic_G, tV_ijkl, no)
     holeEnergy = np.real(tEpsilon_i.to_nparray())
 
     tV_aibj = tV_pqrs[no:,:no,no:,:no]
     tV_aijb = tV_pqrs[no:,:no,:no,no:]
-    tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
+    tEpsilon_a = hf.calc_vir_orb_e(kinetic_G, tV_aibj, tV_aijb, no, nv)
     particleEnergy = np.real(tEpsilon_a.to_nparray())
 
     print_logging_info("HF orbital energies:")

@@ -107,12 +107,12 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
     t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, t_V_ijkl, no)
+    tEpsilon_i = hf.calc_occ_orb_e(kinetic_G, t_V_ijkl, no)
     holeEnergy = np.real(tEpsilon_i.to_nparray())
 
     t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
     t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
-    tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
+    tEpsilon_a = hf.calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
     particleEnergy = np.real(tEpsilon_a.to_nparray())
 
     print_logging_info("HF orbital energies:")

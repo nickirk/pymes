@@ -196,3 +196,9 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
     print_logging_info("Total TC-MP2 E = {:.8f}".format(total_e))
 
     return t_hf_e, contr_from_triply_contra_3b, tc_mp2_e
+
+if __name__ == '__main__':
+    test_zero_shift()
+    test_nonzero_shift()
+    test_twisted_average()
+    print("All tests passed.")
