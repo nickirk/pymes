@@ -88,9 +88,9 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         for l in range(self.n_excit):
             self.u_singles.append((0.5-(np.random.rand(*diag_ai.shape))))
             #self.u_doubles.append(0.5-(np.random.rand(*t_D_abij.shape)))
-            self.u_doubles.append((0.5-(np.random.rand(*diag_abij.shape)))*0.0)
-        self.u_singles[0][3, 1] = 1.
-        self.u_singles[1][1, 1] = 1.
+            self.u_doubles.append((0.5-(np.random.rand(*diag_abij.shape)))*0.01)
+        #self.u_singles[0][3, 1] = 1.
+        #self.u_singles[1][1, 1] = 1.
         #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
         # normalize the trial vectors
@@ -226,13 +226,13 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                                                ctf.astensor(trial_doubles), t_T_abij).to_nparray()
             return delta_singles, delta_doubles
         
-        for iter in range(100):
+        for iter in range(150):
             delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
             # preconditioner for the Jacobi method
-            delta_singles /= (ze-diag_ai)
-            delta_doubles /= (ze-diag_abij)
-            Qe_singles += 0.01 * delta_singles 
-            Qe_doubles += 0.01 * delta_doubles 
+            delta_singles /= (ze-diag_ai+0.01)
+            delta_doubles /= (ze-diag_abij+0.01)
+            Qe_singles += 0.1 * delta_singles 
+            Qe_doubles += 0.1 * delta_doubles 
         print_logging_info(f"iter = {iter}, norm of delta_singles = {np.linalg.norm(delta_singles)}, norm of delta_doubles = {np.linalg.norm(delta_doubles)}", level=2)
         
         return Qe_singles, Qe_doubles
