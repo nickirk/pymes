@@ -126,12 +126,12 @@ def main(nel, cutoff, rs, gamma, kc):
     t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    t_epsilon_i = hf.calcOccupiedOrbE(kinetic_G, t_V_ijkl, no)
+    t_epsilon_i = hf.calc_occ_orb_e(kinetic_G, t_V_ijkl, no)
     hole_e = np.real(t_epsilon_i.to_nparray())
 
     t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
     t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
-    t_epsilon_a = hf.calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
+    t_epsilon_a = hf.calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
     particle_e = np.real(t_epsilon_a.to_nparray())
 
     print_logging_info("HF orbital energies:")
@@ -164,14 +164,15 @@ def main(nel, cutoff, rs, gamma, kc):
 
     print_logging_info("{:.3f} seconds spent on evaluating HF energy"\
                        .format((time.time()-time_hf)))
-
-    mp2_e, mp2Amp = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs)
+    t_V_abij = t_V_pqrs[no:,no:,:no,:no]
+    t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
+    mp2_e, mp2Amp = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij)
     ccd_e = 0.
     dcd_e = 0.
 
     print_logging_info("Starting CCD")
     t_h_pq = ctf.astensor(np.diag(kinetic_G))
-    t_fock_pq = hf.construct_hf_matrix(t_h_pq, t_V_pqrs, no)
+    t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
     solver = ccd.CCD(no,is_diis=True)
     ccd_results  = solver.solve(t_fock_pq, t_V_pqrs, \
                                              level_shift=-1., sp=0, \
@@ -181,8 +182,8 @@ def main(nel, cutoff, rs, gamma, kc):
     ccd_amp = ccd_results["t2 amp"]
 
     print_logging_info("Starting DCD")
-    solver = ccd.CCD(is_dcd=True, is_diis=True)
-    dcd_results = solver.solve(t_epsilon_i, t_epsilon_a, t_V_pqrs, \
+    solver = ccd.CCD(no, is_dcd=True, is_diis=True)
+    dcd_results = solver.solve(t_fock_pq, t_V_pqrs, \
                                              level_shift=-1., sp=0, \
                                              max_iter=60, \
                                              amps=ccd_amp)
@@ -210,9 +211,9 @@ if __name__ == '__main__':
   gamma = None
   nel = 14
   for rs in [0.5]:
-    for cutoff in [10]:
+    for cutoff in [5]:
       kc = None
       ccd_e, dcd_e = main(nel, cutoff, rs, gamma, kc)
-    assert(np.abs(ccd_e - -0.31611540) < 1e-8)
-    assert(np.abs(dcd_e - -0.31810448) < 1e-8)
+    assert(np.abs(ccd_e - -0.5120153512190824) < 1e-6)
+    assert(np.abs(dcd_e - -0.515296499349519) < 1e-6)
   ctf.MPI_Stop()
