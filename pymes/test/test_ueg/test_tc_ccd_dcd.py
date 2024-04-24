@@ -89,7 +89,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+    t_V_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
                                      is_only_2b=True,sp=1)
     #tV_pqrs = ueg_model.eval_2b_integrals(sp=1)
 
@@ -103,14 +103,14 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     time_hf = time.time()
 
     print_logging_info("Partitioning V_pqrs")
-    tV_ijkl = tV_pqrs[:no,:no,:no,:no]
+    tV_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
     tEpsilon_i = hf.calc_occ_orb_e(kinetic_G, tV_ijkl, no)
     holeEnergy = np.real(tEpsilon_i.to_nparray())
 
-    tV_aibj = tV_pqrs[no:,:no,no:,:no]
-    tV_aijb = tV_pqrs[no:,:no,:no,no:]
+    tV_aibj = t_V_pqrs[no:,:no,no:,:no]
+    tV_aijb = t_V_pqrs[no:,:no,:no,no:]
     tEpsilon_a = hf.calc_vir_orb_e(kinetic_G, tV_aibj, tV_aijb, no, nv)
     particleEnergy = np.real(tEpsilon_a.to_nparray())
 
@@ -122,7 +122,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
     tEHF = 2*ctf.einsum('i->',tEpsilon_i)
-    tV_klij = tV_pqrs[:no,:no,:no,:no]
+    tV_klij = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating dir and exc HF energy")
 
@@ -147,7 +147,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     # before calculating new integrals, delete the old one to release memory
     #tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
     #                                 is_effect_2b=True,sp=1)
-    tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+    t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
                                      is_rpa_approx=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
@@ -171,14 +171,17 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     print_logging_info("Starting MP2")
 
-    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
+    t_V_abij = t_V_pqrs[no:,no:,:no,:no]
+    t_V_ijab = t_V_pqrs[:no,:no,no:,no:]
+
+    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, t_V_abij=t_V_abij, t_V_ijab=t_V_ijab)
     ccd_e = 0.
     dcd_e = 0.
 
     #ls = -(np.log(rs)*0.8+1.0)
     ls = -0.2
     print_logging_info("Starting CCD")
-    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, level_shift=ls, \
+    ccd_results = ccd.solve(tEpsilon_i, tEpsilon_a, t_V_pqrs, level_shift=ls, \
                             sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
     # unpacking
     ccd_e = ccd_results["ccd e"]
@@ -188,7 +191,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     ls = -1
     print_logging_info("Starting CCD with level shift = ", ls)
-    dcd_results = ccd.solve(tEpsilon_i, tEpsilon_a, tV_pqrs, level_shift=ls,\
+    dcd_results = ccd.solve(tEpsilon_i, tEpsilon_a, t_V_pqrs, level_shift=ls,\
                             sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
