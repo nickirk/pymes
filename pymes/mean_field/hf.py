@@ -19,7 +19,7 @@ def construct_hf_matrix(no, t_h_pq, t_V_pqrs):
     return t_fock_pq
 
 
-def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
+def calc_occ_orb_e(kinetic_G, tV_ijkl, no):
     dtype = tV_ijkl.dtype
     e = ctf.astensor(kinetic_G[0:no], dtype=dtype)
     # tConjGamma_jiG = ctf.einsum("ijG->jiG", ctf.conj(tGamma_ijG))
@@ -32,7 +32,7 @@ def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     return e
 
 
-def calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
+def calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
     algoName = "calcVirtualOrbE"
     e = ctf.astensor(kinetic_G[no:], dtype=t_V_aijb.dtype)
     # tConjGamma_aiG = ctf.einsum("iaG -> aiG", ctf.conj(tGamma_iaG))
