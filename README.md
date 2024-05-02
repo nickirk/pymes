@@ -58,6 +58,9 @@ Run the configure script to check if all necessary libraries etc. can be found.
 ./configure --install-dir=/path/to/install/dir
 ```
 **Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH.  
+It might complain that static libs cannot be found, but as long as the **dynamic** ones are found
+you can proceed to next steps.
+
 **Tip:** If you use the --install-dir option, it is necessary to export 
 the path to the libraries in your bash as
 
