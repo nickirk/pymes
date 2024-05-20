@@ -1,7 +1,7 @@
 """
-This module contains the class FEAST_EOM_CCSD to solve the EOM-CCSD equations using the FEAST algorithm.
+This module contains the class FEAST_EOM_CCSD to 
+solve the EOM-CCSD equations using the FEAST algorithm.
 
-The class FEAST_EOM_CCSD is a subclass of the class EOM_CCSD. It implements the method solve() to solve the EOM-CCSD equations using the FEAST algorithm.
 """
 
 import numpy as np
@@ -31,11 +31,12 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         Parameters
         ----------
-        ccsd : CCSD
-            The CCSD object.
-        nroots : int, optional
-            The number of eigenvalues and eigenvectors to compute.
-        maxiter : int, optional
+        no: int, number of occupied orbitals
+        e_c: float, the center of the energy window
+        e_r: float, the radius of the energy window
+        n_trial : int, optional
+            The size of the trial space
+        max_iter : int, optional
             The maximum number of iterations.
         tol : float, optional
             The tolerance to stop the iterations.
@@ -51,7 +52,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         self.max_iter = max_iter
         self.tol = tol
-        self.linear_solver = "BICGSTAB"
+        self.linear_solver = "Jacobi"
 
         # stored u vectors
         self.u_singles = []
@@ -80,18 +81,12 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         nv = t_epsilon_a.shape[0]
         diag_ai = self.get_diag_singles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
         diag_abij = self.get_diag_doubles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
-        #t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
-        #t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-        #                      - t_epsilon_a.i("a") - t_epsilon_a.i("b")
 
         print_logging_info("Initialising u tensors...", level=1)
+        # TODO: more initialization schemes should be tested
         for l in range(self.n_excit):
             self.u_singles.append((0.5-(np.random.rand(*diag_ai.shape))))
-            #self.u_doubles.append(0.5-(np.random.rand(*t_D_abij.shape)))
             self.u_doubles.append((0.5-(np.random.rand(*diag_abij.shape)))*0.01)
-        #self.u_singles[0][3, 1] = 1.
-        #self.u_singles[1][1, 1] = 1.
-        #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
 
         # normalize the trial vectors
         for l in range(len(self.u_singles)):
@@ -123,11 +118,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                     self.Q_singles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
                     self.Q_doubles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
             
-            # normalize the trial vectors
-            #for l in range(self.n_trial):
-            #    self.Q_singles[l], self.Q_doubles[l] = normalize_amps(self.Q_singles[l], self.Q_doubles[l])
-
-            #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
             # compute the projected Hamiltonian
             H_proj = np.zeros((len(self.u_singles), len(self.u_singles)))
             B = np.zeros((len(self.u_singles), len(self.u_singles)))
@@ -188,7 +178,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         return self.eigvals
 
-    def _jacobi(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
+    def _jacobi(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                phase=None):
         """
         Solve the linear system (z-H)Qe = Y.
         Parameters
@@ -201,6 +192,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         t_fock_dressed_pq : np.ndarray, shape (norb, norb), dtype=float, dressed Fock matrix
         dict_t_V_dressed : dict, dressed two-body integrals 
         t_T_abij : np.ndarray, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
+        phase: complex, (z-H)Qe = phase * Y
         """
         Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
         Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
@@ -213,6 +205,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
             delta_singles += self.u_singles[l]
+            if phase is not None:
+                delta_singles *= phase
             delta_singles -= ze * trial_singles
             delta_singles += self.update_singles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
@@ -220,6 +214,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
             delta_doubles += self.u_doubles[l]
+            if phase is not None:
+                delta_doubles *= phase
             delta_doubles -= ze * trial_doubles
             delta_doubles += self.update_doubles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
@@ -262,13 +258,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
         Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
-        t_D_ai = np.zeros(self.u_singles[0].shape, dtype=float)
-        epsilons_a = t_fock_dressed_pq.diagonal()[self.no:]
-        epsilons_i = t_fock_dressed_pq.diagonal()[:self.no]
-        #t_D_ai.i("ai") << epsilons_a.i("a") - epsilons_i.i("i") 
-        #t_D_abij = np.zeros(self.u_doubles[0].shape, dtype=float)
-        #t_D_abij.i("abij") <<  epsilons_a.i("a") + epsilons_a.i("b")\
-        #                       -epsilons_i.i("i") - epsilons_i.i("j")  
 
         def _get_residual(trial_singles, trial_doubles):
             """
@@ -478,12 +467,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             norm_singles = 0
             norm_doubles = 0
             for l in range(len(u_singles)):
-                #X = np.concatenate((Qe_singles[l].to_nparray().flatten(), Qe_doubles[l].to_nparray().flatten()))
-                #Hx = (ze*np.diag(np.ones(ham.shape[0])) - ham).dot(X)
-                #Hx -= Y[l]
-                ##Hx /= -(ze*np.ones(len(Hx)) - ham.diagonal())
-                #delta_singles = ctf.astensor(Hx[:nv*no].reshape(nv, no), dtype=complex)
-                #delta_doubles = ctf.astensor(Hx[nv*no:].reshape(nv, nv, no, no), dtype=complex)
                 delta_singles = np.zeros(u_singles[0].shape, dtype=complex)
                 delta_singles = ze * Qe_singles[l]
                 delta_singles -= self.update_singles_test(ham,
