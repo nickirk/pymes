@@ -104,8 +104,8 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         # solve for the linear system (Z_e-H)Q = e^(Z_e)Y
         for e in range(len(z)):
             print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-            Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
-                                                      phase=np.exp(z[e]))
+            Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, t_fock_dressed_pq, 
+                                                  dict_t_V_dressed, t_T_abij, phase=np.exp(z[e]))
             Q_singles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
             Q_doubles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
         # normalize the trial vectors
