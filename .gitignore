@@ -2,3 +2,5 @@ pymes/lib/ctf/*
 *.pyc
 *.dat
 ctf
+pymes.egg-info
+build

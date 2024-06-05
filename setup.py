@@ -8,7 +8,7 @@ setup(
         'numpy',
         'scipy',
         'spglib',
-        'cython',
+        'cython==0.29.37',
         'h5py'
         # add any other necessary libraries here
     ],
