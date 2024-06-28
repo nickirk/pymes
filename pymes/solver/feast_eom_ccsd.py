@@ -179,7 +179,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         return self.eigvals
 
     def _jacobi(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
-                phase=None):
+                phase=None, is_rt=False, dt=None, **kwargs):
         """
         Solve the linear system (z-H)Qe = Y.
         Parameters
@@ -193,9 +193,13 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         dict_t_V_dressed : dict, dressed two-body integrals 
         t_T_abij : np.ndarray, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
         phase: complex, (z-H)Qe = phase * Y
+        dt, the time step for the real-time propagation
+        is_rt: bool, whether the solver is for real-time propagation
         """
         Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
         Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+        shift_abij = diag_abij
+        shift_ai = diag_ai
 
         def _get_residual(trial_singles, trial_doubles):
             """
@@ -208,25 +212,40 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             if phase is not None:
                 delta_singles *= phase
             delta_singles -= ze * trial_singles
-            delta_singles += self.update_singles(t_fock_dressed_pq,
+
+            if is_rt and dt is not None:
+                delta_singles += 1j*dt*self.update_singles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
                                                ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_singles += dt*self.update_singles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
             
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
             delta_doubles += self.u_doubles[l]
             if phase is not None:
                 delta_doubles *= phase
             delta_doubles -= ze * trial_doubles
-            delta_doubles += self.update_doubles(t_fock_dressed_pq,
+            if is_rt and dt is not None:
+                delta_doubles += 1j*dt*self.update_doubles(t_fock_dressed_pq,
                                                dict_t_V_dressed, ctf.astensor(trial_singles),
                                                ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_doubles += self.update_doubles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
             return delta_singles, delta_doubles
+
+        if is_rt and dt is not None:
+            shift_abij = diag_abij*1j*dt 
+            shift_ai = diag_ai*1j*dt
         
         for iter in range(150):
             delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
             # preconditioner for the Jacobi method
-            delta_singles /= (ze-diag_ai+0.01)
-            delta_doubles /= (ze-diag_abij+0.01)
+            delta_singles /= (ze-shift_ai+0.01)
+            delta_doubles /= (ze-shift_abij+0.01)
             Qe_singles += 0.1 * delta_singles 
             Qe_doubles += 0.1 * delta_doubles 
         print_logging_info(f"iter = {iter}, norm of delta_singles = {np.linalg.norm(delta_singles)}, norm of delta_doubles = {np.linalg.norm(delta_doubles)}", level=2)

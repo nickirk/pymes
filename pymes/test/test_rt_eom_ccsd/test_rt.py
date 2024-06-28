@@ -48,10 +48,12 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
 
     n_e = 2
     nv = t_T_ai.shape[0]
-    u_singles = np.zeros([nv, no], dtype=complex)
+    u_singles = np.random.random([nv, no])
+    # normalize the u_singles
+    u_singles = u_singles/np.linalg.norm(u_singles)
     u_doubles = np.zeros([nv, nv, no, no], dtype=complex)
-    u_singles[0, 1] = 1.
-    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.1, e_r=0.1, max_iter=100, tol=1e-8)
+    u_singles
+    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.1, e_r=0.3, max_iter=100, tol=1e-8)
     eom_cc.linear_solver = "jacobi"
     ut_singles, ut_doubles = eom_cc.solve(
         t_fock_dressed_pq, dict_t_V_dressed, t_T_abij, 
