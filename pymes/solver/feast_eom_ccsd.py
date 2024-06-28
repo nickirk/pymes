@@ -200,6 +200,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
         shift_abij = diag_abij
         shift_ai = diag_ai
+        
 
         def _get_residual(trial_singles, trial_doubles):
             """
@@ -246,8 +247,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             # preconditioner for the Jacobi method
             delta_singles /= (ze-shift_ai+0.01)
             delta_doubles /= (ze-shift_abij+0.01)
-            Qe_singles += 0.1 * delta_singles 
-            Qe_doubles += 0.1 * delta_doubles 
+            Qe_singles += 0.05 * delta_singles 
+            Qe_doubles += 0.05 * delta_doubles 
         print_logging_info(f"iter = {iter}, norm of delta_singles = {np.linalg.norm(delta_singles)}, norm of delta_doubles = {np.linalg.norm(delta_doubles)}", level=2)
         
         return Qe_singles, Qe_doubles
