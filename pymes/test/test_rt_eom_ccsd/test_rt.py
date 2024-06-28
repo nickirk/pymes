@@ -48,16 +48,31 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
 
     n_e = 2
     nv = t_T_ai.shape[0]
-    u_singles = np.random.random([nv, no])
+    u_singles_0 = np.random.random([nv, no])
     # normalize the u_singles
-    u_singles = u_singles/np.linalg.norm(u_singles)
-    u_doubles = np.zeros([nv, nv, no, no], dtype=complex)
-    u_singles
-    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.1, e_r=0.3, max_iter=100, tol=1e-8)
+    u_singles_0 = u_singles_0/np.linalg.norm(u_singles_0)
+    u_doubles_0 = np.zeros([nv, nv, no, no], dtype=complex)
+   
+    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.8, e_r=0.3, max_iter=100, tol=1e-8)
     eom_cc.linear_solver = "jacobi"
-    ut_singles, ut_doubles = eom_cc.solve(
-        t_fock_dressed_pq, dict_t_V_dressed, t_T_abij, 
-        dt=0.3, u_singles=u_singles, u_doubles=u_doubles)
+    nt = 20
+    dt = 0.5
+    c_t = np.zeros(nt-1, dtype=complex)
+    t = np.arange(1,nt)*dt
+    u_singles = u_singles_0
+    u_doubles = u_doubles_0
+    for n in range(0,nt-1):
+        ut_singles, ut_doubles = eom_cc.solve(
+            t_fock_dressed_pq, dict_t_V_dressed, t_T_abij, 
+            dt=dt, u_singles=u_singles, u_doubles=u_doubles)
+        # update the u_singles and u_doubles
+        u_singles = ut_singles
+        u_doubles = ut_doubles
+        ct_ = np.tensordot(u_singles, ut_singles, axes=2)
+        ct_ += np.tensordot(u_doubles, ut_doubles, axes=4)
+        print("ct = ", ct_)
+        c_t[n] = ct_
+        np.save("ct.npy", np.column_stack((t,c_t)))
 
 
 if __name__ == "__main__":
