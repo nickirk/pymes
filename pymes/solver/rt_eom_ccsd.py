@@ -120,6 +120,8 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         for l in range(len(self.u_singles)):
             self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
 
+        u_norm= np.tensordot(np.conj(Q_singles[0]), Q_singles[0], axes=2)
+        u_norm += np.tensordot(np.conj(Q_doubles[0]), Q_doubles[0], axes=4)
         print_logging_info("Norm of new u vec after normalization = ", u_norm)
         time_end = time.time()
         print_logging_info(f"RT-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
