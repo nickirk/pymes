@@ -7,7 +7,7 @@ import numpy as np
 import time
 from scipy.linalg import eig
 
-from pymes.solver.feast_eom_ccsd import FEAST_EOM_CCSD, get_gauss_legendre_quadrature
+from pymes.solver.feast_eom_ccsd import FEAST_EOM_CCSD, get_gauss_legendre_quadrature, normalize_amps
 from pymes.log import print_title, print_logging_info
 
 class RT_EOM_CCSD(FEAST_EOM_CCSD):
@@ -25,7 +25,8 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
     self.u_doubles
     """
 
-    def __init__(self, no, e_c=0., e_r=1, dt=0.1, tol=1e-12, max_iter=100, **kwargs):
+    def __init__(self, no, e_c=0., e_r=1, dt=0.1, tol=1e-12, max_iter=100,     
+                 **kwargs):
         """
         Initialize the RT_EOM_CCSD object.
 
@@ -82,44 +83,44 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         diag_ai = self.get_diag_singles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
         diag_abij = self.get_diag_doubles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
 
-        # normalize the trial vectors
-        #for l in range(len(self.u_singles)):
-        #    self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
         
         # the solution to a set of linear systems are repeated
         # separating into real and imag problems can save some computation
         # for now, will use the full contour integral.
         # gauss-legrendre quadrature
-        x, w = get_gauss_legendre_quadrature(10) 
+        x, w = get_gauss_legendre_quadrature(16) 
         theta = np.pi * (x - 1)
-        # the 
+        # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
 
-        # start iteratons
         Q_singles = [np.zeros(diag_ai.shape, dtype=complex)]
         Q_doubles = [np.zeros(diag_abij.shape, dtype=complex)]
 
         time_iter_init = time.time()
 
-        # solve for the linear system (Z_e-H)Q = e^(Z_e)Y
+        # solve for the linear system (Z_e-H)Qe = e^(Z_e)Y
         for e in range(len(z)):
             print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-            Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, t_fock_dressed_pq, 
-                                                  dict_t_V_dressed, t_T_abij, phase=np.exp(z[e]))
-            Q_singles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
-            Q_doubles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
-        # normalize the trial vectors
-        #for l in range(len(self.u_singles)):
-        #    self.u_singles, self.u_doubles = normalize_amps(self.u_singles, self.u_doubles)
+            Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, 
+                                                  t_fock_dressed_pq, 
+                                                  dict_t_V_dressed, t_T_abij, 
+                                                  phase=np.exp(z[e]), is_rt=True, dt=dt)
         
+            Q_singles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e])
+                                             * Qe_singles)
+            Q_doubles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) 
+                                             * Qe_doubles)
         
         # check convergence
         u_norm= np.tensordot(np.conj(Q_singles[0]), Q_singles[0], axes=2)
         u_norm += np.tensordot(np.conj(Q_doubles[0]), Q_doubles[0], axes=4)
-        print_logging_info("Norm of new u vec = ", u_norm)
+        print_logging_info("Norm of new u vec before normalization = ", u_norm)
         self.u_singles = Q_singles
         self.u_doubles = Q_doubles
+        for l in range(len(self.u_singles)):
+            self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
 
+        print_logging_info("Norm of new u vec after normalization = ", u_norm)
         time_end = time.time()
         print_logging_info(f"RT-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
 
