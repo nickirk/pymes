@@ -88,8 +88,8 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         # separating into real and imag problems can save some computation
         # for now, will use the full contour integral.
         # gauss-legrendre quadrature
-        x, w = get_gauss_legendre_quadrature(16) 
-        theta = np.pi * (x - 1)
+        x, w = get_gauss_legendre_quadrature(8) 
+        theta = -np.pi * x 
         # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
 
@@ -106,10 +106,10 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
                                                   dict_t_V_dressed, t_T_abij, 
                                                   phase=np.exp(z[e]), is_rt=True, dt=dt)
         
-            Q_singles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e])
-                                             * Qe_singles)
-            Q_doubles[0] -= w[e]/4 * np.real(self.e_r * np.exp(1j * theta[e]) 
-                                             * Qe_doubles)
+            Q_singles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e])
+                                        * Qe_singles)
+            Q_doubles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e]) 
+                                        * Qe_doubles)
         
         # check convergence
         u_norm= np.tensordot(np.conj(Q_singles[0]), Q_singles[0], axes=2)
@@ -126,4 +126,4 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         time_end = time.time()
         print_logging_info(f"RT-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
 
-        return Q_singles, Q_doubles 
+        return Q_singles[0], Q_doubles[0]
