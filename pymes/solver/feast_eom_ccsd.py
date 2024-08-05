@@ -273,42 +273,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         shift_ai = diag_ai
         
 
-        def _get_residual(trial_singles, trial_doubles):
-            """
-            Get the residual of the linear system (z-H)Q = Y
-            for the l-th trial vector.
-            """
-            delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
-            delta_singles += self.u_singles[l]
-            if phase is not None:
-                delta_singles *= phase
-            delta_singles -= ze * trial_singles
-
-            if is_rt and dt is not None:
-                delta_singles += 1j*dt*self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            else:
-                delta_singles += dt*self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
-            delta_doubles += self.u_doubles[l]
-            if phase is not None:
-                delta_doubles *= phase
-            delta_doubles -= ze * trial_doubles
-            if is_rt and dt is not None:
-                delta_doubles += 1j*dt*self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            else:
-                delta_doubles += self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            return delta_singles, delta_doubles
-
         if is_rt and dt is not None:
             shift_abij = diag_abij*1j*dt 
             shift_ai = diag_ai*1j*dt
