@@ -178,6 +178,75 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         return self.eigvals
 
+    def get_residual(self, l, ze, trial_singles, trial_doubles, 
+                      t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                      phase=None, is_rt=False, dt=None):
+        """
+        Get the residual of the linear system (z-H)Q = Y
+        for the l-th trial vector.
+        """
+        delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
+        delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
+        delta_singles += self.u_singles[l]
+        if phase is not None:
+            delta_singles *= phase
+        delta_singles -= ze * trial_singles
+
+        if is_rt and dt is not None:
+            delta_singles += 1j*dt*self.update_singles(t_fock_dressed_pq,
+                                           dict_t_V_dressed, ctf.astensor(trial_singles),
+                                           ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        else:
+            delta_singles += self.update_singles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        
+        delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+        delta_doubles += self.u_doubles[l]
+        if phase is not None:
+            delta_doubles *= phase
+        delta_doubles -= ze * trial_doubles
+        if is_rt and dt is not None:
+            delta_doubles += 1j*dt*self.update_doubles(t_fock_dressed_pq,
+                                           dict_t_V_dressed, ctf.astensor(trial_singles),
+                                           ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        else:
+            delta_doubles += self.update_doubles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        return delta_singles, delta_doubles
+
+    def _opt_solver(self, l, ze, trial_singles, trial_doubles, 
+                    t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                    phase=None, is_rt=False, dt=None):
+        """
+        solve the linear system (z-H)Q = Y using scipy.optimize solvers
+        """
+        Qe_vec = np.concatenate((trial_singles.flatten(), trial_doubles.flatten()))
+
+        def _get_residual(Qe_vec):
+            """
+            Get the residual of the linear system (z-H)Q = Y
+            for the l-th trial vector.
+            """
+            Qe_singles = Qe_vec[:trial_singles.size].reshape(trial_singles.shape)
+            Qe_doubles = Qe_vec[trial_singles.size:].reshape(trial_doubles.shape)
+            delta_singles, delta_doubles = self.get_residual(
+                l, ze, Qe_singles, Qe_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                phase=phase, is_rt=is_rt, dt=dt)
+            delta_vec = np.concatenate((delta_singles.flatten(), delta_doubles.flatten()))
+            # calculate the norm of the residual
+            return np.linalg.norm(delta_vec)
+
+        from scipy.optimize import minimize
+        res = minimize(_get_residual, Qe_vec, method='CG', tol=1e-4)
+        Qe_vec = res.x
+        Qe_singles = Qe_vec[:trial_singles.size].reshape(trial_singles.shape)
+        Qe_doubles = Qe_vec[trial_singles.size:].reshape(trial_doubles.shape)
+        
+        return Qe_singles, Qe_doubles
+
+    
     def _jacobi(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
                 phase=None, is_rt=False, dt=None, **kwargs):
         """
@@ -202,48 +271,14 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         shift_ai = diag_ai
         
 
-        def _get_residual(trial_singles, trial_doubles):
-            """
-            Get the residual of the linear system (z-H)Q = Y
-            for the l-th trial vector.
-            """
-            delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
-            delta_singles += self.u_singles[l]
-            if phase is not None:
-                delta_singles *= phase
-            delta_singles -= ze * trial_singles
-
-            if is_rt and dt is not None:
-                delta_singles += 1j*dt*self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            else:
-                delta_singles += dt*self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
-            delta_doubles += self.u_doubles[l]
-            if phase is not None:
-                delta_doubles *= phase
-            delta_doubles -= ze * trial_doubles
-            if is_rt and dt is not None:
-                delta_doubles += 1j*dt*self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            else:
-                delta_doubles += self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
-            return delta_singles, delta_doubles
-
         if is_rt and dt is not None:
             shift_abij = diag_abij*1j*dt 
             shift_ai = diag_ai*1j*dt
         
-        for iter in range(150):
-            delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
+        for iter in range(200):
+            delta_singles, delta_doubles = self.get_residual(
+                l, ze, Qe_singles, Qe_doubles, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                phase=phase, is_rt=is_rt, dt=dt)
             # preconditioner for the Jacobi method
             delta_singles /= (ze-shift_ai+0.01)
             delta_doubles /= (ze-shift_abij+0.01)

@@ -127,3 +127,78 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         print_logging_info(f"RT-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
 
         return Q_singles[0], Q_doubles[0]
+
+    def _solve_linear_rt_test(self, ze, u_singles, u_doubles, ham, phase=1, dt=0.1):
+        """
+        Solve the linear system (Z_e-H)Qe = e^(Z_e)Y
+        """
+        no = self.no
+        nv = u_singles[0].shape[0]
+        diag_ai = np.diag(ham)[:no*nv].reshape(nv, no)
+        diag_abij = np.diag(ham)[no*nv:].reshape(nv, nv, no, no)
+
+        Qe_singles = np.zeros(diag_ai.shape, dtype=complex)
+        Qe_doubles = np.zeros(diag_abij.shape, dtype=complex)
+
+        # define combined singles and doubles vec u and Q
+        u = np.concatenate((u_singles[0].flatten(), u_doubles[0].flatten()), axis=0)
+        Q = np.concatenate((Qe_singles.flatten(), Qe_doubles.flatten()), axis=0)
+
+        # solve for the linear system (Z_e-H)Qe = e^(Z_e)Y using linear solver
+        Q = np.linalg.solve(ze * np.eye(u.shape[0]) - ham*dt*1j, phase*u)
+        Qe_singles = Q[:nv*no].reshape(nv, no)
+        Qe_doubles = Q[nv*no:].reshape(nv, nv, no, no)
+        return Qe_singles, Qe_doubles
+
+    def solve_test(self, nv=4, dt=0.1, u_singles=None, u_doubles=None):
+        """
+        Test the RT_EOM_CCSD class using a simple matrix Hamiltonian.
+        """
+        print_title("FEAST-EOM-CCSD Solver Test")
+        no = self.no
+
+        ham = self.construct_fake_non_sym_ham(nv, no)
+        e_target, v_target = np.linalg.eig(ham)
+
+        print_logging_info("Initialising u tensors...", level=1)
+        if u_doubles is None or u_singles is None:
+            raise RuntimeError("No initial state specified!")
+        self.u_singles = [u_singles]
+        self.u_doubles = [u_doubles]
+        # get the diagonal elements
+
+        x, w = get_gauss_legendre_quadrature(16) 
+        theta = -np.pi * x 
+        # the quadrature points
+        z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
+
+        Q_singles = [np.zeros(u_singles.shape, dtype=complex)]
+        Q_doubles = [np.zeros(u_doubles.shape, dtype=complex)]
+
+
+        # solve for the linear system (Z_e-H)Qe = e^(Z_e)Y
+        for e in range(len(z)):
+            print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
+            Qe_singles, Qe_doubles = self._solve_linear_rt_test(z[e], self.u_singles, self.u_doubles, ham,
+                                                  phase=np.exp(z[e]), dt=dt)
+        
+            Q_singles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e])
+                                        * Qe_singles)
+            Q_doubles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e]) 
+                                        * Qe_doubles)
+        
+        # check convergence
+        u_norm= np.tensordot(np.conj(Q_singles[0]), Q_singles[0], axes=2)
+        u_norm += np.tensordot(np.conj(Q_doubles[0]), Q_doubles[0], axes=4)
+        print_logging_info("Norm of new u vec before normalization = ", u_norm)
+        self.u_singles = Q_singles
+        self.u_doubles = Q_doubles
+        for l in range(len(self.u_singles)):
+            self.u_singles[l], self.u_doubles[l] = normalize_amps(self.u_singles[l], self.u_doubles[l])
+
+        u_norm= np.tensordot(np.conj(Q_singles[0]), Q_singles[0], axes=2)
+        u_norm += np.tensordot(np.conj(Q_doubles[0]), Q_doubles[0], axes=4)
+        print_logging_info("Norm of new u vec after normalization = ", u_norm)
+        time_end = time.time()
+
+        return Q_singles[0], Q_doubles[0]
