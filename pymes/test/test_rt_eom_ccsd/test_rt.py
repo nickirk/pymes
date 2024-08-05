@@ -56,7 +56,7 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
     eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.8, e_r=0.3, max_iter=100, tol=1e-8)
     eom_cc.linear_solver = "jacobi"
     nt = 20
-    dt = 0.5
+    dt = 0.1
     c_t = np.zeros(nt-1, dtype=complex)
     t = np.arange(1,nt)*dt
     u_singles = u_singles_0
@@ -74,6 +74,31 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
         c_t[n] = ct_
         np.save("ct.npy", np.column_stack((t,c_t)))
 
+def test_rt_eom_ccsd_model_ham():
+    no = 2
+    nv = 4
+    dt = 0.05
+    nt = 1000
+    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=3.5, e_r=1, max_iter=100, tol=1e-8)
+    # generate initial guess
+    u_singles_0 = np.random.random([nv, no])
+    u_doubles_0 = np.random.random([nv, nv, no, no])
+
+    c_t = np.zeros(nt-1, dtype=complex)
+    t = np.arange(1,nt)*dt
+    u_singles = u_singles_0
+    u_doubles = u_doubles_0
+    for n in range(0,nt-1):
+        ut_singles, ut_doubles = eom_cc.solve_test(nv, dt, u_singles=u_singles_0, u_doubles=u_doubles_0)
+        # update the u_singles and u_doubles
+        u_singles = ut_singles
+        u_doubles = ut_doubles
+        ct_ = np.tensordot(u_singles, ut_singles, axes=2)
+        ct_ += np.tensordot(u_doubles, ut_doubles, axes=4)
+        print("ct = ", ct_)
+        c_t[n] = ct_
+        np.save("ct.npy", np.column_stack((t,c_t)))
 
 if __name__ == "__main__":
-    driver()
+    test_rt_eom_ccsd_model_ham()
+    #driver()
