@@ -372,8 +372,8 @@ class EOM_CCSD:
 
     def construct_fake_ham(self, nv, no):
         dim = nv*no + nv**2*no**2
-        fake_ham = np.diag(np.arange(dim)*4.)
-        fake_ham += (np.random.random([dim, dim])-0.5)*0.1
+        fake_ham = np.diag(np.arange(dim)*0.5)
+        fake_ham += (np.random.random([dim, dim])-0.5)
         fake_ham += fake_ham.T
         fake_ham /= 2
         return fake_ham

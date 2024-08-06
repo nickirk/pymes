@@ -77,28 +77,112 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
 def test_rt_eom_ccsd_model_ham():
     no = 2
     nv = 4
-    dt = 0.05
-    nt = 1000
-    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=3.5, e_r=1, max_iter=100, tol=1e-8)
+    dt = 0.8
+    nt = 2000
+    e_c = 2
+    e_r = 1
+    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=e_c, e_r=e_r, max_iter=100, tol=1e-8)
+    ham = eom_cc.construct_fake_non_sym_ham(nv, no)
+    e_target, v_target = np.linalg.eig(ham)
+    print("Target eigenvalues = ", e_target)
     # generate initial guess
-    u_singles_0 = np.random.random([nv, no])
-    u_doubles_0 = np.random.random([nv, nv, no, no])
+    u_singles_0 = (np.random.random([nv, no])-0.5)*1
+    u_doubles_0 = (np.random.random([nv, nv, no, no])-0.5)*20
+    # form the u_vec
+    u_vec = np.concatenate((u_singles_0.flatten(), u_doubles_0.flatten()), axis=0)
+    # normalize the u_vec
+    u_singles_0 = u_singles_0/np.linalg.norm(u_vec)
+    u_doubles_0 = u_doubles_0/np.linalg.norm(u_vec)
 
     c_t = np.zeros(nt-1, dtype=complex)
     t = np.arange(1,nt)*dt
-    u_singles = u_singles_0
-    u_doubles = u_doubles_0
+    u_singles = u_singles_0.copy()
+    u_doubles = u_doubles_0.copy()
     for n in range(0,nt-1):
-        ut_singles, ut_doubles = eom_cc.solve_test(nv, dt, u_singles=u_singles_0, u_doubles=u_doubles_0)
+        ut_singles, ut_doubles = eom_cc.solve_test(ham, dt, u_singles=u_singles, u_doubles=u_doubles)
         # update the u_singles and u_doubles
-        u_singles = ut_singles
-        u_doubles = ut_doubles
-        ct_ = np.tensordot(u_singles, ut_singles, axes=2)
-        ct_ += np.tensordot(u_doubles, ut_doubles, axes=4)
+        u_singles = ut_singles.copy()
+        u_doubles = ut_doubles.copy()
+        ct_ = np.tensordot(u_singles_0, ut_singles, axes=2)
+        ct_ += np.tensordot(u_doubles_0, ut_doubles, axes=4)
         print("ct = ", ct_)
         c_t[n] = ct_
         np.save("ct.npy", np.column_stack((t,c_t)))
+    # print the eigenvalues of the target hamiltonian that are within the range of e_c-e_r and e_c+e_r
+    e_target = np.sort(e_target)
+    e_target = e_target[(e_target > e_c-e_r-0.5) & (e_target < e_c+e_r+0.5)]
+    print("Eigenvalues within the range of e_c-e_r and e_c+e_r = ", e_target)
 
+def signal_processing():
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.signal import find_peaks
+    from scipy.optimize import curve_fit
+    
+    # Assuming ct[:,0] contains the time data and ct[:,1] contains the signal data
+    time_data = ct[:, 0]
+    signal_data = ct[:, 1]
+    
+    # Compute the sampling rate (assuming uniform sampling)
+    delta_t = time_data[1] - time_data[0]
+    
+    # FFT of the signal
+    ct_fft = np.fft.fft(signal_data)
+    ct_fft = ct_fft / len(ct_fft)  # Normalize the FFT
+    ct_fft = ct_fft * 2
+    ct_fft[0] = ct_fft[0]
+    #ct_fft = np.fft.fftshift(ct_fft)
+    
+    # Compute the frequency array and convert to angular frequency
+    ct_freq = np.fft.fftfreq(len(ct_fft), d=delta_t)
+    #positive_freq_indices = ct_freq >= 0
+    #ct_freq = ct_freq[positive_freq_indices]
+    #ct_fft = ct_fft[positive_freq_indices]
+    
+    ct_omega =  (2 * np.pi * ct_freq)
+    ct_omega = (np.fft.fftshift(ct_omega)).real
+    # Identify the peaks
+    peaks, _ = find_peaks(np.abs(ct_fft), height=0.005)
+    print(peaks)
+    print(np.real(ct_omega[peaks]))
+    
+    
+    # Plot the FFT with the correct x-axis
+    plt.figure()
+    #plt.plot(ct_omega, np.abs(ct_fft.real), '--', label='FFT real')
+    #plt.plot(ct_omega, np.abs(ct_fft.imag), '--', label='FFT imag')
+    plt.plot(ct_omega, np.abs(ct_fft), label='FFT magnitude')
+    # Plot the fitted composite Lorentzian function
+    # Define the Lorentzian function
+    def composite_lorentzian(x, *params):
+        n_peaks = len(params) // 3
+        y = np.zeros_like(x)
+        for i in range(n_peaks):
+            A = params[3 * i]
+            x0 = params[3 * i + 1]
+            gamma = params[3 * i + 2]
+            y += (A / np.pi) * (gamma / ((x - x0)**2 + gamma**2))
+        return y
+    
+    # Initial guess for the parameters [A1, x01, gamma1, A2, x02, gamma2, ...]
+    #initial_guess = []
+    #for peak in peaks:
+    #    initial_guess.extend([np.real(ct_fft)[peak], np.abs((ct_omega[peak])), 0.01])
+    #
+    ### Fit the composite Lorentzian function
+    #popt, _ = curve_fit(composite_lorentzian, np.real(ct_omega), np.abs((ct_fft)), p0=initial_guess)
+    #fitted_peak_locations = popt[1::3]
+    ## Place a vertical line at the fitted peak locations
+    #plt.vlines(fitted_peak_locations, 0, np.max(np.abs(ct_fft)), color='g', linestyle='--', label='Fitted Peaks')
+    #print("Fitted peaks = ", popt[popt>1])
+    #plt.plot(ct_omega, composite_lorentzian(ct_omega, *popt), label='Composite Lorentzian fit')
+    
+    plt.xlim(1, 3)
+    plt.ylim(0, 0.03)
+    plt.xlabel('Angular Frequency (rad/s)')
+    plt.ylabel('Magnitude')
+    plt.legend()
+    plt.show()
 if __name__ == "__main__":
     test_rt_eom_ccsd_model_ham()
     #driver()
