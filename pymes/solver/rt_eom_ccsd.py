@@ -150,16 +150,12 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         Qe_doubles = Q[nv*no:].reshape(nv, nv, no, no)
         return Qe_singles, Qe_doubles
 
-    def solve_test(self, nv=4, dt=0.1, u_singles=None, u_doubles=None):
+    def solve_test(self, ham, dt=0.1, u_singles=None, u_doubles=None):
         """
         Test the RT_EOM_CCSD class using a simple matrix Hamiltonian.
         """
         print_title("FEAST-EOM-CCSD Solver Test")
         no = self.no
-
-        ham = self.construct_fake_non_sym_ham(nv, no)
-        e_target, v_target = np.linalg.eig(ham)
-
         print_logging_info("Initialising u tensors...", level=1)
         if u_doubles is None or u_singles is None:
             raise RuntimeError("No initial state specified!")
