@@ -62,7 +62,7 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         pass
 
     def solve(self, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij, dt=0.1, u_singles=None,
-              u_doubles=None):
+              u_doubles=None) -> tuple([np.ndarray, np.ndarray]):
         """
         Solve the EOM-CCSD equations using the non-Hermitian FEAST algorithm.
         """
@@ -106,9 +106,9 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
                                                   dict_t_V_dressed, t_T_abij, 
                                                   phase=np.exp(z[e]), is_rt=True, dt=dt)
         
-            Q_singles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e])
+            Q_singles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e])
                                         * Qe_singles)
-            Q_doubles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e]) 
+            Q_doubles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e]) 
                                         * Qe_doubles)
         
         # check convergence
