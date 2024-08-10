@@ -114,7 +114,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                     if self.linear_solver.upper() == "BICGSTAB":
                         Qe_singles, Qe_doubles = self._bicgstab(l, z[e], t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
                     else:
-                        Qe_singles, Qe_doubles = self._jacobi(l, z[e], diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+                        Qe_singles, Qe_doubles = self._gcrotmk(l, z[e], diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
                     self.Q_singles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles)
                     self.Q_doubles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles)
             
@@ -282,12 +282,70 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             # preconditioner for the Jacobi method
             delta_singles /= (ze-shift_ai+0.01)
             delta_doubles /= (ze-shift_abij+0.01)
-            Qe_singles += 0.05 * delta_singles 
-            Qe_doubles += 0.05 * delta_doubles 
+            Qe_singles += 0.01 * delta_singles 
+            Qe_doubles += 0.01 * delta_doubles 
         print_logging_info(f"iter = {iter}, norm of delta_singles = {np.linalg.norm(delta_singles)}, norm of delta_doubles = {np.linalg.norm(delta_doubles)}", level=2)
         
         return Qe_singles, Qe_doubles
 
+    def _gcrotmk(self, l, ze, diag_ai, diag_abij, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij,
+                phase=None, is_rt=False, dt=None, **kwargs):
+        from scipy.sparse.linalg import LinearOperator, gcrotmk
+        from scipy.sparse import diags
+
+        Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
+        Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+
+        shift_abij = diag_abij
+        shift_ai = diag_ai
+
+        Qe_vec_init = np.concatenate((Qe_singles.flatten(), Qe_doubles.flatten()))
+        b_vec = np.concatenate((self.u_singles[l].flatten(), self.u_doubles[l].flatten()), dtype=complex)
+        if phase is not None:
+            b_vec *= phase
+
+        def matvec(Qe):
+            """
+            Matrix-vector product for the linear system (z-H)Q = Y
+            """
+            # unpack the vector
+            trial_singles = Qe[:diag_ai.size].reshape(diag_ai.shape)
+            trial_doubles = Qe[diag_ai.size:].reshape(diag_abij.shape)
+            #delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
+            #delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
+            delta_singles = ze * trial_singles
+            delta_doubles = ze * trial_doubles
+
+            if is_rt and dt is not None:
+                delta_singles -= 1j*dt*self.update_singles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_singles -= self.update_singles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        
+            delta_doubles = ze * trial_doubles
+            if is_rt and dt is not None:
+                delta_doubles -= 1j*dt*self.update_doubles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_doubles -= self.update_doubles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            # convert to vector
+            return np.concatenate((delta_singles.flatten(), delta_doubles.flatten()))
+        A = LinearOperator((self.u_singles[0].size + self.u_doubles[0].size, self.u_singles[0].size + self.u_doubles[0].size), matvec=matvec)
+        # construct a scipy sparse matrix M for the preconditioner using the diag_ai and diag_abij
+        combined_diag = np.concatenate((1./(ze-diag_ai.flatten()), 1./(ze-diag_abij.flatten())))
+        M = diags(combined_diag, offsets=0)
+
+        Qe_vec, exit_code = gcrotmk(A, b_vec, x0=Qe_vec_init, M=M, maxiter=10, tol=1e-4)
+        print_logging_info("Linear Solver Info = ", exit_code, level=2)
+        Qe_singles = Qe_vec[:self.u_singles[0].size].reshape(self.u_singles[0].shape)
+        Qe_doubles = Qe_vec[self.u_singles[0].size:].reshape(self.u_doubles[0].shape)
+        return Qe_singles, Qe_doubles
         
 
     def _bicgstab(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
@@ -388,6 +446,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             p_doubles = r_doubles + beta * (p_doubles - omega * v_doubles)
         print_logging_info(f"Linear Solver: l = {l}, tot_iter = {i}, s_norm = {np.abs(s_norm)}, r_norm = {np.abs(r_norm)}", level=2)
         return Qe_singles, Qe_doubles
+
 
     def solve_test(self, nv):
         """
