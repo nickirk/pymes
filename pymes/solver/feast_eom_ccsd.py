@@ -320,6 +320,82 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
             if is_rt and dt is not None:
                 delta_singles -= 1j*dt*self.update_singles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_singles -= self.update_singles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+        
+            delta_doubles = ze * trial_doubles
+            if is_rt and dt is not None:
+                delta_doubles -= 1j*dt*self.update_doubles(t_fock_dressed_pq,
+                                               dict_t_V_dressed, ctf.astensor(trial_singles),
+                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            else:
+                delta_doubles -= self.update_doubles(t_fock_dressed_pq,
+                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
+                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+            # convert to vector
+            return np.concatenate((delta_singles.flatten(), delta_doubles.flatten()))
+        A = LinearOperator((self.u_singles[0].size + self.u_doubles[0].size, self.u_singles[0].size + self.u_doubles[0].size), matvec=matvec)
+        # construct a scipy sparse matrix M for the preconditioner using the diag_ai and diag_abij
+        combined_diag = np.concatenate((1./(ze-diag_ai.flatten()), 1./(ze-diag_abij.flatten())))
+        M = diags(combined_diag, offsets=0)
+
+        Qe_vec, exit_code = gcrotmk(A, b_vec, x0=Qe_vec_init, M=M, maxiter=10, tol=1e-4)
+        print_logging_info("Linear Solver Info = ", exit_code, level=2)
+        Qe_singles = Qe_vec[:self.u_singles[0].size].reshape(self.u_singles[0].shape)
+        Qe_doubles = Qe_vec[self.u_singles[0].size:].reshape(self.u_doubles[0].shape)
+        return Qe_singles, Qe_doubles
+        
+
+    def _bicgstab(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
+        """
+        Solve the linear system (z-H)Q = Y.
+        Default algorithm is BiCGSTAB unconditioned.
+
+        Parameters
+        ----------
+        l : int, trial vector index
+        ze : complex
+            The shift value.
+        t_fock_dressed_pq : np.ndarray, shape (norb, norb), dtype=float, dressed Fock matrix
+        dict_t_V_dressed : dict, dressed two-body integrals
+        t_T_abij : np.ndarray, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
+
+
+        Returns
+        -------
+        Qe_singles : dtype=np.ndarray, single excitation vectors
+        Qe_doubles : dtype=np.ndarray, double excitation vectors
+        """
+
+        Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
+        Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
+
+        shift_abij = diag_abij
+        shift_ai = diag_ai
+
+        Qe_vec_init = np.concatenate((Qe_singles.flatten(), Qe_doubles.flatten()))
+        b_vec = np.concatenate((self.u_singles[l].flatten(), self.u_doubles[l].flatten()), dtype=complex)
+        if phase is not None:
+            b_vec *= phase
+
+        def matvec(Qe):
+            """
+            Matrix-vector product for the linear system (z-H)Q = Y
+            """
+            # unpack the vector
+            trial_singles = Qe[:diag_ai.size].reshape(diag_ai.shape)
+            trial_doubles = Qe[diag_ai.size:].reshape(diag_abij.shape)
+            #delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
+            #delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
+            delta_singles = ze * trial_singles
+            delta_doubles = ze * trial_doubles
+
+            if is_rt and dt is not None:
+                delta_singles -= 1j*dt*self.update_singles(t_fock_dressed_pq,
                                                dict_t_V_dressed, trial_singles,
                                                trial_doubles, t_T_abij)
             else:
@@ -349,6 +425,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         Qe_doubles = Qe_vec[self.u_singles[0].size:].reshape(self.u_doubles[0].shape)
         return Qe_singles, Qe_doubles
         
+
+
 
 
     def solve_test(self, nv):
