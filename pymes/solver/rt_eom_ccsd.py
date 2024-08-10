@@ -88,7 +88,7 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         # separating into real and imag problems can save some computation
         # for now, will use the full contour integral.
         # gauss-legrendre quadrature
-        x, w = get_gauss_legendre_quadrature(8) 
+        x, w = get_gauss_legendre_quadrature(12) 
         theta = -np.pi * x 
         # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
@@ -101,14 +101,18 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         # solve for the linear system (Z_e-H)Qe = e^(Z_e)Y
         for e in range(len(z)):
             print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-            Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, 
+            #Qe_singles, Qe_doubles = self._jacobi(0, z[e], diag_ai, diag_abij, 
+            #                                      t_fock_dressed_pq, 
+            #                                      dict_t_V_dressed, t_T_abij, 
+            #                                      phase=np.exp(z[e]), is_rt=True, dt=dt)
+            Qe_singles, Qe_doubles = self._gcrotmk(0, z[e], diag_ai, diag_abij, 
                                                   t_fock_dressed_pq, 
                                                   dict_t_V_dressed, t_T_abij, 
                                                   phase=np.exp(z[e]), is_rt=True, dt=dt)
         
-            Q_singles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e])
+            Q_singles[0] -= w[e]/2 * (self.e_r * dt * np.exp(1j * theta[e])
                                         * Qe_singles)
-            Q_doubles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e]) 
+            Q_doubles[0] -= w[e]/2 * (self.e_r * dt * np.exp(1j * theta[e]) 
                                         * Qe_doubles)
         
         # check convergence
@@ -163,7 +167,7 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         self.u_doubles = [u_doubles]
         # get the diagonal elements
 
-        x, w = get_gauss_legendre_quadrature(16) 
+        x, w = get_gauss_legendre_quadrature(12) 
         theta = -np.pi * x 
         # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
@@ -178,9 +182,9 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
             Qe_singles, Qe_doubles = self._solve_linear_rt_test(z[e], self.u_singles, self.u_doubles, ham,
                                                   phase=np.exp(z[e]), dt=dt)
         
-            Q_singles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e])
-                                        * Qe_singles)
-            Q_doubles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e]) 
+            Q_singles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e])
+                                      * Qe_singles)
+            Q_doubles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e]) 
                                         * Qe_doubles)
         
         # check convergence
