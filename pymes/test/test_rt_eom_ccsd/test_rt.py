@@ -48,46 +48,54 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
 
     n_e = 2
     nv = t_T_ai.shape[0]
-    u_singles_0 = np.random.random([nv, no])
-    # normalize the u_singles
-    u_singles_0 = u_singles_0/np.linalg.norm(u_singles_0)
-    u_doubles_0 = np.zeros([nv, nv, no, no], dtype=complex)
+    u_singles_0 = np.random.random([nv, no]) - 0.5
+    u_doubles_0 = np.zeros([nv, nv, no, no])
+    # calculate the norm 
+    u_vec = np.concatenate((u_singles_0.flatten(), u_doubles_0.flatten()), axis=0)
+    norm = np.linalg.norm(u_vec)
+    u_singles_0 = u_singles_0/norm
+    u_doubles_0 = u_doubles_0/norm
+
    
-    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.8, e_r=0.3, max_iter=100, tol=1e-8)
+    eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=0.5, e_r=0.1, max_iter=100, tol=1e-8)
     eom_cc.linear_solver = "jacobi"
-    nt = 20
-    dt = 0.1
+    nt = 200
+    dt = 0.5
     c_t = np.zeros(nt-1, dtype=complex)
     t = np.arange(1,nt)*dt
-    u_singles = u_singles_0
-    u_doubles = u_doubles_0
+    u_singles = u_singles_0.copy()
+    u_doubles = u_doubles_0.copy()
     for n in range(0,nt-1):
         ut_singles, ut_doubles = eom_cc.solve(
             t_fock_dressed_pq, dict_t_V_dressed, t_T_abij, 
             dt=dt, u_singles=u_singles, u_doubles=u_doubles)
         # update the u_singles and u_doubles
-        u_singles = ut_singles
-        u_doubles = ut_doubles
-        ct_ = np.tensordot(u_singles, ut_singles, axes=2)
-        ct_ += np.tensordot(u_doubles, ut_doubles, axes=4)
+        u_singles = ut_singles.copy()
+        u_doubles = ut_doubles.copy()
+        ct_ = np.tensordot(u_singles_0, ut_singles, axes=2)
+        ct_ += np.tensordot(u_doubles_0, ut_doubles, axes=4)
         print("ct = ", ct_)
         c_t[n] = ct_
         np.save("ct.npy", np.column_stack((t,c_t)))
 
 def test_rt_eom_ccsd_model_ham():
-    no = 2
+    no = 4
     nv = 4
-    dt = 0.8
+    dt = 0.3
     nt = 2000
-    e_c = 2
+    e_c = 8
     e_r = 1
     eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=e_c, e_r=e_r, max_iter=100, tol=1e-8)
-    ham = eom_cc.construct_fake_non_sym_ham(nv, no)
+    #ham = eom_cc.construct_fake_non_sym_ham(nv, no)
+    #np.save("ham.npy", ham)
+    ham = np.load("ham.npy")
     e_target, v_target = np.linalg.eig(ham)
     print("Target eigenvalues = ", e_target)
+    #np.save("e_target.npy", e_target)
     # generate initial guess
+    np.random.seed(None)
     u_singles_0 = (np.random.random([nv, no])-0.5)*1
-    u_doubles_0 = (np.random.random([nv, nv, no, no])-0.5)*20
+    u_doubles_0 = (np.random.random([nv, nv, no, no])-0.5)*5
     # form the u_vec
     u_vec = np.concatenate((u_singles_0.flatten(), u_doubles_0.flatten()), axis=0)
     # normalize the u_vec
@@ -107,10 +115,10 @@ def test_rt_eom_ccsd_model_ham():
         ct_ += np.tensordot(u_doubles_0, ut_doubles, axes=4)
         print("ct = ", ct_)
         c_t[n] = ct_
-        np.save("ct.npy", np.column_stack((t,c_t)))
+        np.save("ct1.npy", np.column_stack((t,c_t)))
     # print the eigenvalues of the target hamiltonian that are within the range of e_c-e_r and e_c+e_r
     e_target = np.sort(e_target)
-    e_target = e_target[(e_target > e_c-e_r-0.5) & (e_target < e_c+e_r+0.5)]
+    e_target = e_target[(e_target > e_c-e_r) & (e_target < e_c+e_r)]
     print("Eigenvalues within the range of e_c-e_r and e_c+e_r = ", e_target)
 
 def signal_processing():
@@ -184,5 +192,5 @@ def signal_processing():
     plt.legend()
     plt.show()
 if __name__ == "__main__":
-    test_rt_eom_ccsd_model_ham()
-    #driver()
+    #test_rt_eom_ccsd_model_ham()
+    driver()
