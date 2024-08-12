@@ -47,7 +47,7 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
     dict_t_V_dressed = mycc.get_T1_dressed_V(t_T_ai, dict_t_V)#, dict_t_V_dressed)
 
     n_e = 2
-    eom_cc = feast_eom_ccsd.FEAST_EOM_CCSD(no, e_c=0.43, e_r=0.1, n_trial=4, max_iter=100, tol=1e-8)
+    eom_cc = feast_eom_ccsd.FEAST_EOM_CCSD(no, e_c=0.5, e_r=0.1, n_trial=4, max_iter=100, tol=1e-8)
     eom_cc.linear_solver = "jacobi"
     e_excit = eom_cc.solve(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
     print("Excited state energies = ", e_excit)

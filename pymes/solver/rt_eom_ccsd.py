@@ -88,7 +88,7 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         # separating into real and imag problems can save some computation
         # for now, will use the full contour integral.
         # gauss-legrendre quadrature
-        x, w = get_gauss_legendre_quadrature(12) 
+        x, w = get_gauss_legendre_quadrature(8) 
         theta = -np.pi * x 
         # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
