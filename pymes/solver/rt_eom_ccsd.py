@@ -167,7 +167,7 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
         self.u_doubles = [u_doubles]
         # get the diagonal elements
 
-        x, w = get_gauss_legendre_quadrature(12) 
+        x, w = get_gauss_legendre_quadrature(16) 
         theta = -np.pi * x 
         # the quadrature points
         z = (self.e_c*1j + self.e_r * np.exp(1j * theta))*dt
@@ -182,9 +182,9 @@ class RT_EOM_CCSD(FEAST_EOM_CCSD):
             Qe_singles, Qe_doubles = self._solve_linear_rt_test(z[e], self.u_singles, self.u_doubles, ham,
                                                   phase=np.exp(z[e]), dt=dt)
         
-            Q_singles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e])
-                                      * Qe_singles)
-            Q_doubles[0] -= w[e]/4 * (self.e_r * dt * np.exp(1j * theta[e]) 
+            Q_singles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e])
+                                        * Qe_singles)
+            Q_doubles[0] -= w[e]/2 * (self.e_r * np.exp(1j * theta[e]) 
                                         * Qe_doubles)
         
         # check convergence

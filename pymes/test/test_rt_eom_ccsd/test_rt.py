@@ -79,23 +79,21 @@ def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g",
         np.save("ct.npy", np.column_stack((t,c_t)))
 
 def test_rt_eom_ccsd_model_ham():
-    no = 4
+    no = 2
     nv = 4
-    dt = 0.3
+    dt = 0.8
     nt = 2000
-    e_c = 8
+    e_c = 2
     e_r = 1
     eom_cc = rt_eom_ccsd.RT_EOM_CCSD(no, e_c=e_c, e_r=e_r, max_iter=100, tol=1e-8)
-    #ham = eom_cc.construct_fake_non_sym_ham(nv, no)
-    #np.save("ham.npy", ham)
-    ham = np.load("ham.npy")
+    ham = eom_cc.construct_fake_non_sym_ham(nv, no)
     e_target, v_target = np.linalg.eig(ham)
     print("Target eigenvalues = ", e_target)
     #np.save("e_target.npy", e_target)
     # generate initial guess
     np.random.seed(None)
     u_singles_0 = (np.random.random([nv, no])-0.5)*1
-    u_doubles_0 = (np.random.random([nv, nv, no, no])-0.5)*5
+    u_doubles_0 = (np.random.random([nv, nv, no, no])-0.5)*20
     # form the u_vec
     u_vec = np.concatenate((u_singles_0.flatten(), u_doubles_0.flatten()), axis=0)
     # normalize the u_vec
@@ -107,6 +105,7 @@ def test_rt_eom_ccsd_model_ham():
     u_singles = u_singles_0.copy()
     u_doubles = u_doubles_0.copy()
     for n in range(0,nt-1):
+        print("n = ", n)
         ut_singles, ut_doubles = eom_cc.solve_test(ham, dt, u_singles=u_singles, u_doubles=u_doubles)
         # update the u_singles and u_doubles
         u_singles = ut_singles.copy()
@@ -118,7 +117,7 @@ def test_rt_eom_ccsd_model_ham():
         np.save("ct1.npy", np.column_stack((t,c_t)))
     # print the eigenvalues of the target hamiltonian that are within the range of e_c-e_r and e_c+e_r
     e_target = np.sort(e_target)
-    e_target = e_target[(e_target > e_c-e_r) & (e_target < e_c+e_r)]
+    e_target = e_target[(e_target > e_c-e_r-0.5) & (e_target < e_c+e_r+0.5)]
     print("Eigenvalues within the range of e_c-e_r and e_c+e_r = ", e_target)
 
 def signal_processing():
