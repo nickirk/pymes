@@ -1,6 +1,5 @@
 import time
 import numpy as np
-import ctf
 
 from pymes.solver import mp2
 from pymes.mixer import diis
@@ -34,7 +33,6 @@ class CCD:
         '''
         algo_name = "ccd.solve"
         time_ccd = time.time()
-        world = ctf.comm()
 
         no = self.no
         nv = t_fock_pq.shape[0] - no
@@ -74,19 +72,16 @@ class CCD:
         print_logging_info("Using Bruekner quasi-particle energy: ", self.is_bruekner,
                            level=1)
         print_logging_info("Iteration = 0", level=1)
-        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift,
-                                    sp=sp)
+        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift)
+        print("MP2 energy = ", e_mp2)
         if amps is not None:
             t_T_abij = amps
 
-        t_D_abij = ctf.tensor([nv, nv, no, no], dtype=t_V_pqrs.dtype, sp=sp)
-        # the following ctf expression calcs the outer sum, as wanted.
-        t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-        - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+        t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
 
         t_D_abij = 1. / (t_D_abij + level_shift)
-        # why the ctf contraction is not used here?
-        # let's see if the ctf contraction does the same job
+        # why the np contraction is not used here?
+        # let's see if the np contraction does the same job
         dE = np.abs(np.real(e_mp2))
         iteration = 0
         e_last_iter_ccd = np.real(e_mp2)
@@ -108,24 +103,24 @@ class CCD:
 
             if self.is_bruekner:
                 # construct amp dependent quasi-particle energies
-                t_tilde_T_abij = ctf.tensor([nv, nv, no, no], dtype=t_T_abij.dtype,
-                                            sp=t_T_abij.sp)
-                t_tilde_T_abij.set_zero()
-                t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") \
-                - t_T_abij.i("baij")
+                t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
+                #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") \
+                #- t_T_abij.i("baij")
+                t_tilde_T_abij += 2.0 * t_T_abij - np.einsum("baij -> abij", t_T_abij)
                 t_epsilon_i = t_epsilon_i \
-                              + 1. / 2 * ctf.einsum("ilcd,cdil->i", t_V_ijab,
+                              + 1. / 2 * np.einsum("ilcd,cdil->i", t_V_ijab,
                                                     t_tilde_T_abij)
                 t_epsilon_a = t_epsilon_a \
-                              - 1. / 2 * ctf.einsum("klad,adkl->a", t_V_ijab,
+                              - 1. / 2 * np.einsum("klad,adkl->a", t_V_ijab,
                                                     t_tilde_T_abij)
 
                 # update the denominator accordingly
-                t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-                - t_epsilon_a.i("a") - t_epsilon_a.i("b")
+                #t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
+                #- t_epsilon_a.i("a") - t_epsilon_a.i("b")
+                t_D_abij = np.einsum('i, j, a, b -> abij', t_epsilon_i, t_epsilon_i, -t_epsilon_a, -t_epsilon_a)
                 t_D_abij = 1. / (t_D_abij + level_shift)
 
-            t_delta_T_abij = ctf.einsum('abij,abij->abij', t_R_abij, t_D_abij)
+            t_delta_T_abij = np.einsum('abij,abij->abij', t_R_abij, t_D_abij)
             t_T_abij += delta * t_delta_T_abij
 
             if self.is_diis:
@@ -139,8 +134,8 @@ class CCD:
             dE = e_ccd - e_last_iter_ccd
             e_last_iter_ccd = e_ccd
 
-            t2_l1_norm = ctf.norm(t_T_abij)
-            residual_norm = ctf.norm(t_delta_T_abij)
+            t2_l1_norm = np.linalg.norm(t_T_abij)
+            residual_norm = np.linalg.norm(t_delta_T_abij)
 
             if iteration <= max_iter:
                 print_logging_info("Iteration = ", iteration, level=1)
@@ -172,38 +167,41 @@ class CCD:
         algo_name = "ccd.get_residual"
         no = self.no
         nv = t_fock_pq.shape[0] - no
-        t_R_abij = ctf.tensor([nv, nv, no, no], dtype=t_V_klij.dtype, sp=t_T_abij.sp)
+        t_R_abij = np.zeros([nv, nv, no, no], dtype=t_V_klij.dtype)
 
         # t_V_ijkl and t_V_klij are not the same in transcorrelated Hamiltonian!
-        t_I_klij = ctf.tensor([no, no, no, no], dtype=t_V_klij.dtype, sp=t_T_abij.sp)
+        t_I_klij = np.zeros([no, no, no, no], dtype=t_V_klij.dtype)
 
         # = operatore pass the reference instead of making a copy.
         # if we want a copy, we need to specify that.
-        # t_I_klij = ctf.tensor([nv,nv,no,no], dtype=t_V_klij.dtype,sp=t_V_klij.sp)
+        # t_I_klij = np.zeros([nv,nv,no,no], dtype=t_V_klij.dtype,sp=t_V_klij.sp)
         t_I_klij += t_V_klij
         if not self.is_dcd:
-            t_I_klij += ctf.einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
+            t_I_klij += np.einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
 
-        t_R_abij.i("abij") << t_V_abij.i("abij") \
-                              + t_I_klij.i("klij") * t_T_abij.i("abkl")\
-                              + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
+        #t_R_abij.i("abij") << t_V_abij.i("abij") \
+        #                      + t_I_klij.i("klij") * t_T_abij.i("abkl")\
+        #                      + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
+        t_R_abij += t_V_abij 
+        t_R_abij += np.einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
+        t_R_abij += np.einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
     
         if not self.is_dcd:
-            t_X_alcj = ctf.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
-            t_R_abij += ctf.einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
+            t_X_alcj = np.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
+            t_R_abij += np.einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
 
         # intermediates
         # t_tilde_T_abij
         # tested using MP2 energy, the below tensor op is correct
-        t_tilde_T_abij = ctf.tensor([nv, nv, no, no], dtype=t_T_abij.dtype,
-                                    sp=t_T_abij.sp)
-        t_tilde_T_abij.set_zero()
-        t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") - t_T_abij.i("baij")
+        t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
+                                    
+        #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") - t_T_abij.i("baij")
+        t_tilde_T_abij = 2.0 * t_T_abij - np.einsum("baij -> abij", t_T_abij)
 
         # Xai_kbcj for the quadratic terms
-        t_Xai_cbkj = ctf.einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
+        t_Xai_cbkj = np.einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
 
-        t_R_abij += ctf.einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
+        t_R_abij += np.einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
 
         t_fock_ab = t_fock_pq[no:, no:]
         t_fock_ij = t_fock_pq[:no, :no]
@@ -212,28 +210,34 @@ class CCD:
             t_X_ac = t_fock_ab
             t_X_ki = t_fock_ij
         else:
-            t_X_ac = t_fock_ab - 1. / 2 * ctf.einsum("adkl, lkdc -> ac",
+            t_X_ac = t_fock_ab - 1. / 2 * np.einsum("adkl, lkdc -> ac",
                                                      t_tilde_T_abij, t_V_ijab)
-            t_X_ki = t_fock_ij + 1. / 2 * ctf.einsum("cdil, lkdc -> ki",
+            t_X_ki = t_fock_ij + 1. / 2 * np.einsum("cdil, lkdc -> ki",
                                                      t_tilde_T_abij, t_V_ijab)
 
         if not self.is_dcd:
-            t_X_ac -= 1. / 2. * ctf.einsum("adkl, lkdc -> ac", t_tilde_T_abij, t_V_ijab)
-            t_X_ki += 1. / 2. * ctf.einsum("cdil, lkdc -> ki",
+            t_X_ac -= 1. / 2. * np.einsum("adkl, lkdc -> ac", t_tilde_T_abij, t_V_ijab)
+            t_X_ki += 1. / 2. * np.einsum("cdil, lkdc -> ki",
                                            t_tilde_T_abij, t_V_ijab)
 
-        t_Ex_abij = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
-        #t_Ex_baji = ctf.tensor([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
+        t_Ex_abij = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype)
+        #t_Ex_baji = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
 
-        t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
-            - t_X_ki.i("ki") * t_T_abij.i("abkj") \
-            - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
-            - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
-            + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
+        #t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
+        #    - t_X_ki.i("ki") * t_T_abij.i("abkj") \
+        #    - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
+        #    - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
+        #    + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
+        t_Ex_abij += np.einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
+        t_Ex_abij -= np.einsum("ki, abkj -> abij", t_X_ki, t_T_abij)
+        t_Ex_abij -= np.einsum("kaic, cbkj -> abij", t_V_iajb, t_T_abij)
+        t_Ex_abij -= np.einsum("kbic, ackj -> abij", t_V_iajb, t_T_abij)
+        t_Ex_abij += np.einsum("acik, kbcj -> abij", t_tilde_T_abij, t_V_iabj)
+
         if not self.is_dcd:
-            t_Xai_aibj = ctf.einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
-            t_Ex_abij -= ctf.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
-            t_Ex_abij += ctf.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
+            t_Xai_aibj = np.einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
+            t_Ex_abij -= np.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
+            t_Ex_abij += np.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
         #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
@@ -241,7 +245,8 @@ class CCD:
         ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
         #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
-        t_Ex_abij.i("abij") << t_Ex_abij.i("baji")
+        #t_Ex_abij.i("abij") << t_Ex_abij.i("baji")
+        t_Ex_abij += t_Ex_abij.transpose(1, 0, 3, 2)
         # print_logging_info(test_Ex_abij - t_Ex_abij)
         #t_R_abij += t_Ex_abij + t_Ex_baji
         t_R_abij += t_Ex_abij
@@ -252,6 +257,6 @@ class CCD:
         """
         calculate the CCD energy, using the converged amplitudes
         """
-        t_dir_ccd_e = 2. * ctf.einsum("abij, ijab ->", t_T_abij, t_V_ijab)
-        t_ex_ccd_e = -1. * ctf.einsum("abij, ijba ->", t_T_abij, t_V_ijab)
+        t_dir_ccd_e = 2. * np.einsum("abij, ijab ->", t_T_abij, t_V_ijab)
+        t_ex_ccd_e = -1. * np.einsum("abij, ijba ->", t_T_abij, t_V_ijab)
         return t_dir_ccd_e, t_ex_ccd_e

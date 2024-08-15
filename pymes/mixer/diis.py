@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import numpy as np
-import ctf
 
 import string
 from pymes.log import print_logging_info
@@ -36,7 +35,6 @@ class DIIS:
         """
         algo_name = "diis.mix"
 
-        world = ctf.comm()
 
         # if the list of error and amplitude has fewer items than
         # the dim_space, it means we need all these new tensors to 
@@ -74,7 +72,7 @@ class DIIS:
                 indices = string.ascii_lowercase[:len(
                     self.error_list[-1][nt].shape)]
                 L_tmp[i, -2] += np.real(
-                    ctf.einsum(
+                    np.einsum(
                         indices + "," + indices + "->",
                         self.error_list[i][nt],
                         self.error_list[-1][nt]))
@@ -96,9 +94,8 @@ class DIIS:
         else:
             c = np.linalg.inv(self.L).dot(unit_vec)
 
-        opt_amp = [ctf.tensor(self.amplitude_list[0][i].shape,
-                              dtype=self.amplitude_list[0][i].dtype,
-                              sp=self.amplitude_list[0][i].sp)
+        opt_amp = [np.zeros(self.amplitude_list[0][i].shape,
+                              dtype=self.amplitude_list[0][i].dtype)
                    for i in range(len(self.amplitude_list[0]))]
 
         for a in range(0, len(self.error_list)):

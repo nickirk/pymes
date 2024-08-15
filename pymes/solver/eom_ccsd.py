@@ -1,6 +1,5 @@
 import time
 import numpy as np
-import ctf
 
 from pymes.mixer import diis
 from pymes.log import print_logging_info, print_title
@@ -37,7 +36,7 @@ class EOM_CCSD:
         self.max_dim = n_excit * 4
         self.e_epsilon = 1.e-8
 
-        self.max_iter = 200
+        self.max_iter = 500
 
     def write_logging_info(self):
         return
@@ -49,9 +48,9 @@ class EOM_CCSD:
 
         Params:
         -----------
-            t_fock_pq: ctf tensor, (singles dressed) fock matrix
-            dict_t_V: dict of ctf tensors, (singles dressed) two-body integrals
-            t_T_abij: ctf tensor, the doubles amplitudes from a ground state CCSD calculation
+            t_fock_pq: np tensor, (singles dressed) fock matrix
+            dict_t_V: dict of np tensors, (singles dressed) two-body integrals
+            t_T_abij: np tensor, the doubles amplitudes from a ground state CCSD calculation
                 For EOM-CCSD, t_T_abij should be singles dressed. ??
                 For EOM-MP2, t_T_abij is the original doubles amplitude
         Returns:
@@ -65,12 +64,11 @@ class EOM_CCSD:
         t_epsilon_i = t_fock_dressed_pq.diagonal()[:no]
         t_epsilon_a = t_fock_dressed_pq.diagonal()[no:]
         nv = t_epsilon_a.shape[0]
-        t_D_ai = ctf.tensor([nv, no])
-        t_D_abij = ctf.tensor(t_T_abij.shape)
-        t_D_ai.i("ai") << t_epsilon_i.i("i") - t_epsilon_a.i("a")
-        t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-                              - t_epsilon_a.i("a") - t_epsilon_a.i("b")
-        D_ai = -t_D_ai.to_nparray().ravel()
+        t_D_ai = np.zeros([nv, no])
+        t_D_abij = np.zeros(t_T_abij.shape)
+        t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
+        t_D_ai =  t_epsilon_i[None, :] - t_epsilon_a[:, None]
+        D_ai = -t_D_ai.ravel()
         lowest_ex_ind_init = np.argsort(D_ai)[:self.n_excit]
 
         print_logging_info("Initialising u tensors...", level=1)
@@ -78,8 +76,8 @@ class EOM_CCSD:
             A = np.zeros(t_D_ai.shape).ravel()
             A[lowest_ex_ind_init[i]] = 1.
             A = A.reshape(-1, no)
-            self.u_singles.append(ctf.astensor(A))
-            self.u_doubles.append(ctf.tensor(t_D_abij.shape))
+            self.u_singles.append(A)
+            self.u_doubles.append(np.zeros(t_D_abij.shape))
 
         # start iterative solver, arnoldi or davidson
         # need QR decomposition of the matrix made up of the states to ensure the orthogonality among them~~
@@ -89,8 +87,8 @@ class EOM_CCSD:
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
             self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
-            w_singles = [ctf.tensor(t_D_ai.shape, dtype=t_D_ai.dtype, sp=t_D_ai.sp) for _ in range(subspace_dim)]
-            w_doubles = [ctf.tensor(t_D_abij.shape, dtype=t_D_abij.dtype, sp=t_D_abij.sp) for _ in range(subspace_dim)]
+            w_singles = [np.zeros(t_D_ai.shape, dtype=t_D_ai.dtype) for _ in range(subspace_dim)]
+            w_doubles = [np.zeros(t_D_abij.shape, dtype=t_D_abij.dtype) for _ in range(subspace_dim)]
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
                 w_singles[l] = self.update_singles(t_fock_dressed_pq,
@@ -101,12 +99,12 @@ class EOM_CCSD:
                                                    self.u_doubles[l], t_T_abij)
                 # build Hamiltonian inside subspace
                 for j in range(l):
-                    B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
-                              + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
-                    B[l, j] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
-                              + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
-                B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
-                          + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
+                    B[j, l] = np.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                              + np.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = np.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = np.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
             # diagnolise matrix B, find the lowest energies
             e_old = self.e_excit
             e, v = np.linalg.eig(B)
@@ -121,8 +119,8 @@ class EOM_CCSD:
             u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
-                    y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
-                    y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
+                    y_singles = np.zeros(w_singles[-1].shape, dtype=w_singles[-1].dtype)
+                    y_doubles = np.zeros(w_doubles[-1].shape, dtype=w_doubles[-1].dtype)
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
@@ -133,8 +131,8 @@ class EOM_CCSD:
                 self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
-                    y_singles = ctf.tensor(w_singles[-1].shape, dtype=w_singles[-1].dtype, sp=w_singles[-1].sp)
-                    y_doubles = ctf.tensor(w_doubles[-1].shape, dtype=w_doubles[-1].dtype, sp=w_doubles[-1].sp)
+                    y_singles = np.zeros(w_singles[-1].shape, dtype=w_singles[-1].dtype)
+                    y_doubles = np.zeros(w_doubles[-1].shape, dtype=w_doubles[-1].dtype)
                     for l in range(subspace_dim):
                         y_singles += w_singles[l] * v[l, n]
                         y_doubles += w_doubles[l] * v[l, n]
@@ -173,20 +171,27 @@ class EOM_CCSD:
         """
         no = self.no
         nv = t_fock_pq.shape[0] - no
-        diag_singles = ctf.tensor([nv, no], dtype=t_fock_pq.dtype, sp=t_fock_pq.sp)
+        diag_singles = np.zeros([nv, no], dtype=t_fock_pq.dtype)
 
         # integral and t_u_ai products
-        diag_singles.i("ai") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
-        diag_singles.i("ai") << 2. * dict_t_V["iabj"].i("iaai") - 1. * dict_t_V["iajb"].i("iaia")
+        #diag_singles.i("ai") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
+        diag_singles += -1. * t_fock_pq[:no, :no].diagonal()[None, :] + 1. * t_fock_pq[no:, no:].diagonal()[:, None]
+        #diag_singles.i("ai") << 2. * dict_t_V["iabj"].i("iaai") - 1. * dict_t_V["iajb"].i("iaia")
+        diag_singles += 2. * np.einsum("iaai->ai", dict_t_V["iabj"])
+        diag_singles -= 1. * np.einsum("iaia->ai", dict_t_V["iajb"])
         # integral, T and t_u_ai products
-        diag_singles += 4. * ctf.einsum("jiba, baji->ai", dict_t_V["ijab"], t_T_abij)
-        diag_singles.i("ai") << -2. * ctf.einsum("jkba, bajk->a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_singles.i("ai") << -2. * ctf.einsum("jibc, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_singles += -2. * ctf.einsum("jiba, abji->ai", dict_t_V["ijab"], t_T_abij)
-        diag_singles += -2. * ctf.einsum("jiab, baji->ai", dict_t_V["ijab"], t_T_abij)
-        diag_singles.i("ai") << +1. * ctf.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_singles.i("ai") << +1. * ctf.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_singles += +1. * ctf.einsum("jiab, abji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles += 4. * np.einsum("jiba, baji->ai", dict_t_V["ijab"], t_T_abij)
+        #diag_singles.i("ai") << -2. * np.einsum("jkba, bajk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles += -2. * np.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
+        #diag_singles.i("ai") << -2. * np.einsum("jibc, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += -2. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
+        diag_singles += -2. * np.einsum("jiba, abji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles += -2. * np.einsum("jiab, baji->ai", dict_t_V["ijab"], t_T_abij)
+        #diag_singles.i("ai") << +1. * np.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles += +1. * np.einsum("jkab, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
+        #diag_singles.i("ai") << +1. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += +1. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
+        diag_singles += +1. * np.einsum("jiab, abji->ai", dict_t_V["ijab"], t_T_abij)
 
         return diag_singles
     
@@ -196,39 +201,65 @@ class EOM_CCSD:
         """
         no = self.no
         nv = t_fock_pq.shape[0] - no
-        diag_doubles = ctf.tensor([nv, nv, no, no], dtype=t_fock_pq.dtype, sp=t_fock_pq.sp)
+        diag_doubles = np.zeros([nv, nv, no, no], dtype=t_fock_pq.dtype)
 
         # add those involving P(ijab,jiba) and from t_u_abij, in total 22 terms
-        diag_doubles.i("abij") << +4. * ctf.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << -2. * ctf.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_doubles.i("abij") << -2. * ctf.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_doubles.i("abij") << -2. * ctf.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << +2. * dict_t_V["iabj"].i("iaai")
-        diag_doubles.i("abij") << -2. * ctf.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << -2. * ctf.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << -2. * ctf.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij).i("abj")
-        diag_doubles.i("abij") << -2. * ctf.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij).i("ij")
-        diag_doubles.i("abij") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
-        diag_doubles.i("abij") << -1. * ctf.einsum("iaia -> ai", dict_t_V["iajb"]).i("ai")
-        diag_doubles.i("abij") << -1. * ctf.einsum("ibib -> bi", dict_t_V["iajb"]).i("bi")
-        diag_doubles.i("abij") << +1. * ctf.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << -1. * dict_t_V["iabj"].i("iaai")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij).i("aij")
-        diag_doubles.i("abij") << +1. * ctf.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij).i("aj")
-        diag_doubles.i("abij") << +1. * ctf.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        #diag_doubles.i("abij") << +4. * np.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += +4. * np.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles += -2. * np.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles += -2. * np.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * np.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << +2. * dict_t_V["iabj"].i("iaai")
+        diag_doubles += +2. * np.einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * np.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * np.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * np.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij).i("abj")
+        diag_doubles += -2. * np.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij)[:, :, None, :]
+        #diag_doubles.i("abij") << -2. * np.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles += -2. * np.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
+        #diag_doubles.i("abij") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
+        diag_doubles += -1. * t_fock_pq[:no, :no].diagonal()[None, None, :, None] + 1. * t_fock_pq[no:, no:].diagonal()[:, None, None, None]
+        #diag_doubles.i("abij") << -1. * np.einsum("iaia -> ai", dict_t_V["iajb"]).i("ai")
+        diag_doubles += -1. * np.einsum("iaia -> ai", dict_t_V["iajb"])[:, None, :, None]
+        #diag_doubles.i("abij") << -1. * np.einsum("ibib -> bi", dict_t_V["iajb"]).i("bi")
+        diag_doubles += -1. * np.einsum("ibib -> bi", dict_t_V["iajb"])[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * np.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles += +1. * np.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
+        #diag_doubles.i("abij") << +1. * np.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles += +1. * np.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
+        #diag_doubles.i("abij") << +1. * np.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += +1. * np.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -1. * dict_t_V["iabj"].i("iaai")
+        diag_doubles += -1. * np.einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * np.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles    += +1. * np.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * np.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        diag_doubles += +1. * np.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij)
+        #diag_doubles.i("abij") << +1. * np.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij).i("aij")
+        diag_doubles += +1. * np.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij)[:, None, :, :]
+        #diag_doubles.i("abij") << +1. * np.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij).i("aj")
+        diag_doubles += +1. * np.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij)[:, None, None, :]
+        #diag_doubles.i("abij") << +1. * np.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        diag_doubles += +1. * np.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij)
 
         # add exchange contributions
-        diag_doubles.i("abij") << diag_doubles.i("baji")
+        #diag_doubles.i("abij") << diag_doubles.i("baji")
+        diag_doubles += diag_doubles.transpose(1, 0, 3, 2)
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        diag_doubles.i("abij") << ctf.einsum("ijij-> ij", dict_t_V["klij"]).i("ij")
-        diag_doubles.i("abij") << ctf.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij).i("ab")
-        diag_doubles.i("abij") << ctf.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij).i("ij")
-        diag_doubles.i("abij") << dict_t_V["abcd"].i("abab")
+        #diag_doubles.i("abij") << np.einsum("ijij-> ij", dict_t_V["klij"]).i("ij")
+        diag_doubles += np.einsum("ijij -> ij", dict_t_V["klij"])[None, None, :, :]
+        #diag_doubles.i("abij") << np.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij).i("ab")
+        diag_doubles += np.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij)[:, :, None, None]
+        #diag_doubles.i("abij") << np.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles += np.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
+        #diag_doubles.i("abij") << dict_t_V["abcd"].i("abab")
+        diag_doubles += np.einsum("abab -> ab", dict_t_V["abcd"])[:, :, None, None]
 
         return diag_doubles
 
@@ -239,40 +270,40 @@ class EOM_CCSD:
 
         Parameters:
         -----------
-        t_fock_pq: ctf tensor, fock matrix
-        dict_t_V: dictionary of V blocks, which are ctf tensors
-        t_u_ai: ctf tensor, the singles coefficients for the EOM-CCSD ansatz, to be updated.
-        t_u_abij: ctf tensor, the doubles coefficients for EOM-CCSD ansatz (which shall not be changed in this step)
-        t_T_abij: ctf tensor, the doubles amplitudes from ground state CCSD calculation
+        t_fock_pq: np tensor, fock matrix
+        dict_t_V: dictionary of V blocks, which are np tensors
+        t_u_ai: np tensor, the singles coefficients for the EOM-CCSD ansatz, to be updated.
+        t_u_abij: np tensor, the doubles coefficients for EOM-CCSD ansatz (which shall not be changed in this step)
+        t_T_abij: np tensor, the doubles amplitudes from ground state CCSD calculation
         Returns:
         --------
-        t_delta_singles: ctf tensor, the change of the singles block of u for the nth state
+        t_delta_singles: np tensor, the change of the singles block of u for the nth state
         """
 
         no = self.no
-        t_delta_singles = ctf.tensor(t_u_ai.shape, dtype=t_u_ai.dtype, sp=t_u_ai.sp)
+        t_delta_singles = np.zeros(t_u_ai.shape, dtype=t_u_ai.dtype)
 
-        t_delta_singles += 2. * ctf.einsum("jb, baji->ai", t_fock_pq[:no, no:], t_u_abij)
-        t_delta_singles += -1. * ctf.einsum("ji, aj -> ai", t_fock_pq[:no, :no], t_u_ai)
-        t_delta_singles += -1. * ctf.einsum("jb, abji->ai", t_fock_pq[:no, no:], t_u_abij)
-        t_delta_singles += 1. * ctf.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
+        t_delta_singles += 2. * np.einsum("jb, baji->ai", t_fock_pq[:no, no:], t_u_abij)
+        t_delta_singles += -1. * np.einsum("ji, aj -> ai", t_fock_pq[:no, :no], t_u_ai)
+        t_delta_singles += -1. * np.einsum("jb, abji->ai", t_fock_pq[:no, no:], t_u_abij)
+        t_delta_singles += 1. * np.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
         # integral and t_u_ai products
-        t_delta_singles += 2. * ctf.einsum("jabi, bj->ai", dict_t_V["iabj"], t_u_ai)
-        t_delta_singles += -1. * ctf.einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
+        t_delta_singles += 2. * np.einsum("jabi, bj->ai", dict_t_V["iabj"], t_u_ai)
+        t_delta_singles += -1. * np.einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
         # integral and t_u_abij products
-        t_delta_singles += -2. * ctf.einsum("jkib, abjk->ai", dict_t_V["ijka"], t_u_abij)
-        t_delta_singles += 2. * ctf.einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
-        t_delta_singles += ctf.einsum("jkib, bajk->ai", dict_t_V["ijka"], t_u_abij)
-        t_delta_singles += -1. * ctf.einsum("jacb, bcji->ai", dict_t_V["iabc"], t_u_abij)
+        t_delta_singles += -2. * np.einsum("jkib, abjk->ai", dict_t_V["ijka"], t_u_abij)
+        t_delta_singles += 2. * np.einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
+        t_delta_singles += np.einsum("jkib, bajk->ai", dict_t_V["ijka"], t_u_abij)
+        t_delta_singles += -1. * np.einsum("jacb, bcji->ai", dict_t_V["iabc"], t_u_abij)
         # integral, T and t_u_ai products
-        t_delta_singles += 4. * ctf.einsum("jkbc, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * ctf.einsum("jkbc, bajk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * ctf.einsum("jkbc, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * ctf.einsum("jkbc, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * ctf.einsum("jkcb, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * ctf.einsum("jkbc, abjk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * ctf.einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * ctf.einsum("jkcb, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += 4. * np.einsum("jkbc, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * np.einsum("jkbc, bajk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * np.einsum("jkbc, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * np.einsum("jkbc, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * np.einsum("jkcb, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * np.einsum("jkbc, abjk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * np.einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * np.einsum("jkcb, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
 
         return t_delta_singles
 
@@ -283,92 +314,93 @@ class EOM_CCSD:
 
         Parameters:
         -----------
-        t_fock_pq: ctf tensor, fock matrix
-        dict_t_V: dictionary of V blocks, which are ctf tensors
-        t_u_ai: ctf tensor, the singles coefficients.
-        t_u_abij: ctf tensor, the doubles coefficients to be updated.
-        t_T_abij: ctf tensor, the doubles amplitudes from a ground state calculation.
+        t_fock_pq: np tensor, fock matrix
+        dict_t_V: dictionary of V blocks, which are np tensors
+        t_u_ai: np tensor, the singles coefficients.
+        t_u_abij: np tensor, the doubles coefficients to be updated.
+        t_T_abij: np tensor, the doubles amplitudes from a ground state calculation.
         Returns:
         --------
-        t_delta_doubles: ctf tensor, the change of the doubles block of u
+        t_delta_doubles: np tensor, the change of the doubles block of u
         """
         no = self.no
-        t_delta_doubles = ctf.tensor(t_u_abij.shape, dtype=t_u_abij.dtype, sp=t_u_abij.sp)
+        t_delta_doubles = np.zeros(t_u_abij.shape, dtype=t_u_abij.dtype)
 
         # add those involving P(ijab,jiba) and from t_u_ai, in total 18 terms
-        t_delta_doubles += - 2. * ctf.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 2. * ctf.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 2. * ctf.einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 2. * ctf.einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kbij, ak -> abij", dict_t_V["iajk"], t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("kldi, bdkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kacd, bckj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("kldi, abkj, dl -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kadc, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("kadc, bcki, dj -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("lacd, cdji, bl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * ctf.einsum("lacd, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * ctf.einsum("abic, cj -> abij", dict_t_V["abic"], t_u_ai)
+        t_delta_doubles += - 2. * np.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 2. * np.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 2. * np.einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 2. * np.einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("kbij, ak -> abij", dict_t_V["iajk"], t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("kldi, bdkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("kacd, bckj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("kldi, abkj, dl -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("kadc, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("kadc, bcki, dj -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("lacd, cdji, bl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * np.einsum("lacd, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * np.einsum("abic, cj -> abij", dict_t_V["abic"], t_u_ai)
 
         # add those involving P(ijab,jiba) and from t_u_abij, in total 22 terms
-        t_delta_doubles += +4. * ctf.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("klcd, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("klcd, caki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +2. * ctf.einsum("kaci, cbkj -> abij", dict_t_V["iabj"], t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("kldc, abkj, dcil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * ctf.einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -1. * ctf.einsum("ki, abkj -> abij", t_fock_pq[:no, :no], t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("ac, cbij -> abij", t_fock_pq[no:, no:], t_u_abij)
-        t_delta_doubles += -1. * ctf.einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
-        t_delta_doubles += -1. * ctf.einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -1. * ctf.einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, abkj, dcli -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, caki, dbjl -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("kldc, ackj, dbil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * ctf.einsum("lkcd, cbij, dalk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +4. * np.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("klcd, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("klcd, caki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +2. * np.einsum("kaci, cbkj -> abij", dict_t_V["iabj"], t_u_abij)
+        t_delta_doubles += -2. * np.einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("kldc, abkj, dcil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * np.einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -1. * np.einsum("ki, abkj -> abij", t_fock_pq[:no, :no], t_u_abij)
+        t_delta_doubles += +1. * np.einsum("ac, cbij -> abij", t_fock_pq[no:, no:], t_u_abij)
+        t_delta_doubles += -1. * np.einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
+        t_delta_doubles += -1. * np.einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
+        t_delta_doubles += +1. * np.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -1. * np.einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
+        t_delta_doubles += +1. * np.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("kldc, abkj, dcli -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("kldc, caki, dbjl -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("kldc, ackj, dbil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * np.einsum("lkcd, cbij, dalk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
 
         # add exchange contributions
-        t_delta_doubles.i("abij") << t_delta_doubles.i("baji")
+        #t_delta_doubles.i("abij") << t_delta_doubles.i("baji")
+        t_delta_doubles += t_delta_doubles.transpose(1, 0, 3, 2)
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        t_delta_doubles += ctf.einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij)
-        t_delta_doubles += ctf.einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += ctf.einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += ctf.einsum("abcd, cdij -> abij", dict_t_V["abcd"], t_u_abij)
+        t_delta_doubles += np.einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij)
+        t_delta_doubles += np.einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += np.einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += np.einsum("abcd, cdij -> abij", dict_t_V["abcd"], t_u_abij)
 
         return t_delta_doubles
 
     def update_singles_test(self, fake_ham, t_u_ai, t_u_abij):
         no = self.no
         nv = t_u_ai.shape[0]
-        u_ai = t_u_ai.to_nparray().ravel()
-        u_abij = t_u_abij.to_nparray().ravel()
+        u_ai = t_u_ai.ravel()
+        u_abij = t_u_abij.ravel()
         u_vec = np.concatenate((u_ai, u_abij), axis=None)
         delta_singles = np.dot(fake_ham, u_vec)[:no*nv]
         delta_singles = delta_singles.reshape(nv, no)
-        return ctf.astensor(delta_singles)
+        return delta_singles
 
     def update_doubles_test(self, fake_ham, t_u_ai, t_u_abij):
         no = self.no
         nv = t_u_ai.shape[0]
-        u_ai = t_u_ai.to_nparray().ravel()
-        u_abij = t_u_abij.to_nparray().ravel()
+        u_ai = t_u_ai.ravel()
+        u_abij = t_u_abij.ravel()
         u_vec = np.concatenate((u_ai, u_abij), axis=None)
         delta_doubles = np.dot(fake_ham, u_vec)[no*nv:]
         delta_doubles = delta_doubles.reshape(nv, nv, no, no)
-        return ctf.astensor(delta_doubles)
+        return delta_doubles
 
     def construct_fake_ham(self, nv, no):
         dim = nv*no + nv**2*no**2
@@ -395,16 +427,16 @@ class EOM_CCSD:
             A = np.zeros(nv*no).ravel()
             A[i] = 1.
             A = A.reshape(-1, no)
-            self.u_singles.append(ctf.astensor(A))
-            self.u_doubles.append(ctf.tensor([nv, nv, no, no]))
+            self.u_singles.append(A)
+            self.u_doubles.append(np.zeros([nv, nv, no, no]))
 
         diff_e_norm = np.inf
         for i in range(self.max_iter):
             time_iter_init = time.time()
             subspace_dim = len(self.u_singles)
             self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
-            w_singles = [ctf.tensor([nv, no])] * subspace_dim
-            w_doubles = [ctf.tensor([nv, nv, no, no])] * subspace_dim
+            w_singles = [np.zeros([nv, no])] * subspace_dim
+            w_doubles = [np.zeros([nv, nv, no, no])] * subspace_dim
             B = np.zeros([subspace_dim, subspace_dim])
             for l in range(subspace_dim):
                 w_singles[l] = self.update_singles_test(ham,
@@ -415,12 +447,12 @@ class EOM_CCSD:
                                                     self.u_doubles[l])
                 # build Hamiltonian inside subspace
                 for j in range(l):
-                    B[j, l] = ctf.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
-                              + ctf.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
-                    B[l, j] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
-                              + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
-                B[l, l] = ctf.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
-                          + ctf.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
+                    B[j, l] = np.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                              + np.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = np.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = np.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
             # diagnolise matrix B, find the lowest energies
             e, v = np.linalg.eig(B)
             lowest_ex_ind = e.argsort()[:self.n_excit]
@@ -434,8 +466,8 @@ class EOM_CCSD:
             u_doubles_tmp = []
             if subspace_dim >= self.max_dim:
                 for n in range(self.n_excit):
-                    y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
-                    y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
+                    y_singles = np.zeros(w_singles[0].shape, dtype=w_singles[0].dtype)
+                    y_doubles = np.zeros(w_doubles[0].shape, dtype=w_doubles[0].dtype)
                     for l in range(subspace_dim):
                         y_singles += self.u_singles[l] * v[l, n]
                         y_doubles += self.u_doubles[l] * v[l, n]
@@ -446,8 +478,8 @@ class EOM_CCSD:
                 self.e_excit = e_old
             else:
                 for n in range(self.n_excit):
-                    y_singles = ctf.tensor(w_singles[0].shape, dtype=w_singles[0].dtype, sp=w_singles[0].sp)
-                    y_doubles = ctf.tensor(w_doubles[0].shape, dtype=w_doubles[0].dtype, sp=w_doubles[0].sp)
+                    y_singles = np.zeros(w_singles[0].shape, dtype=w_singles[0].dtype)
+                    y_doubles = np.zeros(w_doubles[0].shape, dtype=w_doubles[0].dtype)
                     for l in range(subspace_dim):
                         y_singles += w_singles[l] * v[l, n]
                         y_doubles += w_doubles[l] * v[l, n]
@@ -477,28 +509,27 @@ class EOM_CCSD:
 
     def QR(self, u_singles, u_doubles):
         """
-        This QR algorithm is designed to orthogonalize the states, in consideration of the ctf date structure
+        This QR algorithm is designed to orthogonalize the states, in consideration of the np date structure
         and aiming to minimize
         the memory footprint. Each state consists of a singles and doubles block.
         Parameters:
         -----------
-        u_singles: list of ctf tensors, list of singles coefficients
-        u_doubles: list of ctf tensors, list of doubles coefficients
+        u_singles: list of np tensors, list of singles coefficients
+        u_doubles: list of np tensors, list of doubles coefficients
 
         Returns:
         --------
-        u_singles_: list of ctf tensors, which are now orthogonalised
-        u_doubles_: list of ctf tensors, which are now orthogonalised
+        u_singles_: list of np tensors, which are now orthogonalised
+        u_doubles_: list of np tensors, which are now orthogonalised
         """
         no = self.no
         nv = self.u_singles[0].shape[0]
         subspace_len = len(u_singles)
-        subspace_matrix = ctf.tensor([no*nv+nv**2*no**2, subspace_len])
+        subspace_matrix = np.zeros([no*nv+nv**2*no**2, subspace_len])
         for i in range(subspace_len):
-            subspace_matrix[:no*nv, i] = u_singles[i].to_nparray().ravel()
-            subspace_matrix[no*nv:, i] = u_doubles[i].to_nparray().ravel()
-        Q, R = np.linalg.qr(subspace_matrix.to_nparray())
-        Q = ctf.astensor(Q)
+            subspace_matrix[:no*nv, i] = u_singles[i].ravel()
+            subspace_matrix[no*nv:, i] = u_doubles[i].ravel()
+        Q, R = np.linalg.qr(subspace_matrix)
 
         for i in range(subspace_len):
             u_singles[i] = Q[:no*nv, i]
