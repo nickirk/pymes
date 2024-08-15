@@ -320,22 +320,22 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
             if is_rt and dt is not None:
                 delta_singles -= 1j*dt*self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             else:
                 delta_singles -= self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, trial_singles,
+                                                   trial_doubles, t_T_abij)
         
             delta_doubles = ze * trial_doubles
             if is_rt and dt is not None:
                 delta_doubles -= 1j*dt*self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             else:
                 delta_doubles -= self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, trial_singles,
+                                                   trial_doubles, t_T_abij)
             # convert to vector
             return np.concatenate((delta_singles.flatten(), delta_doubles.flatten()))
         A = LinearOperator((self.u_singles[0].size + self.u_doubles[0].size, self.u_singles[0].size + self.u_doubles[0].size), matvec=matvec)
