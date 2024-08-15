@@ -1,11 +1,11 @@
 import time
 import numpy as np
-
+from functools import partial
 from pymes.mixer import diis
 from pymes.log import print_logging_info, print_title
 from pymes.integral.partition import part_2_body_int
 
-
+einsum = partial(np.einsum, optimize=True)
 '''
 EOM-CCSD implementation
 EOM-CCSD is used to calculate excitation energies of a system.
@@ -99,12 +99,12 @@ class EOM_CCSD:
                                                    self.u_doubles[l], t_T_abij)
                 # build Hamiltonian inside subspace
                 for j in range(l):
-                    B[j, l] = np.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
-                              + np.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
-                    B[l, j] = np.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
-                              + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
-                B[l, l] = np.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
-                          + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
+                    B[j, l] = einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                              + einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
             # diagnolise matrix B, find the lowest energies
             e_old = self.e_excit
             e, v = np.linalg.eig(B)
@@ -177,21 +177,21 @@ class EOM_CCSD:
         #diag_singles.i("ai") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
         diag_singles += -1. * t_fock_pq[:no, :no].diagonal()[None, :] + 1. * t_fock_pq[no:, no:].diagonal()[:, None]
         #diag_singles.i("ai") << 2. * dict_t_V["iabj"].i("iaai") - 1. * dict_t_V["iajb"].i("iaia")
-        diag_singles += 2. * np.einsum("iaai->ai", dict_t_V["iabj"])
-        diag_singles -= 1. * np.einsum("iaia->ai", dict_t_V["iajb"])
+        diag_singles += 2. * einsum("iaai->ai", dict_t_V["iabj"])
+        diag_singles -= 1. * einsum("iaia->ai", dict_t_V["iajb"])
         # integral, T and t_u_ai products
-        diag_singles += 4. * np.einsum("jiba, baji->ai", dict_t_V["ijab"], t_T_abij)
-        #diag_singles.i("ai") << -2. * np.einsum("jkba, bajk->a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_singles += -2. * np.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
-        #diag_singles.i("ai") << -2. * np.einsum("jibc, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_singles += -2. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
-        diag_singles += -2. * np.einsum("jiba, abji->ai", dict_t_V["ijab"], t_T_abij)
-        diag_singles += -2. * np.einsum("jiab, baji->ai", dict_t_V["ijab"], t_T_abij)
-        #diag_singles.i("ai") << +1. * np.einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_singles += +1. * np.einsum("jkab, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
-        #diag_singles.i("ai") << +1. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_singles += +1. * np.einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
-        diag_singles += +1. * np.einsum("jiab, abji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles += 4. * einsum("jiba, baji->ai", dict_t_V["ijab"], t_T_abij)
+        #diag_singles.i("ai") << -2. * einsum("jkba, bajk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles += -2. * einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
+        #diag_singles.i("ai") << -2. * einsum("jibc, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += -2. * einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
+        diag_singles += -2. * einsum("jiba, abji->ai", dict_t_V["ijab"], t_T_abij)
+        diag_singles += -2. * einsum("jiab, baji->ai", dict_t_V["ijab"], t_T_abij)
+        #diag_singles.i("ai") << +1. * einsum("jkba, abjk->a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_singles += +1. * einsum("jkab, abjk->a", dict_t_V["ijab"], t_T_abij)[:, None]
+        #diag_singles.i("ai") << +1. * einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_singles += +1. * einsum("jicb, bcji->i", dict_t_V["ijab"], t_T_abij)[None, :]
+        diag_singles += +1. * einsum("jiab, abji->ai", dict_t_V["ijab"], t_T_abij)
 
         return diag_singles
     
@@ -204,62 +204,62 @@ class EOM_CCSD:
         diag_doubles = np.zeros([nv, nv, no, no], dtype=t_fock_pq.dtype)
 
         # add those involving P(ijab,jiba) and from t_u_abij, in total 22 terms
-        #diag_doubles.i("abij") << +4. * np.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles += +4. * np.einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_doubles += -2. * np.einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_doubles += -2. * np.einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles += -2. * np.einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << +4. * einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += +4. * einsum("kica, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles += -2. * einsum("klca, cakl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
+        #diag_doubles.i("abij") << -2. * einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles += -2. * einsum("kicd, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
+        #diag_doubles.i("abij") << -2. * einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * einsum("kica, caki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
         #diag_doubles.i("abij") << +2. * dict_t_V["iabj"].i("iaai")
-        diag_doubles += +2. * np.einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles += -2. * np.einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles += -2. * np.einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
-        #diag_doubles.i("abij") << -2. * np.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij).i("abj")
-        diag_doubles += -2. * np.einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij)[:, :, None, :]
-        #diag_doubles.i("abij") << -2. * np.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij).i("ij")
-        diag_doubles += -2. * np.einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
+        diag_doubles += +2. * einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * einsum("kica, acki  -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += -2. * einsum("kiac, caki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -2. * einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij).i("abj")
+        diag_doubles += -2. * einsum("kjab, abkj -> abj", dict_t_V["ijab"], t_T_abij)[:, :, None, :]
+        #diag_doubles.i("abij") << -2. * einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles += -2. * einsum("ijcb, cbij  -> ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
         #diag_doubles.i("abij") << -1. * t_fock_pq[:no, :no].i("ii") + 1. * t_fock_pq[no:, no:].i("aa")
         diag_doubles += -1. * t_fock_pq[:no, :no].diagonal()[None, None, :, None] + 1. * t_fock_pq[no:, no:].diagonal()[:, None, None, None]
-        #diag_doubles.i("abij") << -1. * np.einsum("iaia -> ai", dict_t_V["iajb"]).i("ai")
-        diag_doubles += -1. * np.einsum("iaia -> ai", dict_t_V["iajb"])[:, None, :, None]
-        #diag_doubles.i("abij") << -1. * np.einsum("ibib -> bi", dict_t_V["iajb"]).i("bi")
-        diag_doubles += -1. * np.einsum("ibib -> bi", dict_t_V["iajb"])[:, None, :, None]
-        #diag_doubles.i("abij") << +1. * np.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
-        diag_doubles += +1. * np.einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
-        #diag_doubles.i("abij") << +1. * np.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
-        diag_doubles += +1. * np.einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
-        #diag_doubles.i("abij") << +1. * np.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles += +1. * np.einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << -1. * einsum("iaia -> ai", dict_t_V["iajb"]).i("ai")
+        diag_doubles += -1. * einsum("iaia -> ai", dict_t_V["iajb"])[:, None, :, None]
+        #diag_doubles.i("abij") << -1. * einsum("ibib -> bi", dict_t_V["iajb"]).i("bi")
+        diag_doubles += -1. * einsum("ibib -> bi", dict_t_V["iajb"])[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij).i("a")
+        diag_doubles += +1. * einsum("klca, ackl  -> a", dict_t_V["ijab"], t_T_abij)[:, None, None, None]
+        #diag_doubles.i("abij") << +1. * einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij).i("i")
+        diag_doubles += +1. * einsum("kidc, cdki -> i", dict_t_V["ijab"], t_T_abij)[None, None, :, None]
+        #diag_doubles.i("abij") << +1. * einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles += +1. * einsum("kicb, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
         #diag_doubles.i("abij") << -1. * dict_t_V["iabj"].i("iaai")
-        diag_doubles += -1. * np.einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
-        #diag_doubles.i("abij") << +1. * np.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
-        diag_doubles    += +1. * np.einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
-        #diag_doubles.i("abij") << +1. * np.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
-        diag_doubles += +1. * np.einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij)
-        #diag_doubles.i("abij") << +1. * np.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij).i("aij")
-        diag_doubles += +1. * np.einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij)[:, None, :, :]
-        #diag_doubles.i("abij") << +1. * np.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij).i("aj")
-        diag_doubles += +1. * np.einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij)[:, None, None, :]
-        #diag_doubles.i("abij") << +1. * np.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
-        diag_doubles += +1. * np.einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij)
+        diag_doubles += -1. * einsum("iaai -> ai", dict_t_V["iabj"])[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij).i("ai")
+        diag_doubles    += +1. * einsum("kiac, acki -> ai", dict_t_V["ijab"], t_T_abij)[:, None, :, None]
+        #diag_doubles.i("abij") << +1. * einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        diag_doubles += +1. * einsum("kiab, abkj -> abij", dict_t_V["ijab"], t_T_abij)
+        #diag_doubles.i("abij") << +1. * einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij).i("aij")
+        diag_doubles += +1. * einsum("kjac, caki -> aij", dict_t_V["ijab"], t_T_abij)[:, None, :, :]
+        #diag_doubles.i("abij") << +1. * einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij).i("aj")
+        diag_doubles += +1. * einsum("kjac, ackj -> aj", dict_t_V["ijab"], t_T_abij)[:, None, None, :]
+        #diag_doubles.i("abij") << +1. * einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij).i("abij")
+        diag_doubles += +1. * einsum("ijca, cbij -> abij", dict_t_V["ijab"], t_T_abij)
 
         # add exchange contributions
         #diag_doubles.i("abij") << diag_doubles.i("baji")
         diag_doubles += diag_doubles.transpose(1, 0, 3, 2)
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        #diag_doubles.i("abij") << np.einsum("ijij-> ij", dict_t_V["klij"]).i("ij")
-        diag_doubles += np.einsum("ijij -> ij", dict_t_V["klij"])[None, None, :, :]
-        #diag_doubles.i("abij") << np.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij).i("ab")
-        diag_doubles += np.einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij)[:, :, None, None]
-        #diag_doubles.i("abij") << np.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij).i("ij")
-        diag_doubles += np.einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
+        #diag_doubles.i("abij") << einsum("ijij-> ij", dict_t_V["klij"]).i("ij")
+        diag_doubles += einsum("ijij -> ij", dict_t_V["klij"])[None, None, :, :]
+        #diag_doubles.i("abij") << einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij).i("ab")
+        diag_doubles += einsum("klab, abkl->ab", dict_t_V["ijab"], t_T_abij)[:, :, None, None]
+        #diag_doubles.i("abij") << einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij).i("ij")
+        diag_doubles += einsum("ijcd, cdij->ij", dict_t_V["ijab"], t_T_abij)[None, None, :, :]
         #diag_doubles.i("abij") << dict_t_V["abcd"].i("abab")
-        diag_doubles += np.einsum("abab -> ab", dict_t_V["abcd"])[:, :, None, None]
+        diag_doubles += einsum("abab -> ab", dict_t_V["abcd"])[:, :, None, None]
 
         return diag_doubles
 
@@ -283,27 +283,27 @@ class EOM_CCSD:
         no = self.no
         t_delta_singles = np.zeros(t_u_ai.shape, dtype=t_u_ai.dtype)
 
-        t_delta_singles += 2. * np.einsum("jb, baji->ai", t_fock_pq[:no, no:], t_u_abij)
-        t_delta_singles += -1. * np.einsum("ji, aj -> ai", t_fock_pq[:no, :no], t_u_ai)
-        t_delta_singles += -1. * np.einsum("jb, abji->ai", t_fock_pq[:no, no:], t_u_abij)
-        t_delta_singles += 1. * np.einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
+        t_delta_singles += 2. * einsum("jb, baji->ai", t_fock_pq[:no, no:], t_u_abij)
+        t_delta_singles += -1. * einsum("ji, aj -> ai", t_fock_pq[:no, :no], t_u_ai)
+        t_delta_singles += -1. * einsum("jb, abji->ai", t_fock_pq[:no, no:], t_u_abij)
+        t_delta_singles += 1. * einsum("ab, bi->ai", t_fock_pq[no:, no:], t_u_ai)
         # integral and t_u_ai products
-        t_delta_singles += 2. * np.einsum("jabi, bj->ai", dict_t_V["iabj"], t_u_ai)
-        t_delta_singles += -1. * np.einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
+        t_delta_singles += 2. * einsum("jabi, bj->ai", dict_t_V["iabj"], t_u_ai)
+        t_delta_singles += -1. * einsum("jaib, bj->ai", dict_t_V["iajb"], t_u_ai)
         # integral and t_u_abij products
-        t_delta_singles += -2. * np.einsum("jkib, abjk->ai", dict_t_V["ijka"], t_u_abij)
-        t_delta_singles += 2. * np.einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
-        t_delta_singles += np.einsum("jkib, bajk->ai", dict_t_V["ijka"], t_u_abij)
-        t_delta_singles += -1. * np.einsum("jacb, bcji->ai", dict_t_V["iabc"], t_u_abij)
+        t_delta_singles += -2. * einsum("jkib, abjk->ai", dict_t_V["ijka"], t_u_abij)
+        t_delta_singles += 2. * einsum("jabc, bcji->ai", dict_t_V["iabc"], t_u_abij)
+        t_delta_singles += einsum("jkib, bajk->ai", dict_t_V["ijka"], t_u_abij)
+        t_delta_singles += -1. * einsum("jacb, bcji->ai", dict_t_V["iabc"], t_u_abij)
         # integral, T and t_u_ai products
-        t_delta_singles += 4. * np.einsum("jkbc, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * np.einsum("jkbc, bajk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * np.einsum("jkbc, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * np.einsum("jkbc, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += -2. * np.einsum("jkcb, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * np.einsum("jkbc, abjk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * np.einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
-        t_delta_singles += +1. * np.einsum("jkcb, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += 4. * einsum("jkbc, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * einsum("jkbc, bajk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * einsum("jkbc, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * einsum("jkbc, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += -2. * einsum("jkcb, baji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * einsum("jkbc, abjk, ci->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * einsum("jkcb, bcji, ak->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
+        t_delta_singles += +1. * einsum("jkcb, abji, ck->ai", dict_t_V["ijab"], t_T_abij, t_u_ai)
 
         return t_delta_singles
 
@@ -327,58 +327,58 @@ class EOM_CCSD:
         t_delta_doubles = np.zeros(t_u_abij.shape, dtype=t_u_abij.dtype)
 
         # add those involving P(ijab,jiba) and from t_u_ai, in total 18 terms
-        t_delta_doubles += - 2. * np.einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 2. * np.einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 2. * np.einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 2. * np.einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("kbij, ak -> abij", dict_t_V["iajk"], t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("kldi, bdkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("kacd, bckj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("kldi, abkj, dl -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("kadc, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("kadc, bcki, dj -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("lacd, cdji, bl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += - 1. * np.einsum("lacd, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
-        t_delta_doubles += + 1. * np.einsum("abic, cj -> abij", dict_t_V["abic"], t_u_ai)
+        t_delta_doubles += - 2. * einsum("klid, abkj, dl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 2. * einsum("klci, cbkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 2. * einsum("kacd, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 2. * einsum("ladc, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("kd, abkj, di -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("lc, cbij, al -> abij", t_fock_pq[:no, no:], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * einsum("klid, abkl, dj -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * einsum("klic, cbkj, al -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * einsum("klid, adkj, bl -> abij", dict_t_V["ijka"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("kbij, ak -> abij", dict_t_V["iajk"], t_u_ai)
+        t_delta_doubles += + 1. * einsum("kldi, bdkj, al -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("kacd, bckj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * einsum("kldi, abkj, dl -> abij", dict_t_V["ijak"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("kadc, cbkj, di -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("kadc, bcki, dj -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("lacd, cdji, bl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += - 1. * einsum("lacd, cbij, dl -> abij", dict_t_V["iabc"], t_T_abij, t_u_ai)
+        t_delta_doubles += + 1. * einsum("abic, cj -> abij", dict_t_V["abic"], t_u_ai)
 
         # add those involving P(ijab,jiba) and from t_u_abij, in total 22 terms
-        t_delta_doubles += +4. * np.einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("klcd, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("klcd, caki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +2. * np.einsum("kaci, cbkj -> abij", dict_t_V["iabj"], t_u_abij)
-        t_delta_doubles += -2. * np.einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("kldc, abkj, dcil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -2. * np.einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -1. * np.einsum("ki, abkj -> abij", t_fock_pq[:no, :no], t_u_abij)
-        t_delta_doubles += +1. * np.einsum("ac, cbij -> abij", t_fock_pq[no:, no:], t_u_abij)
-        t_delta_doubles += -1. * np.einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
-        t_delta_doubles += -1. * np.einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
-        t_delta_doubles += +1. * np.einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += -1. * np.einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
-        t_delta_doubles += +1. * np.einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("kldc, abkj, dcli -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("kldc, caki, dbjl -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("kldc, ackj, dbil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += +1. * np.einsum("lkcd, cbij, dalk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +4. * einsum("klcd, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("klcd, cakl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("klcd, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("klcd, caki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +2. * einsum("kaci, cbkj -> abij", dict_t_V["iabj"], t_u_abij)
+        t_delta_doubles += -2. * einsum("klcd, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("kldc, caki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("kldc, abkj, dcil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -2. * einsum("lkcd, cbij, adlk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -1. * einsum("ki, abkj -> abij", t_fock_pq[:no, :no], t_u_abij)
+        t_delta_doubles += +1. * einsum("ac, cbij -> abij", t_fock_pq[no:, no:], t_u_abij)
+        t_delta_doubles += -1. * einsum("kaic, cbkj -> abij", dict_t_V["iajb"], t_u_abij)
+        t_delta_doubles += -1. * einsum("kbic, ackj -> abij", dict_t_V["iajb"], t_u_abij)
+        t_delta_doubles += +1. * einsum("klcd, ackl, dbij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("kldc, cdki, ablj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("klcd, acki, bdlj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += -1. * einsum("kaci, bckj -> abij", dict_t_V["iabj"], t_u_abij)
+        t_delta_doubles += +1. * einsum("kldc, acki, dblj -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("kldc, abkj, dcli -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("kldc, caki, dbjl -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("kldc, ackj, dbil -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += +1. * einsum("lkcd, cbij, dalk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
 
         # add exchange contributions
         #t_delta_doubles.i("abij") << t_delta_doubles.i("baji")
         t_delta_doubles += t_delta_doubles.transpose(1, 0, 3, 2)
         # after adding exchanging indices contribution from P(ijab, jiba),
         # now add all terms that don't involve P(ijab,jiba)
-        t_delta_doubles += np.einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij)
-        t_delta_doubles += np.einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += np.einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
-        t_delta_doubles += np.einsum("abcd, cdij -> abij", dict_t_V["abcd"], t_u_abij)
+        t_delta_doubles += einsum("klij, abkl -> abij", dict_t_V["klij"], t_u_abij)
+        t_delta_doubles += einsum("kldc, abkl, dcij -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += einsum("lkcd, cdij, ablk -> abij", dict_t_V["ijab"], t_T_abij, t_u_abij)
+        t_delta_doubles += einsum("abcd, cdij -> abij", dict_t_V["abcd"], t_u_abij)
 
         return t_delta_doubles
 
@@ -447,12 +447,12 @@ class EOM_CCSD:
                                                     self.u_doubles[l])
                 # build Hamiltonian inside subspace
                 for j in range(l):
-                    B[j, l] = np.einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
-                              + np.einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
-                    B[l, j] = np.einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
-                              + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
-                B[l, l] = np.einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
-                          + np.einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
+                    B[j, l] = einsum("ai, ai->", self.u_singles[j], w_singles[l]) \
+                              + einsum("abij, abij->", self.u_doubles[j], w_doubles[l])
+                    B[l, j] = einsum("ai, ai->", self.u_singles[l], w_singles[j]) \
+                              + einsum("abij, abij->", self.u_doubles[l], w_doubles[j])
+                B[l, l] = einsum("ai, ai->", self.u_singles[l], w_singles[l]) \
+                          + einsum("abij, abij->", self.u_doubles[l], w_doubles[l])
             # diagnolise matrix B, find the lowest energies
             e, v = np.linalg.eig(B)
             lowest_ex_ind = e.argsort()[:self.n_excit]
