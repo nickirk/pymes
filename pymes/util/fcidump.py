@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 import os.path
-import ctf
 import numpy as np
 import sys
 from pymes.log import print_logging_info
@@ -21,41 +20,39 @@ def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r', file="
 
     e_nuc: float, nuclear energy
     """
-    world = ctf.comm()
 
     nP = integrals.shape[0]
     inds, vals = integrals.read_all_nnz()
-    if world.rank() == 0:
-        f = open(file, "w")
-        # write header
-        f.write("&FCI\n")
-        f.write(" NORB=%i,\n" % nP)
-        f.write(" NELEC=%i,\n" % (no * 2))
-        f.write(" MS2=%i,\n" % ms2)
-        # prepare orbsym
-        OrbSym = [orbsym] * nP
-        f.write(" ORBSYM=" + str(OrbSym).strip('[]') + ",\n")
-        f.write(" ISYM=%i,\n" % isym)
-        f.write("/\n")
+    f = open(file, "w")
+    # write header
+    f.write("&FCI\n")
+    f.write(" NORB=%i,\n" % nP)
+    f.write(" NELEC=%i,\n" % (no * 2))
+    f.write(" MS2=%i,\n" % ms2)
+    # prepare orbsym
+    OrbSym = [orbsym] * nP
+    f.write(" ORBSYM=" + str(OrbSym).strip('[]') + ",\n")
+    f.write(" ISYM=%i,\n" % isym)
+    f.write("/\n")
 
-        for l in range(len(inds)):
-            p = int(inds[l] / nP ** 3)
-            q = int((inds[l] - p * nP ** 3) / nP ** 2)
-            r = int((inds[l] - p * nP ** 3 - q * nP ** 2) / nP)
-            s = int(inds[l] - p * nP ** 3 - q * nP ** 2 - r * nP)
+    for l in range(len(inds)):
+        p = int(inds[l] / nP ** 3)
+        q = int((inds[l] - p * nP ** 3) / nP ** 2)
+        r = int((inds[l] - p * nP ** 3 - q * nP ** 2) / nP)
+        s = int(inds[l] - p * nP ** 3 - q * nP ** 2 - r * nP)
 
-            f.write("  " + str(vals[l]) + "  " + str(p + 1) \
-                    + "  " + str(r + 1) + "  " + str(q + 1) + "  " + str(s + 1) + "\n")
+        f.write("  " + str(vals[l]) + "  " + str(p + 1) \
+                + "  " + str(r + 1) + "  " + str(q + 1) + "  " + str(s + 1) + "\n")
 
-        for i in range(nP):
-            for j in range(nP):
-                if np.abs(h[i, j]) > 1.e-10:
-                    f.write("  " + str(h[i, j]) + "  " + str(i + 1) + "  " \
-                            + str(j + 1) + "  0  0\n")
+    for i in range(nP):
+        for j in range(nP):
+            if np.abs(h[i, j]) > 1.e-10:
+                f.write("  " + str(h[i, j]) + "  " + str(i + 1) + "  " \
+                        + str(j + 1) + "  0  0\n")
 
-        f.write(str(e_nuc) + " 0  0  0  0")
+    f.write(str(e_nuc) + " 0  0  0  0")
 
-        f.close()
+    f.close()
     return
 
 
@@ -84,7 +81,6 @@ def read(fcidump_file="FCIDUMP", is_tc=False):
     V_pqrs: numpy tensor, [nb, nb, nb, nb]
               the Coulomb integrals.
     """
-    world = ctf.comm()
 
     header_dict = {"norb": 0, "nelec": 0}
 

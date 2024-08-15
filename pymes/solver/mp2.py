@@ -1,10 +1,24 @@
 import time
 import numpy as np
-import ctf
 
 from pymes.log import print_logging_info
 
-def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None, **kwargs):
+def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., **kwargs):
+    """
+    dense mp2 algorithm
+    Note that t_V_ijab and t_V_abij are not necessarily
+    the same, e.g. in transcorrelated Hamiltonian.
+
+    """
+    t_T_abij = t_V_abij.copy()
+    t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
+    t_T_abij /= (t_D_abij + leve_shift)
+    eDir = 2.0*np.einsum('abij, ijab->',t_T_abij, t_V_ijab)
+    eExc = -1.0*np.einsum('abij, jiab->',t_T_abij, t_V_ijab)
+    eTotal = eDir + eExc
+    return [eTotal, t_T_abij]
+
+def solve_sp(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None, **kwargs):
     """
     mp2 algorithm
     Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
@@ -21,7 +35,6 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
     """
 
     algoName = "mp2.solve"
-    world = ctf.comm()
     timeMp2 = time.time()
     print_logging_info(algoName,level=0)
 
@@ -45,7 +58,6 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
 
     print_logging_info("Looping through nnz in t_V_abij", level = 1)
     print_logging_info("Total nnz entries on rank 0 = ", len(inds), level = 1)
-    num_proc = world.np()
 
     for ind in range(len(inds)):
         if ind % num_proc == 0:
@@ -57,7 +69,7 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
     del epsilon_i, t_epsilon_i
     del epsilon_a, t_epsilon_a
 
-    t_T_abij = ctf.tensor([nv,nv,no,no], dtype=t_V_ijab.dtype, sp=t_V_ijab.sp)
+    t_T_abij = np.zeros([nv,nv,no,no], dtype=t_V_ijab.dtype)
     t_T_abij.write(inds, vals)
 
     if nv_part_size is None:
@@ -80,8 +92,8 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_
         t_T_nmij = t_T_abij[n_lower:n_higher, :, :, :]
         t_V_ijnm = t_V_ijab[:, :, n_lower:n_higher, :]
 
-        eDir += 2.0*ctf.einsum('abij, ijab->',t_T_nmij, t_V_ijnm)
-        eExc += -1.0*ctf.einsum('abij, jiab->',t_T_nmij, t_V_ijnm)
+        eDir += 2.0*np.einsum('abij, ijab->',t_T_nmij, t_V_ijnm)
+        eExc += -1.0*np.einsum('abij, jiab->',t_T_nmij, t_V_ijnm)
 
 
     print_logging_info("Direct contribution = {:.12f}".format(np.real(eDir)),\

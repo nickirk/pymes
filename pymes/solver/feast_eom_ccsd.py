@@ -8,7 +8,6 @@ import numpy as np
 import time
 from scipy.linalg import eig
 
-import ctf
 
 from pymes.solver.eom_ccsd import EOM_CCSD
 from pymes.log import print_title, print_logging_info
@@ -79,8 +78,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         t_epsilon_i = t_fock_dressed_pq.diagonal()[:no]
         t_epsilon_a = t_fock_dressed_pq.diagonal()[no:]
         nv = t_epsilon_a.shape[0]
-        diag_ai = self.get_diag_singles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
-        diag_abij = self.get_diag_doubles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij).to_nparray()
+        diag_ai = self.get_diag_singles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
+        diag_abij = self.get_diag_doubles(t_fock_dressed_pq, dict_t_V_dressed, t_T_abij)
 
         print_logging_info("Initialising u tensors...", level=1)
         # TODO: more initialization schemes should be tested
@@ -125,11 +124,11 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             w_doubles = [np.zeros(self.u_doubles[0].shape) for _ in range(len(self.u_doubles))]
             for i in range(len(self.u_singles)):
                 w_singles[i] = self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(self.Q_singles[i]),
-                                                   ctf.astensor(self.Q_doubles[i]), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, self.Q_singles[i],
+                                                   self.Q_doubles[i], t_T_abij)
                 w_doubles[i] = self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(self.Q_singles[i]),
-                                                   ctf.astensor(self.Q_doubles[i]), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, self.Q_singles[i],
+                                                   self.Q_doubles[i], t_T_abij)
                 for j in range(i):
                     H_proj[j, i] = np.tensordot(self.Q_singles[j], w_singles[i], axes=2) \
                               + np.tensordot(self.Q_doubles[j], w_doubles[i], axes=4)
@@ -194,12 +193,12 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
         if is_rt and dt is not None:
             delta_singles += 1j*dt*self.update_singles(t_fock_dressed_pq,
-                                           dict_t_V_dressed, ctf.astensor(trial_singles),
-                                           ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                           dict_t_V_dressed, trial_singles,
+                                           trial_doubles, t_T_abij)
         else:
             delta_singles += self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
         
         delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
         delta_doubles += self.u_doubles[l]
@@ -208,12 +207,12 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         delta_doubles -= ze * trial_doubles
         if is_rt and dt is not None:
             delta_doubles += 1j*dt*self.update_doubles(t_fock_dressed_pq,
-                                           dict_t_V_dressed, ctf.astensor(trial_singles),
-                                           ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                           dict_t_V_dressed, trial_singles,
+                                           trial_doubles, t_T_abij)
         else:
             delta_doubles += self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
         return delta_singles, delta_doubles
 
     def _opt_solver(self, l, ze, trial_singles, trial_doubles, 
@@ -318,22 +317,22 @@ class FEAST_EOM_CCSD(EOM_CCSD):
 
             if is_rt and dt is not None:
                 delta_singles -= 1j*dt*self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             else:
                 delta_singles -= self.update_singles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, trial_singles,
+                                                   trial_doubles, t_T_abij)
         
             delta_doubles = ze * trial_doubles
             if is_rt and dt is not None:
                 delta_doubles -= 1j*dt*self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             else:
                 delta_doubles -= self.update_doubles(t_fock_dressed_pq,
-                                                   dict_t_V_dressed, ctf.astensor(trial_singles),
-                                                   ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                                   dict_t_V_dressed, trial_singles,
+                                                   trial_doubles, t_T_abij)
             # convert to vector
             return np.concatenate((delta_singles.flatten(), delta_doubles.flatten()))
         A = LinearOperator((self.u_singles[0].size + self.u_doubles[0].size, self.u_singles[0].size + self.u_doubles[0].size), matvec=matvec)
@@ -382,20 +381,20 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             delta_singles += self.u_singles[l]
             delta_singles -= ze * trial_singles
             delta_singles += self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             
             delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
             delta_doubles += self.u_doubles[l]
             delta_doubles -= ze * trial_doubles
             delta_doubles += self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, ctf.astensor(trial_singles),
-                                               ctf.astensor(trial_doubles), t_T_abij).to_nparray()
+                                               dict_t_V_dressed, trial_singles,
+                                               trial_doubles, t_T_abij)
             return delta_singles, delta_doubles
         
         delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
-        rho = np.tensordot(np.conj(delta_singles), delta_singles, axes=2)
-        rho += np.tensordot(np.conj(delta_doubles), delta_doubles, axes=4)
+        rho = np.tensordot(np.conj(delta_singles, delta_singles, axes=2))
+        rho += np.tensordot(np.conj(delta_doubles, delta_doubles, axes=4))
         p_singles = delta_singles.copy()
         p_doubles = delta_doubles.copy()
         r0_singles = delta_singles.copy()
@@ -406,32 +405,32 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         s_norm = 0.
         for i in range(100):
             v_singles, v_doubles = _get_residual(p_singles, p_doubles)
-            alpha = np.tensordot(np.conj(r0_singles), v_singles, axes=2)
-            alpha += np.tensordot(np.conj(r0_doubles), v_doubles, axes=4)
+            alpha = np.tensordot(np.conj(r0_singles, v_singles, axes=2))
+            alpha += np.tensordot(np.conj(r0_doubles, v_doubles, axes=4))
             alpha = rho / alpha
             h_singles = Qe_singles + alpha * p_singles 
             h_doubles = Qe_doubles + alpha * p_doubles
             s_singles = r_singles - alpha * v_singles
             s_doubles = r_doubles - alpha * v_doubles
-            s_norm = np.tensordot(np.conj(s_singles), s_singles, axes=2)
-            s_norm += np.tensordot(np.conj(s_doubles), s_doubles, axes=4)
+            s_norm = np.tensordot(np.conj(s_singles, s_singles, axes=2))
+            s_norm += np.tensordot(np.conj(s_doubles, s_doubles, axes=4))
             if np.abs(s_norm) < 1e-8:
                 print_logging_info(f"i = {i}, converged for s_norm", level=2)
                 Qe_singles = h_singles
                 Qe_doubles = h_doubles
                 break
             t_singles, t_doubles = _get_residual(s_singles, s_doubles)
-            omega = np.tensordot(np.conj(t_singles), s_singles, axes=2)
-            omega += np.tensordot(np.conj(t_doubles), s_doubles, axes=4)
-            t_norm = np.tensordot(np.conj(t_singles), t_singles, axes=2)
-            t_norm += np.tensordot(np.conj(t_doubles), t_doubles, axes=4)
+            omega = np.tensordot(np.conj(t_singles, s_singles, axes=2))
+            omega += np.tensordot(np.conj(t_doubles, s_doubles, axes=4))
+            t_norm = np.tensordot(np.conj(t_singles, t_singles, axes=2))
+            t_norm += np.tensordot(np.conj(t_doubles, t_doubles, axes=4))
             omega /= t_norm
             Qe_singles = h_singles + omega * s_singles
             Qe_doubles = h_doubles + omega * s_doubles
             r_singles = s_singles - omega * t_singles
             r_doubles = s_doubles - omega * t_doubles
-            r_norm = np.tensordot(np.conj(r_singles), r_singles, axes=2)
-            r_norm += np.tensordot(np.conj(r_doubles), r_doubles, axes=4)
+            r_norm = np.tensordot(np.conj(r_singles, r_singles, axes=2))
+            r_norm += np.tensordot(np.conj(r_doubles, r_doubles, axes=4))
             if np.abs(r_norm) < 1e-8:
                 print_logging_info(f"i = {i}, converged for r_norm", level=2)
                 break
@@ -439,8 +438,8 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             #    print_logging_info(f"i = {i}, r_norm: {np.abs(r_norm)}, s_norm: {np.abs(s_norm)}", level=2)
             # update rho and save the previous values
             rho_old = rho
-            rho = np.tensordot(np.conj(r0_singles), r_singles, axes=2)
-            rho += np.tensordot(np.conj(r0_doubles), r_doubles, axes=4)
+            rho = np.tensordot(np.conj(r0_singles, r_singles, axes=2))
+            rho += np.tensordot(np.conj(r0_doubles, r_doubles, axes=4))
             beta = (rho/rho_old) * (alpha/omega)
             p_singles = r_singles + beta * (p_singles - omega * v_singles)
             p_doubles = r_doubles + beta * (p_doubles - omega * v_doubles)
@@ -482,7 +481,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             self.Q_singles = [np.zeros(s_shape, dtype=float) for _ in  range(self.n_trial)]
             self.Q_doubles = [np.zeros(d_shape, dtype=float) for _ in  range(self.n_trial)]
             time_iter_init = time.time()
-            #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles)
+            #self.u_singles, self.u_doubles = self.QR(self.u_singles, self.u_doubles
 
             # solve for the linear system (z-H)Q = Y at z = z_e
             for e in range(len(z)):
@@ -492,7 +491,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                 for l in range(self.n_trial):
                     self.Q_singles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_singles[l])
                     self.Q_doubles[l] -= w[e]/2 * np.real(self.e_r * np.exp(1j * theta[e]) * Qe_doubles[l])
-            #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles)
+            #self.Q_singles, self.Q_doubles = self.QR(self.Q_singles, self.Q_doubles
             # compute the projected Hamiltonian
             H_proj = np.zeros((self.n_trial, self.n_trial))
             B = np.zeros((self.n_trial, self.n_trial))
@@ -500,11 +499,11 @@ class FEAST_EOM_CCSD(EOM_CCSD):
             w_doubles = [np.zeros(self.u_doubles[0].shape) for _ in range(self.n_trial)]
             for i in range(self.n_trial):
                 w_singles[i] = self.update_singles_test(ham,
-                                                   ctf.astensor(self.Q_singles[i]),
-                                                   ctf.astensor(self.Q_doubles[i])).to_nparray()
+                                                   self.Q_singles[i],
+                                                   self.Q_doubles[i])
                 w_doubles[i] = self.update_doubles_test(ham,
-                                                   ctf.astensor(self.Q_singles[i]),
-                                                   ctf.astensor(self.Q_doubles[i])).to_nparray()
+                                                   self.Q_singles[i],
+                                                   self.Q_doubles[i])
                 for j in range(i):
                     H_proj[j, i] = np.tensordot(self.Q_singles[j], w_singles[i], axes=2) \
                               + np.tensordot(self.Q_doubles[j], w_doubles[i], axes=4)
@@ -584,15 +583,15 @@ class FEAST_EOM_CCSD(EOM_CCSD):
                 delta_singles = np.zeros(u_singles[0].shape, dtype=complex)
                 delta_singles = ze * Qe_singles[l]
                 delta_singles -= self.update_singles_test(ham,
-                                                   ctf.astensor(Qe_singles[l]),
-                                                   ctf.astensor(Qe_doubles[l])).to_nparray()
+                                                   Qe_singles[l],
+                                                   Qe_doubles[l])
                 delta_singles -= u_singles[l]
                 
                 delta_doubles = np.zeros(u_doubles[0].shape, dtype=complex)
                 delta_doubles = ze * Qe_doubles[l]
                 delta_doubles -= self.update_doubles_test(ham,
-                                                   ctf.astensor(Qe_singles[l]),
-                                                   ctf.astensor(Qe_doubles[l])).to_nparray()
+                                                   Qe_singles[l],
+                                                   Qe_doubles[l])
                 delta_doubles -= u_doubles[l]
 
                 Qe_singles[l] -= 0.1 * (delta_singles/(ze - ham.diagonal()[:nv*no].reshape(nv, no))) 
