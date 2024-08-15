@@ -1,5 +1,8 @@
 import time
 import numpy as np
+from functools import partial
+
+einsum = partial(np.einsum, optimize=True)
 
 from pymes.log import print_logging_info
 
@@ -13,8 +16,8 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., **kwargs)
     t_T_abij = t_V_abij.copy()
     t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
     t_T_abij /= (t_D_abij + leve_shift)
-    eDir = 2.0*np.einsum('abij, ijab->',t_T_abij, t_V_ijab)
-    eExc = -1.0*np.einsum('abij, jiab->',t_T_abij, t_V_ijab)
+    eDir = 2.0*einsum('abij, ijab->',t_T_abij, t_V_ijab)
+    eExc = -1.0*einsum('abij, jiab->',t_T_abij, t_V_ijab)
     eTotal = eDir + eExc
     return [eTotal, t_T_abij]
 
@@ -92,8 +95,8 @@ def solve_sp(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, 
         t_T_nmij = t_T_abij[n_lower:n_higher, :, :, :]
         t_V_ijnm = t_V_ijab[:, :, n_lower:n_higher, :]
 
-        eDir += 2.0*np.einsum('abij, ijab->',t_T_nmij, t_V_ijnm)
-        eExc += -1.0*np.einsum('abij, jiab->',t_T_nmij, t_V_ijnm)
+        eDir += 2.0*einsum('abij, ijab->',t_T_nmij, t_V_ijnm)
+        eExc += -1.0*einsum('abij, jiab->',t_T_nmij, t_V_ijnm)
 
 
     print_logging_info("Direct contribution = {:.12f}".format(np.real(eDir)),\

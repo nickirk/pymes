@@ -7,11 +7,13 @@ solve the EOM-CCSD equations using the FEAST algorithm.
 import numpy as np
 import time
 from scipy.linalg import eig
+from functools import partial
 
 
 from pymes.solver.eom_ccsd import EOM_CCSD
 from pymes.log import print_title, print_logging_info
 
+einsum = partial(np.einsum, optimize=True)
 class FEAST_EOM_CCSD(EOM_CCSD):
     """
     This class implements the FEAST algorithm to solve the EOM-CCSD equations.
@@ -346,105 +348,6 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         Qe_doubles = Qe_vec[self.u_singles[0].size:].reshape(self.u_doubles[0].shape)
         return Qe_singles, Qe_doubles
         
-
-    def _bicgstab(self, l, ze, t_fock_dressed_pq, dict_t_V_dressed, t_T_abij):
-        """
-        Solve the linear system (z-H)Q = Y.
-        Default algorithm is BiCGSTAB unconditioned.
-
-        Parameters
-        ----------
-        l : int, trial vector index
-        ze : complex
-            The shift value.
-        t_fock_dressed_pq : np.ndarray, shape (norb, norb), dtype=float, dressed Fock matrix
-        dict_t_V_dressed : dict, dressed two-body integrals
-        t_T_abij : np.ndarray, shape (norb, norb, norb, norb), dtype=float, T2 amplitudes
-
-
-        Returns
-        -------
-        Qe_singles : dtype=np.ndarray, single excitation vectors
-        Qe_doubles : dtype=np.ndarray, double excitation vectors
-        """
-
-        Qe_singles = np.zeros(self.u_singles[0].shape, dtype=complex)
-        Qe_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
-
-        def _get_residual(trial_singles, trial_doubles):
-            """
-            Get the residual of the linear system (z-H)Q = Y
-            for the l-th trial vector.
-            """
-            delta_singles = np.zeros(self.u_singles[0].shape, dtype=complex) 
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex) 
-            delta_singles += self.u_singles[l]
-            delta_singles -= ze * trial_singles
-            delta_singles += self.update_singles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, trial_singles,
-                                               trial_doubles, t_T_abij)
-            
-            delta_doubles = np.zeros(self.u_doubles[0].shape, dtype=complex)
-            delta_doubles += self.u_doubles[l]
-            delta_doubles -= ze * trial_doubles
-            delta_doubles += self.update_doubles(t_fock_dressed_pq,
-                                               dict_t_V_dressed, trial_singles,
-                                               trial_doubles, t_T_abij)
-            return delta_singles, delta_doubles
-        
-        delta_singles, delta_doubles = _get_residual(Qe_singles, Qe_doubles)
-        rho = np.tensordot(np.conj(delta_singles, delta_singles, axes=2))
-        rho += np.tensordot(np.conj(delta_doubles, delta_doubles, axes=4))
-        p_singles = delta_singles.copy()
-        p_doubles = delta_doubles.copy()
-        r0_singles = delta_singles.copy()
-        r0_doubles = delta_doubles.copy()
-        r_singles = delta_singles.copy()
-        r_doubles = delta_doubles.copy()
-        r_norm = 0.
-        s_norm = 0.
-        for i in range(100):
-            v_singles, v_doubles = _get_residual(p_singles, p_doubles)
-            alpha = np.tensordot(np.conj(r0_singles, v_singles, axes=2))
-            alpha += np.tensordot(np.conj(r0_doubles, v_doubles, axes=4))
-            alpha = rho / alpha
-            h_singles = Qe_singles + alpha * p_singles 
-            h_doubles = Qe_doubles + alpha * p_doubles
-            s_singles = r_singles - alpha * v_singles
-            s_doubles = r_doubles - alpha * v_doubles
-            s_norm = np.tensordot(np.conj(s_singles, s_singles, axes=2))
-            s_norm += np.tensordot(np.conj(s_doubles, s_doubles, axes=4))
-            if np.abs(s_norm) < 1e-8:
-                print_logging_info(f"i = {i}, converged for s_norm", level=2)
-                Qe_singles = h_singles
-                Qe_doubles = h_doubles
-                break
-            t_singles, t_doubles = _get_residual(s_singles, s_doubles)
-            omega = np.tensordot(np.conj(t_singles, s_singles, axes=2))
-            omega += np.tensordot(np.conj(t_doubles, s_doubles, axes=4))
-            t_norm = np.tensordot(np.conj(t_singles, t_singles, axes=2))
-            t_norm += np.tensordot(np.conj(t_doubles, t_doubles, axes=4))
-            omega /= t_norm
-            Qe_singles = h_singles + omega * s_singles
-            Qe_doubles = h_doubles + omega * s_doubles
-            r_singles = s_singles - omega * t_singles
-            r_doubles = s_doubles - omega * t_doubles
-            r_norm = np.tensordot(np.conj(r_singles, r_singles, axes=2))
-            r_norm += np.tensordot(np.conj(r_doubles, r_doubles, axes=4))
-            if np.abs(r_norm) < 1e-8:
-                print_logging_info(f"i = {i}, converged for r_norm", level=2)
-                break
-            #else:
-            #    print_logging_info(f"i = {i}, r_norm: {np.abs(r_norm)}, s_norm: {np.abs(s_norm)}", level=2)
-            # update rho and save the previous values
-            rho_old = rho
-            rho = np.tensordot(np.conj(r0_singles, r_singles, axes=2))
-            rho += np.tensordot(np.conj(r0_doubles, r_doubles, axes=4))
-            beta = (rho/rho_old) * (alpha/omega)
-            p_singles = r_singles + beta * (p_singles - omega * v_singles)
-            p_doubles = r_doubles + beta * (p_doubles - omega * v_doubles)
-        print_logging_info(f"Linear Solver: l = {l}, tot_iter = {i}, s_norm = {np.abs(s_norm)}, r_norm = {np.abs(r_norm)}", level=2)
-        return Qe_singles, Qe_doubles
 
 
     def solve_test(self, nv):
