@@ -54,6 +54,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         self.max_iter = max_iter
         self.tol = tol
         self.linear_solver = "Jacobi"
+        self.ls_max_iter = 20
 
         # stored u vectors
         self.u_singles = []
@@ -342,7 +343,7 @@ class FEAST_EOM_CCSD(EOM_CCSD):
         combined_diag = np.concatenate((1./(ze-diag_ai.flatten()+0.01), 1./(ze-diag_abij.flatten()+0.01)))
         M = diags(combined_diag, offsets=0)
 
-        Qe_vec, exit_code = gcrotmk(A, b_vec, x0=Qe_vec_init, M=M, maxiter=3, tol=1e-4)
+        Qe_vec, exit_code = gcrotmk(A, b_vec, x0=Qe_vec_init, M=M, maxiter=self.ls_max_iter, tol=1e-4)
         print_logging_info("Linear Solver Info = ", exit_code, level=2)
         Qe_singles = Qe_vec[:self.u_singles[0].size].reshape(self.u_singles[0].shape)
         Qe_doubles = Qe_vec[self.u_singles[0].size:].reshape(self.u_doubles[0].shape)
