@@ -59,25 +59,28 @@ def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fa
     # start iteratons
     e_norm_prev = 1e10
     for iter in range(eom.max_cycle):
-        Q = [np.zeros(size, dtype=complex) for _ in range(nroots)]
+
+        ntrial = len(u_vec)
+
+        Q = [np.zeros(size, dtype=complex) for _ in range(ntrial)]
 
         time_iter_init = time.time()
-
+        #u_vec = QR(u_vec)    
         # solve for the linear system (z-H)Q = Y at z = z_e
         for e in range(len(z)):
             print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
-            for l in range(nroots):
+            for l in range(ntrial):
                 Qe = eom._gcrotmk(z[e], b=u_vec[l], diag=diag, precond=precond)
 
                 Q[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe)
                 Q[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe)
         
         # compute the projected Hamiltonian
-        H_proj = np.zeros((nroots, nroots), dtype=complex)
+        H_proj = np.zeros((ntrial, ntrial), dtype=complex)
         B = np.zeros(H_proj.shape, dtype=complex)
-        Hu = [np.zeros(size) for _ in range(nroots)]
+        Hu = [np.zeros(size) for _ in range(ntrial)]
         Hu = matvec(Q)
-        for i in range(nroots):
+        for i in range(ntrial):
             for j in range(i):
                 H_proj[j, i] = np.dot(np.conj(Q[j]), Hu[i])
                 H_proj[i, j] = np.dot(np.conj(Q[i]), Hu[j]) 
@@ -87,19 +90,32 @@ def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fa
             B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
         eigvals, eigvecs = eig(H_proj, B)
-        
+        # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
+        valid_inds = np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r)
+        valid_eigvals = eigvals[valid_inds].real
+        # get the eigenvectors corresponding to the max and min eigenvalues
 
         # update u_singles and u_doubles and to the trial vectors
-        for l in range(nroots):
+        for l in range(ntrial):
             for i in range(len(eigvals)):
                 u_vec[l] += np.real(eigvecs[i, l] * Q[i])
         
         # check convergence
-        e_norm = np.linalg.norm(eigvals)
+        e_norm = np.linalg.norm(valid_eigvals)
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             break
         else:
-            print_logging_info(f"Iter = {iter}, Eigenvalues: {eigvals}", level=1)
+            if iter%4 == 0:
+                max_eigval = np.max(valid_eigvals)
+                min_eigval = np.min(valid_eigvals)
+                max_eigvec = eigvecs[:, np.argmax(valid_eigvals)].dot(np.asarray(Q))
+                min_eigvec = eigvecs[:, np.argmin(valid_eigvals)].dot(np.asarray(Q))
+                # add more trial u vectors based on the max and min eigenvectors
+                u_vec.append(max_eigvec/(max_eigval - diag))
+                u_vec.append(min_eigvec/(min_eigval - diag))
+            print_logging_info(f"Iter = {iter}, All eigenvalues: {eigvals}", level=1)
+            print_logging_info(f"Added two more trial vectors, total ntrial= {len(u_vec)}", level=1)
+            print_logging_info(f"Valid eigenvalues: {valid_eigvals}", level=1)
             print_logging_info(f"Norm of eigenvalues: {e_norm}, Difference: {np.abs(e_norm - e_norm_prev)}", level=1)
 
         e_norm_prev = e_norm
@@ -110,6 +126,17 @@ def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fa
 
     return eigvals, u_vec
 
+def QR(u):
+    """
+    QR decomposition of a matrix u
+    """
+    u = np.asarray(u).T
+    Q, R = np.linalg.qr(u)
+    Q = Q.T
+    u = []
+    for i in range(len(Q)):
+        u.append(Q[i])
+    return u
     
 class FEAST_EOMEESinglet(EOMEE):
 
