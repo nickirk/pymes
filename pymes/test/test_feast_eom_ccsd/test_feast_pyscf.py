@@ -22,15 +22,20 @@ def driver():
     # RCCSD calculation
     mycc = cc.CCSD(mf)
     mycc.kernel()
-    mycc.max_memory = 12000
+    #mycc.max_memory = 12000
     mycc.incore_complete = True
-    #mycc.eomee_ccsd_singlet(nroots=20)
+    #e, _ = mycc.eomee_ccsd_singlet(nroots=20)
+    #e, _ = mycc.eeccsd(nroots=28)
+    #print(e)
+    #np.save("eom_ccsd_pyscf_all.npy", e)
 
     # EOM-EE-CCSD calculation
     eom = feast_eom_rccsd.FEAST_EOMEESinglet(mycc)
-    eom.max_cycle = 50
-    eom.ls_max_iter = 5
-    eom.kernel(nroots=6, e_c=19.7, e_r=0.1)
+    eom.max_cycle = 20
+    eom.ls_max_iter = 10
+    eom.conv_tol = 1e-6
+    e_feast, _ = eom.kernel(nroots=5, e_c=19.74, e_r=0.1)
+    np.save("eom_ccsd_feast.npy", e_feast)
 
 
 def main():
