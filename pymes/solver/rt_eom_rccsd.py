@@ -23,6 +23,9 @@ def kernel(eom, dt=0.1, e_r=None, e_c=None, ngl_pts=16, koopmans=False, guess=No
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+
+    nroots = 1
+
     logger.info(eom, 'RT-EOM-CCSD singlet kernel')
     logger.info(eom, 'Number of initial guesses = %d', nroots)
     logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
@@ -35,7 +38,6 @@ def kernel(eom, dt=0.1, e_r=None, e_c=None, ngl_pts=16, koopmans=False, guess=No
     matvec, diag = eom.gen_matvec(imds, left=left, **kwargs)
 
     size = eom.vector_size()
-    nroots = 1
     # create initial guesses
     print_logging_info("Initialising u tensors...", level=1)
     if guess is not None:
@@ -77,10 +79,10 @@ def kernel(eom, dt=0.1, e_r=None, e_c=None, ngl_pts=16, koopmans=False, guess=No
         Q[0] -= w[e]/2 * (e_r * dt * np.exp(1j * theta[e]) * Qe)
         
     u_norm= np.dot(np.conj(Q[0]), Q[0])
-    print_logging_info("Norm of new u vec before normalization = ", u_norm)
-    Q /= np.linalg.norm(Q)
-    u_norm= np.dot(np.conj(Q[0]), Q[0])
-    print_logging_info("Norm of new u vec after normalization = ", u_norm)
+    print_logging_info("Norm of new u vec = ", u_norm)
+    #Q /= np.linalg.norm(Q)
+    #u_norm= np.dot(np.conj(Q[0]), Q[0])
+    #print_logging_info("Norm of new u vec after normalization = ", u_norm)
     u_vec = Q
     time_end = time.time()
     print_logging_info(f"RT-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
