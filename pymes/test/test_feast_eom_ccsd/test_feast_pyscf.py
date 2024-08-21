@@ -32,10 +32,12 @@ def driver():
     # EOM-EE-CCSD calculation
     eom = feast_eom_rccsd.FEAST_EOMEESinglet(mycc)
     eom.max_cycle = 20
-    eom.ls_max_iter = 10
+    eom.ls_max_iter = 20
     eom.conv_tol = 1e-6
-    e_feast, _ = eom.kernel(nroots=5, e_c=19.74, e_r=0.1)
-    np.save("eom_ccsd_feast.npy", e_feast)
+    e_c = 19.75
+    e_r = 0.05
+    e_feast, _ = eom.kernel(nroots=7, e_c=e_c, e_r=e_r)
+    np.save("eom_ccsd_feast_"+str(e_c)+"_"+str(e_r)+".npy", e_feast)
 
 
 def main():

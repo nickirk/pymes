@@ -104,7 +104,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fa
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             break
         else:
-            if iter%4 == 0:
+            if iter%5 == 0 and iter > 0:
                 max_eigval = np.max(valid_eigvals)
                 min_eigval = np.min(valid_eigvals)
                 max_eigvec = eigvecs[:, np.argmax(valid_eigvals)].dot(np.asarray(Q))
@@ -143,6 +143,7 @@ class FEAST_EOMEESinglet(EOMEE):
         EOMEE.__init__(self, cc)
         self.ls_max_iter = 100
         self.ls_conv_tol = 1e-4
+        self.max_ntrial = 16
     
     kernel = feast
     matvec = eeccsd_matvec_singlet
