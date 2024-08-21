@@ -17,12 +17,17 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
-def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
+def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+    logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
+    logger.info(eom, 'Number of initial guesses = %d', nroots)
+    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
+    logger.info(eom, 'e_c = %s', e_c)
+    logger.info(eom, 'e_r = %s', e_r)
 
     if imds is None:
         imds = eom.make_imds(eris)
@@ -52,7 +57,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fa
 
     u_vec = guess.copy()
     # gauss-legrendre quadrature
-    x, w = get_gauss_legendre_quadrature(8) 
+    x, w = get_gauss_legendre_quadrature(ngl_pts) 
     theta = -np.pi / 2 * (x - 1)
     z = e_c + e_r * np.exp(1j * theta)
 
@@ -147,6 +152,7 @@ class FEAST_EOMEESinglet(EOMEE):
     
     kernel = feast
     matvec = eeccsd_matvec_singlet
+
 
     def get_init_guess(self, nroots=1, koopmans=False, diag=None):
         size = self.vector_size()

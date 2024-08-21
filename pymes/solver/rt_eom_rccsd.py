@@ -17,12 +17,17 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
-def kernel(eom, dt=0.1, e_r=None, e_c=None, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
+def kernel(eom, dt=0.1, e_r=None, e_c=None, ngl_pts=16, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+    logger.info(eom, 'RT-EOM-CCSD singlet kernel')
+    logger.info(eom, 'Number of initial guesses = %d', nroots)
+    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
+    logger.info(eom, 'e_c = %s', e_c)
+    logger.info(eom, 'e_r = %s', e_r)
 
     if imds is None:
         imds = eom.make_imds(eris)
@@ -53,7 +58,7 @@ def kernel(eom, dt=0.1, e_r=None, e_c=None, koopmans=False, guess=None, left=Fal
 
     u_vec = guess.copy()
     # gauss-legrendre quadrature
-    x, w = get_gauss_legendre_quadrature(16) 
+    x, w = get_gauss_legendre_quadrature(ngl_pts) 
     theta = -np.pi * x
     #theta = np.concatenate((-np.pi * x, np.pi * x))
     #w = np.concatenate((w, w))
