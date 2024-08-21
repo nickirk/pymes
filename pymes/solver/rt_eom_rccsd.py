@@ -23,6 +23,11 @@ def kernel(eom, dt=0.1, e_r=None, e_c=None, ngl_pts=16, koopmans=False, guess=No
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+    logger.info(eom, 'RT-EOM-CCSD singlet kernel')
+    logger.info(eom, 'Number of initial guesses = %d', nroots)
+    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
+    logger.info(eom, 'e_c = %s', e_c)
+    logger.info(eom, 'e_r = %s', e_r)
 
     nroots = 1
 

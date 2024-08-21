@@ -17,12 +17,30 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
+def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
 def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_pts=8,  n_aux=0, guess=None, left=False, koopmans=None, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+    logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
+    logger.info(eom, 'Number of initial guesses = %d', nroots)
+    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
+    logger.info(eom, 'e_c = %s', e_c)
+    logger.info(eom, 'e_r = %s', e_r)
+
+    if emin is not None and emax is not None:
+        e_r = (emax - emin)/2
+        e_c = emax - e_r
+    elif e_c is not None:
+        user_guess = True
+        e_guess = e_c
+    else:
+        raise ValueError("e_c or emin and emax must be specified.")
+
+    if e_r is None:
+        e_r = 1    
 
     if emin is not None and emax is not None:
         e_r = (emax - emin)/2
