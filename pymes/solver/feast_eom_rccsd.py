@@ -173,7 +173,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         u_vec = [np.zeros(size) for _ in range(len(eigvals))]
         for l in range(len(eigvals)):
             for i in range(len(eigvals)):
-                u_vec[l] += np.real(eigvecs[i, l] * Q[i])
+                u_vec[l] += np.real(valid_eigvecs[i, l] * Q[i])
         
         max_comp = np.max(np.abs(np.asarray(u_vec)), axis=1)
         max_comp_loc = np.argmax(np.abs(np.asarray(u_vec)), axis=1)
