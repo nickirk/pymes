@@ -69,11 +69,10 @@ def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=No
 
         Q = [np.zeros(size, dtype=complex) for _ in range(ntrial)]
 
-        time_iter_init = time.time()
         #u_vec = QR(u_vec)    
         # solve for the linear system (z-H)Q = Y at z = z_e
         for e in range(len(z)):
-            print_logging_info(f"e = {e}, z = {z[e]}, theta = {theta[e]}, w = {w[e]}", level=1)
+            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(ntrial):
                 Qe = eom._gcrotmk(z[e], b=u_vec[l], diag=diag, precond=precond)
 
@@ -97,36 +96,60 @@ def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=No
         # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
         valid_inds = np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r)
         valid_eigvals = eigvals[valid_inds].real
+        valid_eigvecs = eigvecs[:, valid_inds]
         # get the eigenvectors corresponding to the max and min eigenvalues
 
         # update u_singles and u_doubles and to the trial vectors
-        for l in range(ntrial):
+        u_vec = [np.zeros(size) for _ in range(len(valid_eigvals))]
+        for l in range(len(valid_eigvals)):
             for i in range(len(eigvals)):
-                u_vec[l] += np.real(eigvecs[i, l] * Q[i])
+                u_vec[l] += np.real(valid_eigvecs[i, l] * Q[i])
         
         # check convergence
         e_norm = np.linalg.norm(valid_eigvals)
+        logger.debug(eom, "Iter = %d, all eigenvalues:", iter)
+        logger.debug(eom, "%s", eigvals)
+        logger.debug(eom, "Valid eigenvalues:" )
+        logger.debug(eom, "%s", valid_eigvals)
+        logger.info(eom, "cycle = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
+                    e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
+            logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
         else:
-            if iter%5 == 0 and iter > 0:
-                max_eigval = np.max(valid_eigvals)
-                min_eigval = np.min(valid_eigvals)
-                max_eigvec = eigvecs[:, np.argmax(valid_eigvals)].dot(np.asarray(Q))
-                min_eigvec = eigvecs[:, np.argmin(valid_eigvals)].dot(np.asarray(Q))
+            if iter > 0: # and len(u_vec) <= eom.max_ntrial:
+                # eigvals might contain nan
+                max_valid_ind = np.argmax(valid_eigvals.real)
+                min_valid_ind = np.argmin(valid_eigvals.real)
+                max_ind = np.where(eigvals.real == valid_eigvals[max_valid_ind])[0][0]
+                min_ind = np.where(eigvals.real == valid_eigvals[min_valid_ind])[0][0]
+                max_eigval = eigvals[max_ind]
+                min_eigval = eigvals[min_ind]
+                max_eigvec = u_vec[max_valid_ind]
+                min_eigvec = u_vec[min_valid_ind]
                 # add more trial u vectors based on the max and min eigenvectors
-                u_vec.append(max_eigvec/(max_eigval - diag))
-                u_vec.append(min_eigvec/(min_eigval - diag))
-                print_logging_info(f"Added two more trial vectors, total ntrial= {len(u_vec)}", level=1)
-            print_logging_info(f"Iter = {iter}, All eigenvalues: {eigvals}", level=1)
-            print_logging_info(f"Valid eigenvalues: {valid_eigvals}", level=1)
-            print_logging_info(f"Norm of eigenvalues: {e_norm}, Difference: {np.abs(e_norm - e_norm_prev)}", level=1)
-
+                #u_vec.append(np.random.rand(size)-0.5)
+                #u_vec.append(np.random.rand(size)-0.5)
+                u_vec.append((Hu[max_ind] - max_eigval * max_eigvec)/(max_eigval - diag + 1e-10))
+                if max_ind == min_ind:
+                    u_vec.append(np.random.rand(size)-0.5)
+                else:
+                    u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
+                logger.debug(eom, "     # trial u vec = %d", len(u_vec))
+        
+        u_vec = QR(u_vec)
+        e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
 
 
-        time_end = time.time()
-        print_logging_info(f"FEAST-EOM-CCSD finished in {time_end - time_init:.2f} seconds.", level=0)
+    logger.info(eom, "All eigenvalues:" )
+    logger.info(eom, "  %s", eigvals)
+    logger.info(eom, "Valid eigenvalues:" )
+    logger.info(eom, "  %s", np.sort(valid_eigvals))
+    time_end = time.time()
+    if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
+        logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
+    logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
     return eigvals, u_vec
 
@@ -204,7 +227,8 @@ class FEAST_EOMEESinglet(EOMEE):
         M = diags(combined_diag, offsets=0)
 
         Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=self.ls_max_iter, tol=self.ls_conv_tol)
-        print_logging_info("Linear Solver Info = ", exit_code, level=2)
+        if exit_code != 0:
+            logger.warn(self, "Linear Solver Info = %d", exit_code)
         return Qe_vec
 
 
