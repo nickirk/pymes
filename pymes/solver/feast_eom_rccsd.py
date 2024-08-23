@@ -66,9 +66,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
-    #if n_aux is not None:
-    #    n_aux = 0
-
     if guess is not None:
         user_guess = True
         e_guess = []
@@ -134,6 +131,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     for iter in range(eom.max_cycle):
 
         ntrial = len(u_vec)
+
+        u_vec = QR(u_vec)
 
 
         Q = prune(u_vec, max_iter=eom.ls_max_iter)
