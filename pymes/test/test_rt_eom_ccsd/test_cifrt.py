@@ -39,19 +39,20 @@ def driver():
 
 
    
-    nt = 200
+    nt = 2000
     dt = 0.5
     c_t = np.zeros(nt-1, dtype=complex)
     t = np.arange(1,nt)*dt
     u0 = u_vec.copy()
     for n in range(0,nt-1):
-        u_vec_t = eom.kernel(guess=[u_vec], e_c=1.2, e_r=0.05, dt=dt)
+        u_vec_t = eom.kernel(guess=[u_vec], e_c=1.2, e_r=0.1, dt=dt)
         # update the u_singles and u_doubles
         ct_ = np.dot(u0, u_vec)
         u_vec = u_vec_t.copy()
         print("ct = ", ct_)
         c_t[n] = ct_
         np.save("ct.npy", np.column_stack((t,c_t)))
+    np.save("u_vec_rt.npy", u_vec)
 
 
 def signal_processing():

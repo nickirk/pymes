@@ -41,7 +41,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     size = eom.vector_size()
     nroots = min(nroots, size)
     # create initial guesses
-    print_logging_info("Initialising u tensors...", level=1)
+    logger.info(eom, "Initialising u tensors...")
     if guess is not None:
         user_guess = True
         for g in guess:
@@ -70,10 +70,13 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
 
         ntrial = len(u_vec)
 
+        u_vec = QR(u_vec)
+
         Q = [np.zeros(size, dtype=complex) for _ in range(ntrial)]
 
         #u_vec = QR(u_vec)    
         # solve for the linear system (z-H)Q = Y at z = z_e
+        #u_vec = QR(u_vec)
         for e in range(len(z)):
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(ntrial):
@@ -143,7 +146,6 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
                     u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
                 logger.debug(eom, "     # trial u vec = %d", len(u_vec))
         
-        u_vec = QR(u_vec)
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
 
@@ -157,7 +159,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    return valid_eigvals, u_vec
+    return np.sort(valid_eigvals), u_vec
 
 def QR(u):
     """
@@ -234,7 +236,7 @@ class FEAST_EOMEESinglet(EOMEE):
 
         Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=self.ls_max_iter, tol=self.ls_conv_tol)
         if exit_code != 0:
-            logger.warn(self, "Linear Solver Info = %d", exit_code)
+            logger.warn(self, "Linear solver not converged after max %d cycles.", exit_code)
         return Qe_vec
 
 
