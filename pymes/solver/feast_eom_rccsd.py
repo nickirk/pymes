@@ -17,12 +17,16 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
-def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
+def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
         eom.check_sanity()
     eom.dump_flags()
+
+    e_r = (emax - emin)/2
+    e_c = emax - e_r
+
     logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
     logger.info(eom, 'Number of initial guesses = %d', nroots)
     logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
@@ -54,7 +58,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=No
 
     print_title("FEAST-EOM-CCSD Solver")
     time_init = time.time()
-
     u_vec = guess.copy()
     # gauss-legrendre quadrature
     x, w = get_gauss_legendre_quadrature(ngl_pts) 
@@ -97,6 +100,9 @@ def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=No
         valid_inds = np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r)
         valid_eigvals = eigvals[valid_inds].real
         valid_eigvecs = eigvecs[:, valid_inds]
+        if len(valid_eigvals) == 0:
+            logger.warn(eom, "No valid eigenvalues found in specified energy window.")
+            break
         # get the eigenvectors corresponding to the max and min eigenvalues
 
         # update u_singles and u_doubles and to the trial vectors
@@ -151,7 +157,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, ngl_pts=8, koopmans=False, guess=No
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    return eigvals, u_vec
+    return valid_eigvals, u_vec
 
 def QR(u):
     """
