@@ -200,6 +200,26 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
+        else:
+            if iter > 0: # and len(u_vec) <= eom.max_ntrial:
+                # eigvals might contain nan
+                max_valid_ind = np.argmax(valid_eigvals.real)
+                min_valid_ind = np.argmin(valid_eigvals.real)
+                max_ind = np.where(eigvals.real == valid_eigvals[max_valid_ind])[0][0]
+                min_ind = np.where(eigvals.real == valid_eigvals[min_valid_ind])[0][0]
+                max_eigval = eigvals[max_ind]
+                min_eigval = eigvals[min_ind]
+                max_eigvec = u_vec[max_valid_ind]
+                min_eigvec = u_vec[min_valid_ind]
+                # add more trial u vectors based on the max and min eigenvectors
+                #u_vec.append(np.random.rand(size)-0.5)
+                #u_vec.append(np.random.rand(size)-0.5)
+                u_vec.append((Hu[max_ind] - max_eigval * max_eigvec)/(max_eigval - diag + 1e-10))
+                if max_ind == min_ind:
+                    u_vec.append(np.random.rand(size)-0.5)
+                else:
+                    u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
+                logger.debug(eom, "     # trial u vec = %d", len(u_vec))
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
