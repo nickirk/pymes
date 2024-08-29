@@ -113,6 +113,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
+                logger.debug(eom, "  worker %d processing l = %d", e, l)
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
