@@ -65,17 +65,24 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     z = e_c + e_r * np.exp(1j * theta)
 
     def prune(u_, max_iter=eom.ls_max_iter):
+        from joblib import Parallel, delayed
+
         Q_ = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
 
-        for e in range(len(z)):
+        def process_element(e):
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
-
                 Q_[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
+            return Q_
+
+        results = Parallel(n_jobs=-1)(delayed(process_element)(e) for e in range(len(z)))
+        for result in results:
+            for l in range(len(u_)):
+                Q_[l] += result[l]
+    
         u_ = Q_
         return u_
-
     # start iteratons
     e_norm_prev = 1e10
     num_eigs_prev = 0
