@@ -70,19 +70,19 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         Q_ = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
 
         def process_element(e):
+            Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
-                Q_[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
-            return Q_
+                Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
+            return Q_loc
 
         results = Parallel(n_jobs=-1)(delayed(process_element)(e) for e in range(len(z)))
         for result in results:
             for l in range(len(u_)):
                 Q_[l] += result[l]
     
-        u_ = Q_
-        return u_
+        return Q_
     # start iteratons
     e_norm_prev = 1e10
     num_eigs_prev = 0
@@ -167,10 +167,6 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         e_norm_prev = e_norm
 
 
-    logger.info(eom, "All eigenvalues:" )
-    logger.info(eom, "  %s", eigvals)
-    logger.info(eom, "Valid eigenvalues:" )
-    logger.info(eom, "  %s", valid_eigvals[sort_inds][:eom.nroots])
     time_end = time.time()
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
