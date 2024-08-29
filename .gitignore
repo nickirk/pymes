@@ -3,4 +3,7 @@ pymes/lib/ctf/*
 *.dat
 ctf
 pymes.egg-info
-build
+data
+figures
+.vscode
+fcidump*

@@ -8,7 +8,7 @@ from pymes.solver import feast_eom_rccsd
 
 
 def driver():
-    basis = '6311g**'
+    basis = 'cc-pvdz'
     mol = gto.Mole(
         atom = 'O 0.0000	0.0000	0.1185; H 0.0000	0.7555	-0.4739; H 0.0000 -0.7555 -0.4739',
         basis = basis,
@@ -28,29 +28,31 @@ def driver():
     mycc.kernel()
     #mycc.max_memory = 12000
     mycc.incore_complete = True
-    e, _ = mycc.eomee_ccsd_singlet(nroots=30)
-    #e, _ = mycc.eeccsd(nroots=28)
-    #print(e)
-    np.save("eom_ccsd_pyscf_all.npy", e)
+    e, _ = mycc.eomee_ccsd_singlet(nroots=28)
+    ##e, _ = mycc.eeccsd(nroots=28)
+    ##print(e)
+    #e = np.load("eom_ccsd_pyscf_all.npy")
 
     # EOM-EE-CCSD calculation
     eom = feast_eom_rccsd.FEAST_EOMEESinglet(mycc)
     logger.verbose = 5 
-    eom.max_cycle = 25
+    eom.max_cycle = 100
     eom.ls_max_iter = 2
     eom.conv_tol = 1e-7
     eom.max_ntrial = 7
+    eom.verbose = 5
+    eom.nroots = 7
 
-    emin = 19.68
-    emax = 19.69
-    de = 0.01
+    emin = 1.1
+    emax = 1.19
+    de = 0.1
     energies = []
     r1 = []
     r2 = []
     for emin_ in np.arange(emin, emax, de):
         print("emin = ", emin_, "emax = ", emin_+de)
     
-        e_feast, u_vecs = eom.kernel(nroots=3,  emin=emin_, emax=emin_+de)
+        e_feast, u_vecs = eom.kernel(nroots=3,  emin=emin_, emax=emin_+de, ngl_pts=8)
         for u in u_vecs:
             r1_, r2_ = eom.vector_to_amplitudes(u)
             r1.append(r1_)

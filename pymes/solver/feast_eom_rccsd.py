@@ -64,25 +64,41 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     theta = -np.pi / 2 * (x - 1)
     z = e_c + e_r * np.exp(1j * theta)
 
+    def prune(u_, max_iter=eom.ls_max_iter):
+        Q_ = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
+
+        for e in range(len(z)):
+            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
+            for l in range(len(u_)):
+                Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
+
+                Q_[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
+        u_ = Q_
+        return u_
+
     # start iteratons
     e_norm_prev = 1e10
+    num_eigs_prev = 0
+    num_eigs = 0
     for iter in range(eom.max_cycle):
 
         ntrial = len(u_vec)
 
-        u_vec = QR(u_vec)
-
-        Q = [np.zeros(size, dtype=complex) for _ in range(ntrial)]
-
-        #u_vec = QR(u_vec)    
-        # solve for the linear system (z-H)Q = Y at z = z_e
         #u_vec = QR(u_vec)
-        for e in range(len(z)):
-            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
-            for l in range(ntrial):
-                Qe = eom._gcrotmk(z[e], b=u_vec[l], diag=diag, precond=precond)
 
-                Q[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe)
+        if iter == 0 or num_eigs <= num_eigs_prev:
+            logger.info(eom, "Pruning all the trial vectors...")
+            Q = prune(u_vec, max_iter=eom.ls_max_iter*2)
+        else:
+            Q = u_vec
+            # randomly choose a vec in u_vec to prune while keeping other vectors unchanged
+            #rand_ind = np.random.randint(0, len(u_vec))
+            #Q = prune([u_vec[rand_ind]])
+            #u_vec[rand_ind] = Q[0]
+            #Q = u_vec
+
+        Q = QR(Q)
+        
         
         # compute the projected Hamiltonian
         H_proj = np.zeros((ntrial, ntrial), dtype=complex)
@@ -99,10 +115,15 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
         eigvals, eigvecs = eig(H_proj, B)
+        # argsort the eigenvalues in ascending order 
+        all_sort_inds = np.argsort(eigvals.real)
         # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
         valid_inds = np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r)
         valid_eigvals = eigvals[valid_inds].real
         valid_eigvecs = eigvecs[:, valid_inds]
+        num_eigs_prev = num_eigs
+        num_eigs = len(valid_eigvals)
+
         if len(valid_eigvals) == 0:
             logger.warn(eom, "No valid eigenvalues found in specified energy window.")
             break
@@ -115,34 +136,25 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
                 u_vec[l] += np.real(valid_eigvecs[i, l] * Q[i])
         
         # check convergence
-        e_norm = np.linalg.norm(valid_eigvals)
+        sort_inds = np.argsort(valid_eigvals)
+        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
         logger.debug(eom, "Iter = %d, all eigenvalues:", iter)
-        logger.debug(eom, "%s", eigvals)
+        logger.debug(eom, "%s", eigvals[all_sort_inds])
         logger.debug(eom, "Valid eigenvalues:" )
-        logger.debug(eom, "%s", valid_eigvals)
+        logger.debug(eom, "%s", valid_eigvals[sort_inds])
         logger.info(eom, "cycle = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
                     e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
         else:
-            max_valid_ind = np.argmax(valid_eigvals.real)
-            min_valid_ind = np.argmin(valid_eigvals.real)
-            max_ind = np.where(eigvals.real == valid_eigvals[max_valid_ind])[0][0]
-            min_ind = np.where(eigvals.real == valid_eigvals[min_valid_ind])[0][0]
-            max_eigval = eigvals[max_ind]
-            min_eigval = eigvals[min_ind]
-            max_eigvec = u_vec[max_valid_ind]
-            min_eigvec = u_vec[min_valid_ind]
-            # add more trial u vectors based on the max and min eigenvectors
-            #u_vec.append(np.random.rand(size)-0.5)
-            #u_vec.append(np.random.rand(size)-0.5)
-            u_vec.append((Hu[max_ind] - max_eigval * max_eigvec)/(max_eigval - diag + 1e-10))
-            if max_ind == min_ind:
-                u_vec.append(np.random.rand(size)-0.5)
-            else:
-                u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
-            logger.debug(eom, "     # trial u vec = %d", len(u_vec))
+            u_new = []
+            for ir in range(2):
+                u_rd = np.random.rand(size)-0.5
+                u_rd = u_rd/np.linalg.norm(u_rd)
+                u_new.append(u_rd)
+            u_new = prune(u_new)
+            u_vec = u_vec + u_new
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
@@ -151,7 +163,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     logger.info(eom, "All eigenvalues:" )
     logger.info(eom, "  %s", eigvals)
     logger.info(eom, "Valid eigenvalues:" )
-    logger.info(eom, "  %s", np.sort(valid_eigvals))
+    logger.info(eom, "  %s", valid_eigvals[sort_inds][:eom.nroots])
     time_end = time.time()
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
@@ -194,7 +206,7 @@ class FEAST_EOMEESinglet(EOMEE):
             guess.append(g)
         return guess
 
-    def _gcrotmk(self, ze, b, x0=None, diag=None, precond=None, imds=None, 
+    def _gcrotmk(self, ze, b, max_iter=None, x0=None, diag=None, precond=None, imds=None, 
                  phase=None, is_rt=False, dt=None):
         from scipy.sparse.linalg import LinearOperator, gcrotmk
         from scipy.sparse import diags
@@ -209,6 +221,9 @@ class FEAST_EOMEESinglet(EOMEE):
         if imds is None:
             self._cc.t2 = self._cc.t2.real
             imds = self.make_imds()
+        
+        if max_iter is None:
+            max_iter = self.ls_max_iter
 
         def _matvec(Qe):
             """
@@ -232,9 +247,9 @@ class FEAST_EOMEESinglet(EOMEE):
         combined_diag = 1./(ze-diag+0.01)
         M = diags(combined_diag, offsets=0)
 
-        Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=self.ls_max_iter, tol=self.ls_conv_tol)
+        Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=max_iter, tol=self.ls_conv_tol)
         if exit_code != 0:
-            logger.warn(self, "Linear solver not converged after max %d cycles.", exit_code)
+            logger.debug(self, "Linear solver not converged after max %d cycles.", exit_code)
         return Qe_vec
 
 
