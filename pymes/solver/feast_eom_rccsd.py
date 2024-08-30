@@ -113,7 +113,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
-                logger.debug(eom, "  worker %d processing l = %d", e, l)
+                #logger.debug(eom, "  worker %d processing l = %d", e, l)
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
@@ -176,7 +176,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         u_vec = [np.zeros(size) for _ in range(len(eigvals))]
         for l in range(len(eigvals)):
             for i in range(len(eigvals)):
-                u_vec[l] += np.real(valid_eigvecs[i, l] * Q[i])
+                u_vec[l] += np.real(eigvecs[i, l] * Q[i])
         
         max_comp = np.max(np.abs(np.asarray(u_vec)), axis=1)
         max_comp_loc = np.argmax(np.abs(np.asarray(u_vec)), axis=1)
