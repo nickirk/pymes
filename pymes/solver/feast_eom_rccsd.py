@@ -88,13 +88,14 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     e_norm_prev = 1e10
     num_eigs_prev = 0
     num_eigs = 0
+    subspace_unstable = True
     for iter in range(eom.max_cycle):
 
         ntrial = len(u_vec)
 
         #u_vec = QR(u_vec)
 
-        if iter == 0 or num_eigs <= num_eigs_prev:
+        if iter == 0 or not subspace_unstable:
             logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
             Q = prune(u_vec, max_iter=eom.ls_max_iter*5)
         else:
@@ -156,10 +157,11 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
         else:
-            if num_eigs != num_eigs_prev and len(u_vec) < 2*num_eigs:
+            if num_eigs == len(u_vec):
+                subspace_unstable = True
                 #u_vec = [u_vec[i] for i in valid_inds]
                 u_new = []
-                new_u_num = max(2, int(len(u_vec)/2))
+                new_u_num = 2 #max(2, int(len(u_vec)/2))
                 logger.info(eom, "  Subpace unstable, adding and pruning %d random trial vectors.", new_u_num)
                 for ir in range(new_u_num):
                     u_rd = np.random.rand(size)-0.5
@@ -167,6 +169,8 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
                     u_new.append(u_rd)
                 u_new = prune(u_new)
                 u_vec = u_vec + u_new
+            else:
+                subspace_unstable = False
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
@@ -175,6 +179,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     time_end = time.time()
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
+    logger.info(eom, "Valid eigenvalues: %s", valid_eigvals)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
     return np.sort(valid_eigvals), u_vec
