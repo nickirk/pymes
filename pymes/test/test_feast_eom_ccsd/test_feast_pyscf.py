@@ -8,7 +8,8 @@ from pymes.solver import feast_eom_rccsd
 
 
 def driver():
-    basis = 'cc-pvdz'
+    #basis = '6311g**'
+    basis = 'ccpvtz'
     mol = gto.Mole(
         atom = 'O 0.0000	0.0000	0.1185; H 0.0000	0.7555	-0.4739; H 0.0000 -0.7555 -0.4739',
         basis = basis,
