@@ -73,7 +73,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
-                logger.debug(eom, "  worker %d processing l = %d", e, l)
+                #logger.debug(eom, "  worker %d processing l = %d", e, l)
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
@@ -95,8 +95,8 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         #u_vec = QR(u_vec)
 
         if iter == 0 or num_eigs <= num_eigs_prev:
-            logger.info(eom, "Pruning all the trial vectors...")
-            Q = prune(u_vec, max_iter=eom.ls_max_iter*2)
+            logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
+            Q = prune(u_vec, max_iter=eom.ls_max_iter*5)
         else:
             Q = u_vec
             # randomly choose a vec in u_vec to prune while keeping other vectors unchanged
@@ -126,7 +126,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         # argsort the eigenvalues in ascending order 
         all_sort_inds = np.argsort(eigvals.real)
         # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
-        valid_inds = np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r)
+        valid_inds = np.where(np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r))[0]
         valid_eigvals = eigvals[valid_inds].real
         valid_eigvecs = eigvecs[:, valid_inds]
         num_eigs_prev = num_eigs
@@ -138,10 +138,10 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         # get the eigenvectors corresponding to the max and min eigenvalues
 
         # update u_singles and u_doubles and to the trial vectors
-        u_vec = [np.zeros(size) for _ in range(len(valid_eigvals))]
-        for l in range(len(valid_eigvals)):
+        u_vec = [np.zeros(size) for _ in range(len(eigvals))]
+        for l in range(len(eigvals)):
             for i in range(len(eigvals)):
-                u_vec[l] += np.real(valid_eigvecs[i, l] * Q[i])
+                u_vec[l] += np.real(eigvecs[i, l] * Q[i])
         
         # check convergence
         sort_inds = np.argsort(valid_eigvals)
@@ -150,19 +150,23 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
         logger.debug(eom, "%s", eigvals[all_sort_inds])
         logger.debug(eom, "Valid eigenvalues:" )
         logger.debug(eom, "%s", valid_eigvals[sort_inds])
-        logger.info(eom, "cycle = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
-                    e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
+        logger.info(eom, "cycle = %d, #trial = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
+                    len(u_vec), e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
         else:
-            u_new = []
-            for ir in range(2):
-                u_rd = np.random.rand(size)-0.5
-                u_rd = u_rd/np.linalg.norm(u_rd)
-                u_new.append(u_rd)
-            u_new = prune(u_new)
-            u_vec = u_vec + u_new
+            if num_eigs != num_eigs_prev and len(u_vec) < 2*num_eigs:
+                #u_vec = [u_vec[i] for i in valid_inds]
+                u_new = []
+                new_u_num = max(2, int(len(u_vec)/2))
+                logger.info(eom, "  Subpace unstable, adding and pruning %d random trial vectors.", new_u_num)
+                for ir in range(new_u_num):
+                    u_rd = np.random.rand(size)-0.5
+                    u_rd = u_rd/np.linalg.norm(u_rd)
+                    u_new.append(u_rd)
+                u_new = prune(u_new)
+                u_vec = u_vec + u_new
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
