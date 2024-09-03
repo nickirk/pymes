@@ -135,7 +135,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
 
         if len(valid_eigvals) == 0:
             logger.warn(eom, "No valid eigenvalues found in specified energy window.")
-            break
+            return np.array([]), np.array([])
         # get the eigenvectors corresponding to the max and min eigenvalues
 
         # update u_singles and u_doubles and to the trial vectors
@@ -182,7 +182,10 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     logger.info(eom, "Valid eigenvalues: %s", valid_eigvals)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    return np.sort(valid_eigvals), u_vec
+    valid_u_vec = [u_vec[u] for u in valid_inds]
+    valid_u_vec = [valid_u_vec[u] for u in sort_inds]
+
+    return valid_eigvals[sort_inds], valid_u_vec
 
 def QR(u):
     """
