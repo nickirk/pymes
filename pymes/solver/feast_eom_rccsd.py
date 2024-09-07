@@ -44,8 +44,10 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     logger.info(eom, "Initialising u tensors...")
     if guess is not None:
         user_guess = True
+        e_guess = []
         for g in guess:
             assert g.size == size
+            e_guess.append(np.dot(g, matvec([g])[0]))
     else:
         user_guess = False
         guess = eom.get_init_guess(nroots, koopmans, diag)
@@ -62,7 +64,13 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     # gauss-legrendre quadrature
     x, w = get_gauss_legendre_quadrature(ngl_pts) 
     theta = -np.pi / 2 * (x - 1)
+    if user_guess:
+        e_c = e_guess[0]
     z = e_c + e_r * np.exp(1j * theta)
+    z0 = e_c - e_r*1.01 
+    zn = e_c + e_r*1.01 
+    z[0] = z0 + 1j*1e-3
+    z[-1] = zn + 1j*1e-3
 
     def prune(u_, max_iter=eom.ls_max_iter):
         from joblib import Parallel, delayed
@@ -71,10 +79,16 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
 
         def process_element(e):
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
-            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
+            if np.abs(z[e].imag) < 1e-3:
+                ze = z[e]
+                ze += 1j* (np.sign(z[e].imag) * 1e-3)
+            else:
+                ze = z[e]
+            #ze = z[e]
+            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, ze, theta[e], w[e])
             for l in range(len(u_)):
                 #logger.debug(eom, "  worker %d processing l = %d", e, l)
-                Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
+                Qe_ = eom._gcrotmk(ze, b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
 
@@ -93,7 +107,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
 
         ntrial = len(u_vec)
 
-        #u_vec = QR(u_vec)
+        u_vec = QR(u_vec)
 
         if iter == 0 or not subspace_unstable:
             logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
@@ -118,19 +132,19 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             for j in range(i):
                 H_proj[j, i] = np.dot(np.conj(Q[j]), Hu[i])
                 H_proj[i, j] = np.dot(np.conj(Q[i]), Hu[j]) 
-                B[i, j] = np.dot(np.conj(Q[i]), Q[j])
-                B[j, i] = B[i, j]
+                #B[i, j] = np.dot(np.conj(Q[i]), Q[j])
+                #B[j, i] = B[i, j]
             H_proj[i, i] = np.dot(np.conj(Q[i]), Hu[i])
-            B[i, i] = np.dot(np.conj(Q[i]), Q[i])
+            #B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
-        eigvals, eigvecs = eig(H_proj, B)
+        eigvals, eigvecs = eig(H_proj)
         # argsort the eigenvalues in ascending order 
         all_sort_inds = np.argsort(eigvals.real)
         # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
         valid_inds = np.where(np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r))[0]
         valid_eigvals = eigvals[valid_inds].real
-        valid_eigvecs = eigvecs[:, valid_inds]
-        num_eigs_prev = num_eigs
+        #valid_eigvecs = eigvecs[:, valid_inds]
+        #num_eigs_prev = num_eigs
         num_eigs = len(valid_eigvals)
 
         if len(valid_eigvals) == 0:
@@ -260,7 +274,7 @@ class FEAST_EOMEESinglet(EOMEE):
         # construct a scipy sparse matrix M for the preconditioner using the diag_ai and diag_abij
         if diag is None:
             diag = self.get_diag()
-        combined_diag = 1./(ze-diag+0.01)
+        combined_diag = 1./(ze-diag)
         M = diags(combined_diag, offsets=0)
 
         Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=max_iter, tol=self.ls_conv_tol)
