@@ -45,9 +45,13 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     if guess is not None:
         user_guess = True
         e_guess = []
+        target_u_max_loc = []
         for g in guess:
             assert g.size == size
+            target_u_max_loc.append(np.argmax(np.abs(g)))
             e_guess.append(np.dot(g, matvec([g])[0]))
+        if len(guess) < nroots:
+            guess = guess + eom.get_init_guess(nroots-len(guess), koopmans, diag)
     else:
         user_guess = False
         guess = eom.get_init_guess(nroots, koopmans, diag)
@@ -69,8 +73,8 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     z = e_c + e_r * np.exp(1j * theta)
     z0 = e_c - e_r*1.01 
     zn = e_c + e_r*1.01 
-    z[0] = z0 + 1j*1e-3
-    z[-1] = zn + 1j*1e-3
+    #z[0] = z0 + 1j*1e-3
+    #z[-1] = zn + 1j*1e-3
 
     def prune(u_, max_iter=eom.ls_max_iter):
         from joblib import Parallel, delayed
@@ -102,18 +106,24 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     e_norm_prev = 1e10
     num_eigs_prev = 0
     num_eigs = 0
-    subspace_unstable = True
+    subspace_unstable = True 
     for iter in range(eom.max_cycle):
 
         ntrial = len(u_vec)
 
-        u_vec = QR(u_vec)
+        #u_vec = QR(u_vec)
+            # u_vec are those vectors that are within the energy window
+            #u_vec = [u_vec[u] for u in valid_inds]
+            #u_vec = target_u + eom.get_init_guess(nroots-1, koopmans, diag)
 
-        if iter == 0 or not subspace_unstable:
+        if not subspace_unstable:
             logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
             Q = prune(u_vec, max_iter=eom.ls_max_iter*5)
         else:
-            Q = u_vec
+            if user_guess:
+                Q = prune(u_vec, max_iter=eom.ls_max_iter)
+            else:
+                Q = u_vec
             # randomly choose a vec in u_vec to prune while keeping other vectors unchanged
             #rand_ind = np.random.randint(0, len(u_vec))
             #Q = prune([u_vec[rand_ind]])
@@ -158,19 +168,43 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             for i in range(len(eigvals)):
                 u_vec[l] += np.real(eigvecs[i, l] * Q[i])
         
+        if user_guess:
+            # locate the target u vec with the location of the max abs element
+            # check each u vec in u_vec, if the max abs element is the same as the target u vec, then keep it
+            for ind, u in enumerate(u_vec):
+                if np.argmax(np.abs(u)) in target_u_max_loc:
+                    target_ind = ind
+                    target_u = [u]
+            # recompute e_guess
+            #e_guess = [eigvals[target_ind]]
+            #for g in target_u:
+            #    e_guess.append(np.dot(g, matvec([g])[0]))
+            if len(valid_eigvals) == len(u_vec):
+                subspace_unstable = True
+                e_c = eigvals[target_ind].real
+                e_r = min(np.max(np.abs(eigvals[target_ind].real - eigvals)), e_r) * 0.9
+            else:
+                subspace_unstable = False
+            z = e_c + e_r * np.exp(1j * theta)
+            log.info("recentering, e_c = %s, e_r = %s", e_c, e_r)
+
         # check convergence
+        if user_guess:
+            e_norm = np.linalg.norm(eigvals[target_ind])
+        else:
+            e_norm = np.linalg.norm(valid_eigvals[sort_inds])
         sort_inds = np.argsort(valid_eigvals)
-        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
+        valid_eigvals = valid_eigvals[sort_inds]
         logger.debug(eom, "Iter = %d, all eigenvalues:", iter)
         logger.debug(eom, "%s", eigvals[all_sort_inds])
         logger.debug(eom, "Valid eigenvalues:" )
-        logger.debug(eom, "%s", valid_eigvals[sort_inds])
+        logger.debug(eom, "%s", valid_eigvals)
         logger.info(eom, "cycle = %d, #trial = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
                     len(u_vec), e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
-        else:
+        elif not user_guess:
             if num_eigs == len(u_vec):
                 subspace_unstable = True
                 #u_vec = [u_vec[i] for i in valid_inds]
@@ -186,6 +220,7 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             else:
                 subspace_unstable = False
         
+        
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
 
@@ -194,6 +229,8 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
     logger.info(eom, "Valid eigenvalues: %s", valid_eigvals)
+    if user_guess:
+        logger.info(eom, "Target eigenvalues: %s", eigvals[target_ind])
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
     valid_u_vec = [u_vec[u] for u in valid_inds]
@@ -274,7 +311,9 @@ class FEAST_EOMEESinglet(EOMEE):
         # construct a scipy sparse matrix M for the preconditioner using the diag_ai and diag_abij
         if diag is None:
             diag = self.get_diag()
-        combined_diag = 1./(ze-diag)
+        zero_diag_inds = np.abs(ze - diag) < 1e-5
+        combined_diag = 1./(ze-diag+0.001)
+        combined_diag[zero_diag_inds] = 1
         M = diags(combined_diag, offsets=0)
 
         Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=max_iter, tol=self.ls_conv_tol)
