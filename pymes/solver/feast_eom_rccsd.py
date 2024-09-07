@@ -141,7 +141,10 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
 
         ntrial = len(u_vec)
 
-        u_vec = QR(u_vec)
+        #u_vec = QR(u_vec)
+            # u_vec are those vectors that are within the energy window
+            #u_vec = [u_vec[u] for u in valid_inds]
+            #u_vec = target_u + eom.get_init_guess(nroots-1, koopmans, diag)
 
 
         Q = prune(u_vec, max_iter=eom.ls_max_iter)
@@ -229,6 +232,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
                 else:
                     u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
                 logger.debug(eom, "     # trial u vec = %d", len(u_vec))
+        
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
