@@ -179,10 +179,10 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             #e_guess = [eigvals[target_ind]]
             #for g in target_u:
             #    e_guess.append(np.dot(g, matvec([g])[0]))
+            e_c = eigvals[target_ind].real
+            e_r = min(np.max(np.abs(eigvals[target_ind].real - eigvals)), e_r) * 0.9
             if len(valid_eigvals) == len(u_vec):
                 subspace_unstable = True
-                e_c = eigvals[target_ind].real
-                e_r = min(np.max(np.abs(eigvals[target_ind].real - eigvals)), e_r) * 0.9
             else:
                 subspace_unstable = False
             z = e_c + e_r * np.exp(1j * theta)
