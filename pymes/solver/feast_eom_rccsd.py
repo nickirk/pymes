@@ -27,11 +27,30 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     e_r = (emax - emin)/2
     e_c = emax - e_r
 
-    logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
-    logger.info(eom, 'Number of initial guesses = %d', nroots)
-    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
-    logger.info(eom, 'e_c = %s', e_c)
-    logger.info(eom, 'e_r = %s', e_r)
+
+    if emin is not None and emax is not None:
+        e_r = (emax - emin)/2
+        e_c = emax - e_r
+    elif e_c is not None:
+        user_guess = True
+        e_guess = e_c
+    else:
+        raise ValueError("e_c or emin and emax must be specified.")
+
+    if e_r is None:
+        e_r = 1    
+
+    if emin is not None and emax is not None:
+        e_r = (emax - emin)/2
+        e_c = emax - e_r
+    elif e_c is not None:
+        user_guess = True
+        e_guess = e_c
+    else:
+        raise ValueError("e_c or emin and emax must be specified.")
+
+    if e_r is None:
+        e_r = 1    
 
     if emin is not None and emax is not None:
         e_r = (emax - emin)/2
@@ -66,6 +85,10 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
+    if e_guess_init is not None:
+        user_guess = True
+        e_guess = [e_guess_init]
+
     if guess is not None:
         user_guess = True
         e_guess = []
@@ -161,12 +184,12 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             for j in range(i):
                 H_proj[j, i] = np.dot(np.conj(Q[j]), Hu[i])
                 H_proj[i, j] = np.dot(np.conj(Q[i]), Hu[j]) 
-                #B[i, j] = np.dot(np.conj(Q[i]), Q[j])
-                #B[j, i] = B[i, j]
+                B[i, j] = np.dot(np.conj(Q[i]), Q[j])
+                B[j, i] = B[i, j]
             H_proj[i, i] = np.dot(np.conj(Q[i]), Hu[i])
-            #B[i, i] = np.dot(np.conj(Q[i]), Q[i])
+            B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
-        eigvals, eigvecs = eig(H_proj)
+        eigvals, eigvecs = eig(H_proj, B)
         # argsort the eigenvalues in ascending order 
         all_sort_inds = np.argsort(eigvals.real)
         eigvals = eigvals[all_sort_inds]
@@ -247,8 +270,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     logger.info(eom, "      %s eV", valid_eigvals*27.2114)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    valid_u_vec = [u_vec[u] for u in valid_inds]
-    valid_u_vec = [valid_u_vec[u] for u in sort_inds]
+    valid_u_vec = [u_vec[u] for u in all_sort_inds]
 
     return eigvals, valid_u_vec
 
