@@ -24,8 +24,14 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         eom.check_sanity()
     eom.dump_flags()
 
-    e_r = (emax - emin)/2
-    e_c = emax - e_r
+    if emin is not None and emax is not None:
+        e_r = (emax - emin)/2
+        e_c = emax - e_r
+    elif e_c is not None:
+        user_guess = True
+        e_guess = e_c
+    else:
+        raise ValueError("e_c or emin and emax must be specified.")
 
 
     if emin is not None and emax is not None:
@@ -85,9 +91,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
-    if e_guess_init is not None:
-        user_guess = True
-        e_guess = [e_guess_init]
 
     if guess is not None:
         user_guess = True
@@ -119,8 +122,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     # gauss-legrendre quadrature
     x, w = get_gauss_legendre_quadrature(ngl_pts) 
     theta = -np.pi / 2 * (x - 1)
-    if user_guess:
-        e_c = e_guess[0]
     z = e_c + e_r * np.exp(1j * theta)
     print_title("FEAST-EOM-CCSD Solver")
     logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
@@ -136,16 +137,16 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
 
         def process_element(e):
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
-            if np.abs(z[e].imag) < 1e-3:
-                ze = z[e]
-                ze += 1j* (np.sign(z[e].imag) * 1e-3)
-            else:
-                ze = z[e]
+            #if np.abs(z[e].imag) < 1e-3:
+            #    ze = z[e]
+            #    ze += 1j* (np.sign(z[e].imag) * 1e-3)
+            #else:
+            #    ze = z[e]
             #ze = z[e]
-            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, ze, theta[e], w[e])
+            logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
                 #logger.debug(eom, "  worker %d processing l = %d", e, l)
-                Qe_ = eom._gcrotmk(ze, b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
+                Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
 
@@ -184,12 +185,12 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             for j in range(i):
                 H_proj[j, i] = np.dot(np.conj(Q[j]), Hu[i])
                 H_proj[i, j] = np.dot(np.conj(Q[i]), Hu[j]) 
-                B[i, j] = np.dot(np.conj(Q[i]), Q[j])
-                B[j, i] = B[i, j]
+                #B[i, j] = np.dot(np.conj(Q[i]), Q[j])
+                #B[j, i] = B[i, j]
             H_proj[i, i] = np.dot(np.conj(Q[i]), Hu[i])
-            B[i, i] = np.dot(np.conj(Q[i]), Q[i])
+            #B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
-        eigvals, eigvecs = eig(H_proj, B)
+        eigvals, eigvecs = eig(H_proj)
         # argsort the eigenvalues in ascending order 
         all_sort_inds = np.argsort(eigvals.real)
         eigvals = eigvals[all_sort_inds]

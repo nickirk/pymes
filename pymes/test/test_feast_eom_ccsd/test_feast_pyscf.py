@@ -54,7 +54,7 @@ def driver():
     #guess = mycc.amplitudes_to_vector(r1, r2)
     #print(" loc = ", np.argmax(np.abs(guess)))
     de = 3
-    e_feast, _ = eom.kernel(nroots=3, ngl_pts=8, e_c=1.40, e_r=de, e_brd=1., n_aux=1)
+    e_feast, _ = eom.kernel(nroots=2, ngl_pts=8, e_c=19.66, e_r=de, e_brd=1.01)
     print("feast energies: ", e_feast)
     assert np.isclose(e_feast[0].real, 19.68806362) 
 
