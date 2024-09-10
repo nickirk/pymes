@@ -17,7 +17,7 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
-def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=None, left=False, eris=None, imds=None, **kwargs):
+def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=None, e_guess_init=None, left=False, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
@@ -27,11 +27,6 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     e_r = (emax - emin)/2
     e_c = emax - e_r
 
-    logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
-    logger.info(eom, 'Number of initial guesses = %d', nroots)
-    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
-    logger.info(eom, 'e_c = %s', e_c)
-    logger.info(eom, 'e_r = %s', e_r)
 
     if imds is None:
         imds = eom.make_imds(eris)
@@ -42,18 +37,27 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
+    if e_guess_init is not None:
+        user_guess = True
+        e_guess = [e_guess_init]
+
     if guess is not None:
         user_guess = True
         e_guess = []
         target_u_max_loc = []
         for g in guess:
             assert g.size == size
+            #g = matvec([g])[0]
+            #g /= np.linalg.norm(g)
             target_u_max_loc.append(np.argmax(np.abs(g)))
-            e_guess.append(np.dot(g, matvec([g])[0]))
+            if e_guess_init is not None:
+                e_guess.append(e_guess_init)
+            else:
+                e_guess.append(np.dot(g, matvec([g])[0]))
         if len(guess) < nroots:
             guess = guess + eom.get_init_guess(nroots-len(guess), koopmans, diag)
     else:
-        user_guess = False
+        #user_guess = False
         guess = eom.get_init_guess(nroots, koopmans, diag)
 
     def precond(r, e0, x0):
@@ -62,7 +66,6 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     # GHF or customized RHF/UHF may be of complex type
     real_system = (eom._cc._scf.mo_coeff[0].dtype == np.double)
 
-    print_title("FEAST-EOM-CCSD Solver")
     time_init = time.time()
     u_vec = guess.copy()
     # gauss-legrendre quadrature
@@ -71,10 +74,12 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     if user_guess:
         e_c = e_guess[0]
     z = e_c + e_r * np.exp(1j * theta)
-    z0 = e_c - e_r*1.01 
-    zn = e_c + e_r*1.01 
-    #z[0] = z0 + 1j*1e-3
-    #z[-1] = zn + 1j*1e-3
+    print_title("FEAST-EOM-CCSD Solver")
+    logger.info(eom, 'FEAST EOM-CCSD singlet kernel')
+    logger.info(eom, 'Number of initial guesses = %d', nroots)
+    logger.info(eom, 'Number of quadrature points = %d', ngl_pts)
+    logger.info(eom, 'e_c = %s', e_c)
+    logger.info(eom, 'e_r = %s', e_r)
 
     def prune(u_, max_iter=eom.ls_max_iter):
         from joblib import Parallel, delayed
@@ -116,14 +121,12 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             #u_vec = [u_vec[u] for u in valid_inds]
             #u_vec = target_u + eom.get_init_guess(nroots-1, koopmans, diag)
 
-        if not subspace_unstable:
-            logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
-            Q = prune(u_vec, max_iter=eom.ls_max_iter*5)
+        if user_guess:
+            Q = prune(u_vec, max_iter=eom.ls_max_iter)
         else:
-            if user_guess:
-                Q = prune(u_vec, max_iter=eom.ls_max_iter)
-            else:
-                Q = u_vec
+            #logger.info(eom, "  Pruning all %d trial vectors", len(u_vec))
+            #Q = prune(u_vec, max_iter=eom.ls_max_iter*10)
+            Q = u_vec
             # randomly choose a vec in u_vec to prune while keeping other vectors unchanged
             #rand_ind = np.random.randint(0, len(u_vec))
             #Q = prune([u_vec[rand_ind]])
@@ -142,25 +145,28 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
             for j in range(i):
                 H_proj[j, i] = np.dot(np.conj(Q[j]), Hu[i])
                 H_proj[i, j] = np.dot(np.conj(Q[i]), Hu[j]) 
-                #B[i, j] = np.dot(np.conj(Q[i]), Q[j])
-                #B[j, i] = B[i, j]
+                B[i, j] = np.dot(np.conj(Q[i]), Q[j])
+                B[j, i] = B[i, j]
             H_proj[i, i] = np.dot(np.conj(Q[i]), Hu[i])
-            #B[i, i] = np.dot(np.conj(Q[i]), Q[i])
+            B[i, i] = np.dot(np.conj(Q[i]), Q[i])
         # solve the eigenvalue problem
-        eigvals, eigvecs = eig(H_proj)
+        eigvals, eigvecs = eig(H_proj, B)
         # argsort the eigenvalues in ascending order 
         all_sort_inds = np.argsort(eigvals.real)
+        eigvals = eigvals[all_sort_inds]
         # filter out the valid eigenvalues whose real values are within the range of [e_c - e_r, e_c + e_r]
         valid_inds = np.where(np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r))[0]
         valid_eigvals = eigvals[valid_inds].real
-        #valid_eigvecs = eigvecs[:, valid_inds]
-        #num_eigs_prev = num_eigs
         num_eigs = len(valid_eigvals)
 
         if len(valid_eigvals) == 0:
             logger.warn(eom, "No valid eigenvalues found in specified energy window.")
-            return np.array([]), np.array([])
-        # get the eigenvectors corresponding to the max and min eigenvalues
+            if user_guess:
+                logger.info(eom, "  adding %d random trial vectors.", nroots)
+                u_vec = [np.random.random(size) for i in range(nroots)]
+                e_r = 1
+            else:
+                return np.array([]), np.array([])
 
         # update u_singles and u_doubles and to the trial vectors
         u_vec = [np.zeros(size) for _ in range(len(eigvals))]
@@ -169,34 +175,21 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
                 u_vec[l] += np.real(eigvecs[i, l] * Q[i])
         
         if user_guess:
-            # locate the target u vec with the location of the max abs element
-            # check each u vec in u_vec, if the max abs element is the same as the target u vec, then keep it
-            for ind, u in enumerate(u_vec):
-                if np.argmax(np.abs(u)) in target_u_max_loc:
-                    target_ind = ind
-                    target_u = [u]
-            # recompute e_guess
-            #e_guess = [eigvals[target_ind]]
-            #for g in target_u:
-            #    e_guess.append(np.dot(g, matvec([g])[0]))
-            e_c = eigvals[target_ind].real
-            e_r = min(np.max(np.abs(eigvals[target_ind].real - eigvals)), e_r) * 0.9
-            if len(valid_eigvals) == len(u_vec):
-                subspace_unstable = True
-            else:
-                subspace_unstable = False
+            max_comp = np.max(np.abs(np.asarray(u_vec)), axis=1)
+            max_comp_loc = np.argmax(np.abs(np.asarray(u_vec)), axis=1)
+            e_r = np.max(np.abs(e_guess[0] - eigvals))
+                 
             z = e_c + e_r * np.exp(1j * theta)
-            log.info("recentering, e_c = %s, e_r = %s", e_c, e_r)
+            log.info("e_c = %s, e_r = %s", e_c, e_r)
+            logger.debug(eom, "max(abs(u_target)) = %s", max_comp[all_sort_inds])
+            logger.debug(eom, "argmax(abs(u_target)) = %s", max_comp_loc[all_sort_inds])
 
-        # check convergence
-        if user_guess:
-            e_norm = np.linalg.norm(eigvals[target_ind])
-        else:
-            e_norm = np.linalg.norm(valid_eigvals[sort_inds])
         sort_inds = np.argsort(valid_eigvals)
+        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
         valid_eigvals = valid_eigvals[sort_inds]
         logger.debug(eom, "Iter = %d, all eigenvalues:", iter)
-        logger.debug(eom, "%s", eigvals[all_sort_inds])
+        logger.debug(eom, "%s Ha", eigvals[all_sort_inds])
+        logger.debug(eom, "%s eV", eigvals[all_sort_inds].real*27.2114)
         logger.debug(eom, "Valid eigenvalues:" )
         logger.debug(eom, "%s", valid_eigvals)
         logger.info(eom, "cycle = %d, #trial = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
@@ -228,15 +221,13 @@ def feast(eom, nroots=1, emin=None, emax=None, ngl_pts=8, koopmans=False, guess=
     time_end = time.time()
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
-    logger.info(eom, "Valid eigenvalues: %s", valid_eigvals)
-    if user_guess:
-        logger.info(eom, "Target eigenvalues: %s", eigvals[target_ind])
+    logger.info(eom, "Eigenvalues: %s Ha", eigvals)
+    logger.info(eom, "Eigenvalues: %s eV", eigvals*27.2114)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    valid_u_vec = [u_vec[u] for u in valid_inds]
-    valid_u_vec = [valid_u_vec[u] for u in sort_inds]
+    valid_u_vec = [u_vec[u] for u in all_sort_inds]
 
-    return valid_eigvals[sort_inds], valid_u_vec
+    return eigvals, valid_u_vec
 
 def QR(u):
     """
