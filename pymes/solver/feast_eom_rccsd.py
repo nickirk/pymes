@@ -17,7 +17,7 @@ from pyscf import __config__
 from pymes.log import print_title, print_logging_info
 from pymes.solver.feast_eom_ccsd import get_gauss_legendre_quadrature
 
-def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_pts=8,  guess=None, left=False, koopmans=None, eris=None, imds=None, **kwargs):
+def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_pts=8,  n_aux=0, guess=None, left=False, koopmans=None, eris=None, imds=None, **kwargs):
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.Logger(eom.stdout, eom.verbose)
     if eom.verbose >= logger.WARN:
@@ -45,6 +45,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
+    #if n_aux is not None:
+    #    n_aux = 0
 
     if guess is not None:
         user_guess = True
@@ -63,7 +65,7 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             guess = guess + eom.get_init_guess(nroots-len(guess), koopmans, diag)
     else:
         #user_guess = False
-        guess = eom.get_init_guess(nroots, koopmans, diag)
+        guess = eom.get_init_guess(nroots+n_aux, koopmans, diag)
 
     def precond(r, e0, x0):
         return r/(e0-diag+1e-12)
@@ -176,7 +178,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         if user_guess:
             max_comp = np.max(np.abs(np.asarray(u_vec)), axis=1)
             max_comp_loc = np.argmax(np.abs(np.asarray(u_vec)), axis=1)
-            e_r = np.max(np.abs(e_c - eigvals)) * e_brd
+            #
+            e_r = np.sort(np.abs(e_c - eigvals))[::-1][n_aux] * e_brd
                  
             z = e_c + e_r * np.exp(1j * theta)
             log.info("e_c = %s, e_r = %s", e_c, e_r)
@@ -184,16 +187,13 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
             logger.debug(eom, "argmax(abs(u_target)) = %s", max_comp_loc[all_sort_inds])
 
         sort_inds = np.argsort(valid_eigvals)
-        e_norm = np.linalg.norm(eigvals[sort_inds])
+        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
         valid_eigvals = valid_eigvals[sort_inds]
-        logger.debug(eom, "Iter = %d, all eigenvalues:", iter)
-        logger.debug(eom, "%s Ha", eigvals[all_sort_inds])
-        logger.debug(eom, "%s eV", eigvals[all_sort_inds].real*27.2114)
-        logger.debug(eom, "Valid eigenvalues:" )
-        logger.debug(eom, "%s", valid_eigvals)
         logger.info(eom, "cycle = %d, #trial = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
-                    len(u_vec), e_norm, len(eigvals), np.abs(e_norm - e_norm_prev)) 
-        logger.info(eom, "eigvals: %s Ha", eigvals)
+                    len(u_vec), e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
+        logger.info(eom, "eigvals: %s Ha", eigvals[all_sort_inds])
+        logger.info(eom, "valid eigenvalues:" )
+        logger.info(eom, "%s", valid_eigvals)
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
