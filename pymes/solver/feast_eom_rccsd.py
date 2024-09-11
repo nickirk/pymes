@@ -91,6 +91,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     nroots = min(nroots, size)
     # create initial guesses
     logger.info(eom, "Initialising u tensors...")
+    #if n_aux is not None:
+    #    n_aux = 0
 
     if guess is not None:
         user_guess = True
