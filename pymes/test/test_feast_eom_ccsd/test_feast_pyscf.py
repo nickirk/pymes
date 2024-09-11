@@ -10,6 +10,7 @@ from pymes.solver import feast_eom_rccsd
 def driver():
     basis = '6311g**'
     #basis = 'aug-ccpvtz'
+    #basis = 'sto6g'
     mol = gto.Mole(
         atom = 'O 0.0000	0.0000	0.1185; H 0.0000	0.7555	-0.4739; H 0.0000 -0.7555 -0.4739',
         basis = basis,
@@ -39,7 +40,7 @@ def driver():
     # EOM-EE-CCSD calculation
     eom = feast_eom_rccsd.FEAST_EOMEESinglet(mycc)
     eom.max_cycle = 20
-    eom.ls_max_iter = 1
+    eom.ls_max_iter = 5
     eom.conv_tol = 1e-7
     eom.max_ntrial = 7
     #eom.verbose = 5
@@ -54,7 +55,7 @@ def driver():
     #guess = mycc.amplitudes_to_vector(r1, r2)
     #print(" loc = ", np.argmax(np.abs(guess)))
     de = 3
-    e_feast, _ = eom.kernel(nroots=2, ngl_pts=8, e_c=19.66, e_r=de, e_brd=1.01)
+    e_feast, _ = eom.kernel(nroots=3, ngl_pts=8, e_c=1.40, e_r=de, e_brd=1., n_aux=1)
     print("feast energies: ", e_feast)
     assert np.isclose(e_feast[0].real, 19.68806362) 
 
