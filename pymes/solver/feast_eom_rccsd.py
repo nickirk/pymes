@@ -273,7 +273,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     logger.info(eom, "      %s eV", valid_eigvals*27.2114)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    valid_u_vec = [u_vec[u] for u in all_sort_inds]
+    valid_u_vec = [u_vec[u] for u in valid_inds]
+    valid_u_vec = [valid_u_vec[u] for u in sort_inds]
 
     return eigvals, valid_u_vec
 
