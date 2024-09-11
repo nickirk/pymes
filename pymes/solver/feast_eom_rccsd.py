@@ -163,6 +163,9 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         valid_inds = np.where(np.logical_and(np.real(eigvals) > e_c - e_r, np.real(eigvals) < e_c + e_r))[0]
         valid_eigvals = eigvals[valid_inds].real
         num_eigs = len(valid_eigvals)
+        sort_inds = np.argsort(valid_eigvals)
+        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
+        valid_eigvals = valid_eigvals[sort_inds]
 
         if len(valid_eigvals) == 0:
             if not user_guess:
@@ -183,17 +186,19 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
                  
             z = e_c + e_r * np.exp(1j * theta)
             log.info("e_c = %s, e_r = %s", e_c, e_r)
-            logger.debug(eom, "max(abs(u_target)) = %s", max_comp[all_sort_inds])
-            logger.debug(eom, "argmax(abs(u_target)) = %s", max_comp_loc[all_sort_inds])
+            logger.debug(eom, "all max(abs(u_target)) = %s", max_comp[all_sort_inds])
+            logger.debug(eom, "all argmax(abs(u_target)) = %s", max_comp_loc[all_sort_inds])
+            logger.debug(eom, "valid max(abs(u_target)) = %s", max_comp[all_sort_inds][valid_inds][sort_inds])
+            logger.debug(eom, "valid argmax(abs(u_target)) = %s", max_comp_loc[all_sort_inds][valid_inds][sort_inds])
 
-        sort_inds = np.argsort(valid_eigvals)
-        e_norm = np.linalg.norm(valid_eigvals[sort_inds])
-        valid_eigvals = valid_eigvals[sort_inds]
         logger.info(eom, "cycle = %d, #trial = %d, |eig| = %e, #eig = %d, delta|eig| = %e", iter, 
                     len(u_vec), e_norm, len(valid_eigvals), np.abs(e_norm - e_norm_prev)) 
-        logger.info(eom, "eigvals: %s Ha", eigvals[all_sort_inds])
-        logger.info(eom, "valid eigenvalues:" )
-        logger.info(eom, "%s", valid_eigvals)
+        logger.info(eom, "  eigvals: ")
+        logger.info(eom, "      %s Ha", eigvals)
+        logger.info(eom, "      %s eV", eigvals*27.2114)
+        logger.info(eom, "  valid eigenvalues:" )
+        logger.info(eom, "      %s Ha", valid_eigvals)
+        logger.info(eom, "      %s eV", valid_eigvals*27.2114)
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
@@ -221,11 +226,14 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     time_end = time.time()
     if iter == eom.max_cycle - 1 and e_norm_diff > eom.conv_tol:
         logger.warn(eom, "FEAST-EOM-CCSD not converged in %d iterations.", iter+1)
-    logger.info(eom, "Eigenvalues: %s Ha", eigvals)
-    logger.info(eom, "Eigenvalues: %s eV", eigvals.real*27.2114)
+    logger.info(eom, "  All eigenvalues: %s Ha", eigvals)
+    logger.info(eom, "      %s eV", eigvals.real*27.2114)
+    logger.info(eom, "  Valid eigenvalues: %s Ha", valid_eigvals)
+    logger.info(eom, "      %s eV", valid_eigvals*27.2114)
     logger.info(eom, "FEAST-EOM-CCSD finished in %s seconds.", time_end - time_init)
 
-    valid_u_vec = [u_vec[u] for u in all_sort_inds]
+    valid_u_vec = [u_vec[u] for u in valid_inds]
+    valid_u_vec = [valid_u_vec[u] for u in sort_inds]
 
     return eigvals, valid_u_vec
 
