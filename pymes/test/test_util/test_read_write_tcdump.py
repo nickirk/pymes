@@ -1,15 +1,15 @@
-import ctf
 import numpy as np
 
 from pymes.log import print_logging_info
 from pymes.util import tcdump
+print("Warning: tcdump.py is not tested and unused.")
 
 def test_read_write(file_name="TCDUMP.H2.tc"):
     t_V_orpsqt = tcdump.read(file_name, sp=0)
     print(t_V_orpsqt.sym)
 
     no = 1
-    t_V_ijklmn = ctf.tensor([no,no,no,no,no,no], sym=t_V_orpsqt.sym, sp=t_V_orpsqt.sp)
+    t_V_ijklmn = np.zeros([no,no,no,no,no,no], sym=t_V_orpsqt.sym)
     print(t_V_ijklmn.sym)
     t_V_ijklmn.i("ijklmn") << t_V_orpsqt[:no,:no,:no,:no,:no,:no].i("ijklmn")
     print(t_V_ijklmn.sym)
@@ -17,7 +17,7 @@ def test_read_write(file_name="TCDUMP.H2.tc"):
     print(full_tensor.sym)
 
     print_logging_info("Testing exchange of the 1st electron pair indices...")
-    sym = ctf.tensor([no,no,no,no,no,no], sym=t_V_ijklmn.sym, sp=t_V_orpsqt.sp) 
+    sym = np.zeros([no,no,no,no,no,no], sym=t_V_ijklmn.sym) 
     sym.i("ijklmn") << full_tensor.i("jiklmn")
     assert(np.array_equal(full_tensor.to_nparray(),sym.to_nparray()))
     print_logging_info("Past!")

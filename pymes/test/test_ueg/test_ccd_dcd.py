@@ -3,7 +3,6 @@
 import time
 import numpy as np
 
-import ctf
 
 from pymes.solver import mp2
 from pymes.model import ueg
@@ -11,15 +10,6 @@ from pymes.solver import ccd
 from pymes.mean_field import hf
 from pymes.log import print_title, print_logging_info
 
-
-##############################################################################
-#   1. ctf tensors starts with a lower case t
-#   2. indices follow each variable after a _
-#   3. numpy's nparray runs fastest with the right most index
-#   4. for small tensors, use nparrays, only when large contractions are needed
-#      then use ctf tensors. In case in the future some other tensor engines
-#      might be used
-##############################################################################
 
 
 
@@ -63,7 +53,6 @@ def main(nel, cutoff, rs, gamma, kc):
         Also used in Ref. https://arxiv.org/pdf/2103.03176
     """
 
-    world=ctf.comm()
     no = int(nel/2)
     n_alpha = int(nel/2)
     n_beta = int(nel/2)
@@ -126,31 +115,31 @@ def main(nel, cutoff, rs, gamma, kc):
     t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    t_epsilon_i = hf.calc_occ_orb_e(kinetic_G, t_V_ijkl, no)
-    hole_e = np.real(t_epsilon_i.to_nparray())
+    t_epsilon_i = hf.calcOccupiedOrbE(kinetic_G, t_V_ijkl, no)
+    hole_e = np.real(t_epsilon_i)
 
     t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
     t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
-    t_epsilon_a = hf.calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
-    particle_e = np.real(t_epsilon_a.to_nparray())
+    t_epsilon_a = hf.calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
+    particle_e = np.real(t_epsilon_a)
 
     print_logging_info("HF orbital energies:")
-    print_logging_info(t_epsilon_i.to_nparray())
-    print_logging_info(t_epsilon_a.to_nparray())
+    print_logging_info(t_epsilon_i)
+    print_logging_info(t_epsilon_a)
 
 
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
-    t_e_hf = 2*ctf.einsum('i->',t_epsilon_i)
+    t_e_hf = 2*np.einsum('i->',t_epsilon_i)
     t_V_klij = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating dir and exc HF energy")
 
-    dirHFE = 2. * ctf.einsum('jiji->',t_V_klij.to_nparray())
-    excHFE = -1. * ctf.einsum('ijji->',t_V_klij.to_nparray())
+    dirHFE = 2. * np.einsum('jiji->',t_V_klij)
+    excHFE = -1. * np.einsum('ijji->',t_V_klij)
 
-    dir_orb_e = 2. * ctf.einsum('jiji->i',t_V_klij.to_nparray())
-    exc_orb_e= -1. * ctf.einsum('ijji->i',t_V_klij.to_nparray())
+    dir_orb_e = 2. * np.einsum('jiji->i',t_V_klij)
+    exc_orb_e= -1. * np.einsum('ijji->i',t_V_klij)
     
     print("Direct correction to orbital energies:\n", dir_orb_e)
     print("Exchange correction to orbital energies:\n", exc_orb_e)
@@ -171,7 +160,7 @@ def main(nel, cutoff, rs, gamma, kc):
     dcd_e = 0.
 
     print_logging_info("Starting CCD")
-    t_h_pq = ctf.astensor(np.diag(kinetic_G))
+    t_h_pq = np.diag(kinetic_G)
     t_fock_pq = hf.construct_hf_matrix(no, t_h_pq, t_V_pqrs)
     solver = ccd.CCD(no,is_diis=True)
     ccd_results  = solver.solve(t_fock_pq, t_V_pqrs, \
@@ -200,10 +189,9 @@ def main(nel, cutoff, rs, gamma, kc):
     print_logging_info("Total CCD E = {:.8f}".format(t_e_hf+ccd_e))
     print_logging_info("Total DCD E = {:.8f}".format(t_e_hf+dcd_e))
 
-    if world.rank() == 0:
-        f = open("E_"+str(nel)+"e_rs"+str(rs)+".dat", "a")
-        f.write(str(len(ueg_model.basis_fns))+"  "+str(t_e_hf)\
-                +"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
+    f = open("E_"+str(nel)+"e_rs"+str(rs)+".dat", "a")
+    f.write(str(len(ueg_model.basis_fns))+"  "+str(t_e_hf)\
+            +"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
     return (ccd_e, dcd_e)
 
 if __name__ == '__main__':

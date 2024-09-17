@@ -1,4 +1,3 @@
-import ctf
 import itertools
 import numpy as np
 
@@ -29,12 +28,12 @@ def get_single_contraction(no, t_L_opqrst):
     nb = t_L_opqrst.shape[0]
     t_D_pqrs = ctf.tensor([nb, nb, nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3*2, spin fac = 1
-    t_D_pqrs += -3.0 * 2. * ctf.einsum("pqriis->prqs", t_L_opqrst[:, :, :, :no, :no, :])
+    t_D_pqrs += -3.0 * 2. * np.einsum("pqriis->prqs", t_L_opqrst[:, :, :, :no, :no, :])
     # symmetrisation wrt electrons
-    t_D_pqrs += -3.0 * 2. * ctf.einsum("rspiiq->prqs", t_L_opqrst[:, :, :, :no, :no, :])
+    t_D_pqrs += -3.0 * 2. * np.einsum("rspiiq->prqs", t_L_opqrst[:, :, :, :no, :no, :])
     t_D_pqrs /= 2.0
     # hole lines = 1, loops = 1, sign = 1, equavilent diagrams= 3, spin fac=2**1
-    t_D_pqrs += 2**1*3.0*ctf.einsum("pqrsii->prqs", t_L_opqrst[:, :, :, :, :no, :no])
+    t_D_pqrs += 2**1*3.0*np.einsum("pqrsii->prqs", t_L_opqrst[:, :, :, :, :no, :no])
 
     return -t_D_pqrs/3.
 
@@ -53,16 +52,16 @@ def get_double_contraction(no, t_L_opqrst):
     nb = t_L_opqrst.shape[0]
     t_S_pq = ctf.tensor([nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
     # hole lines = 2, loops = 2, sign = 1, spin fac = 2**2, equavilent diagrams= 3
-    t_S_pq += 2.0**2*3.0*ctf.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
+    t_S_pq += 2.0**2*3.0*np.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
 
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equ = 3*2 (rotational and mirrorring syms)
-    t_S_pq += -1. * 2. ** 1 * 3. * 2. *ctf.einsum("iipjjq->pq", t_L_opqrst[:no, :no, :, :no, :no, :])
+    t_S_pq += -1. * 2. ** 1 * 3. * 2. *np.einsum("iipjjq->pq", t_L_opqrst[:no, :no, :, :no, :no, :])
 
     # hole lines = 2, loops = 0, sign = 1, spin fac = 2**0, equavilent diagrams= 3*2 (rot and mirror)
 
-    t_S_pq += 3. * 2. * ctf.einsum("pijqij->pq", t_L_opqrst[:, :no, :no, :, :no, :no])
+    t_S_pq += 3. * 2. * np.einsum("pijqij->pq", t_L_opqrst[:, :no, :no, :, :no, :no])
     # hole lines = 2, loops = 1, sign = -1, spin fac = 2**1, equavilent diagrams= 3
-    t_S_pq += -1.*3.*2.*ctf.einsum("ijjipq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
+    t_S_pq += -1.*3.*2.*np.einsum("ijjipq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
 
     return -t_S_pq/6.
 
@@ -87,11 +86,11 @@ def get_triple_contraction(no, t_L_orpsqt):
     t_L_ijklmn = t_L_orpsqt[:no,:no,:no,:no,:no,:no]
 
     # hole lines = 3, loops =3, (-1)^(3+3)=1, spin fac = 2**3, equ diagrams = 1
-    t_T_0 += 2.**3*ctf.einsum("iijjkk->", t_L_ijklmn)
+    t_T_0 += 2.**3*np.einsum("iijjkk->", t_L_ijklmn)
     # hole lines = 3, loops =2, (-1)^(3+2)=-1, spin fac = 2**2, equ diagrams = 3
-    t_T_0 += -2**2*3.0*ctf.einsum("ijjikk->", t_L_ijklmn)
+    t_T_0 += -2**2*3.0*np.einsum("ijjikk->", t_L_ijklmn)
     # hole lines = 3, loops =1, (-1)^(3+1)=1, spin fac = 2**1, equ diagrams = 2 (mirror)
-    t_T_0 += 2.0*2.0*ctf.einsum("ijjkki->", t_L_ijklmn)
+    t_T_0 += 2.0*2.0*np.einsum("ijjkki->", t_L_ijklmn)
     
     return -t_T_0/6.
 

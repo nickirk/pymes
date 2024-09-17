@@ -18,9 +18,8 @@ def construct_hf_matrix(no, t_h_pq, t_V_pqrs):
     return t_fock_pq
 
 
-def calc_occ_orb_e(kinetic_G, tV_ijkl, no):
-    dtype = tV_ijkl.dtype
-    e = np.astensor(kinetic_G[0:no], dtype=dtype)
+def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
+    e = kinetic_G[0:no]
     # tConjGamma_jiG = np.einsum("ijG->jiG", np.conj(tGamma_ijG))
     # coul = np.einsum('ikG,jlG->ijkl', tConjGamma_jiG, tGamma_ijG)
     # exCoul = np.einsum('ikG,ljG->ilkj', tConjGamma_jiG, tGamma_ijG)
@@ -31,8 +30,7 @@ def calc_occ_orb_e(kinetic_G, tV_ijkl, no):
     return e
 
 
-def calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
-    algoName = "calcVirtualOrbE"
+def calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
     e = kinetic_G[no:]
     # tConjGamma_aiG = np.einsum("iaG -> aiG", np.conj(tGamma_iaG))
     # dirCoul_aibj =  np.einsum('aiG,bjG->aibj',tConjGamma_aiG, tGamma_aiG)

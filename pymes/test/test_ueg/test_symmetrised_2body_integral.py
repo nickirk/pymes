@@ -4,7 +4,6 @@ import time
 import numpy as np
 
 
-import ctf
 
 from pymes.solver import mp2
 from pymes.model import ueg
@@ -14,7 +13,6 @@ from pymes.log import print_title, print_logging_info
 
 
 ##############################################################################
-#   1. ctf tensors starts with a lower case t
 #   2. indices follow each variable after a _
 #   3. numpy's nparray runs fastest with the right most index
 #   4. for small tensors, use nparrays, only when large contractions are needed
@@ -40,7 +38,6 @@ def compute_kinetic_energy(ueg):
 
 
 def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
-    world=ctf.comm()
     no = int(nel/2)
     nalpha = int(nel/2)
     nbeta = int(nel/2)
@@ -90,9 +87,6 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
     # 3-body integrals). This integral will be used to compute the HF energy
     t_V_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
                                      is_only_2b=True, sp=0)
-    #t_V_sym_pqrs = ctf.tensor(t_V_pqrs.shape, sp=t_V_pqrs.sp)
-    #t_V_sym_pqrs.i("pqrs") << 0.5 *( t_V_pqrs.i("pqrs") + t_V_pqrs.i("qpsr"))
-    #t_V_pqrs = t_V_sym_pqrs
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -107,28 +101,27 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
     t_V_ijkl = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating hole and particle energies")
-    tEpsilon_i = hf.calc_occ_orb_e(kinetic_G, t_V_ijkl, no)
-    holeEnergy = np.real(tEpsilon_i.to_nparray())
+    tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, t_V_ijkl, no)
+    holeEnergy = np.real(tEpsilon_i)
 
     t_V_aibj = t_V_pqrs[no:,:no,no:,:no]
     t_V_aijb = t_V_pqrs[no:,:no,:no,no:]
-    tEpsilon_a = hf.calc_vir_orb_e(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
-    particleEnergy = np.real(tEpsilon_a.to_nparray())
+    tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv)
 
     print_logging_info("HF orbital energies:")
-    print_logging_info(tEpsilon_i.to_nparray())
-    print_logging_info(tEpsilon_a.to_nparray())
+    print_logging_info(tEpsilon_i)
+    print_logging_info(tEpsilon_a)
 
 
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
-    tEHF = 2*ctf.einsum('i->',tEpsilon_i)
+    tEHF = 2*np.einsum('i->',tEpsilon_i)
     t_V_klij = t_V_pqrs[:no,:no,:no,:no]
-    t_fock_pq = hf.construct_hf_matrix(no, ctf.astensor(np.diag(kinetic_G)), t_V_pqrs)
+    t_fock_pq = hf.construct_hf_matrix(no, np.diag(kinetic_G), t_V_pqrs)
     print_logging_info("Calculating dir and exc HF energy")
 
-    dirHFE = 2. * ctf.einsum('jiji->',t_V_klij.to_nparray())
-    excHFE = -1. * ctf.einsum('ijji->',t_V_klij.to_nparray())
+    dirHFE = 2. * np.einsum('jiji->',t_V_klij)
+    excHFE = -1. * np.einsum('ijji->',t_V_klij)
 
     print_logging_info("Summing dir and exc HF energy")
 
@@ -153,8 +146,8 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Symmetrizing t_V_pqrs with respect to electron numbering")
     
     #t_V_eff_pqrs = t_V_asym_pqrs - t_V_pqrs
-    t_V_sym_pqrs = ctf.tensor(t_V_pqrs.shape)
-    t_V_sym_pqrs.i("pqrs") << 0.5 *( t_V_asym_pqrs.i("pqrs") + t_V_asym_pqrs.i("qpsr"))
+    t_V_sym_pqrs = np.zeros(t_V_pqrs.shape)
+    t_V_sym_pqrs += 0.5 *( t_V_asym_pqrs + t_V_asym_pqrs.transpose((1,0,3,2)))
     t_V_pqrs += t_V_sym_pqrs
 
     orbital_energy_correction = True
@@ -181,7 +174,6 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
 
     mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, t_V_abij=t_V_abij, t_V_ijab=t_V_ijab)
     ccd_e = 0.
-    dcd_e = 0.
 
     ls = -(np.log(rs)*0.8+1.0)
     print_logging_info("Starting CCD")
@@ -231,7 +223,6 @@ def test_sym_2b(nel, cutoff,rs, gamma, kc, amps):
     return 0
 
 if __name__ == '__main__':
-  #for gamma in None:
   gamma = None
   amps = None
   nel = 14
@@ -239,4 +230,3 @@ if __name__ == '__main__':
     for cutoff in [5]:
       kCutoffFraction = None
       test_sym_2b(nel,cutoff,rs, gamma, kCutoffFraction,amps)
-  ctf.MPI_Stop()

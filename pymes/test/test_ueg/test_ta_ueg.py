@@ -3,7 +3,6 @@
 import time
 import numpy as np
 
-import ctf
 
 from pymes.solver import mp2
 from pymes.model import ueg
@@ -78,7 +77,6 @@ def test_twisted_average():
 
 
 def driver(nel, cutoff, rs, gamma, kc, shift):
-    world = ctf.comm()
     no = int(nel / 2)
     nalpha = int(nel / 2)
     nbeta = int(nel / 2)
@@ -117,7 +115,7 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
     kinetic_G = compute_kinetic_energy(ueg_model)
     print("Kinetic energies =", kinetic_G)
 
-    t_h_pq = ctf.astensor(np.diag(kinetic_G))
+    t_h_pq = (np.diag(kinetic_G))
     time_pure_2_body_int = time.time()
     ueg_model.gamma = gamma
     # specify the k_c in the correlator
@@ -139,11 +137,11 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
 
     time_hf = time.time()
 
-    t_epsilon_i = t_fock_pq.diagonal()[:no]
-    t_epsilon_a = t_fock_pq.diagonal()[no:]
+    t_epsilon_i = t_fock_pq.diagonal()[:no].copy()
+    t_epsilon_a = t_fock_pq.diagonal()[no:].copy()
     print_logging_info("HF orbital energies:")
-    print_logging_info(t_epsilon_i.to_nparray())
-    print_logging_info(t_epsilon_a.to_nparray())
+    print_logging_info(t_epsilon_i)
+    print_logging_info(t_epsilon_a)
 
     t_hf_e = hf.calc_hf_e(no, 0., t_h_pq, t_V_pqrs)
     print_logging_info("HF energy = {}".format(t_hf_e))
@@ -169,8 +167,8 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
     gap = t_epsilon_a[0] - t_epsilon_i[-1]
     print_logging_info("2b+3b Corrected gap = ", gap)
     print_logging_info("Corrected single-particle energies:")
-    print_logging_info(t_epsilon_i.to_nparray())
-    print_logging_info(t_epsilon_a.to_nparray())
+    print_logging_info(t_epsilon_i)
+    print_logging_info(t_epsilon_a)
 
     # perparing effective 2b
     t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.gaskell,
@@ -182,7 +180,7 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
     t_V_abij = t_V_pqrs[no:, no:, :no, :no]
     del t_V_pqrs
     tc_mp2_e, tc_mp2Amp = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, sp=1)
-    t2_norm = np.sqrt(ctf.einsum("abij, abij->", tc_mp2Amp, tc_mp2Amp))
+    t2_norm = np.sqrt(np.einsum("abij, abij->", tc_mp2Amp, tc_mp2Amp))
 
     total_e = t_hf_e + tc_mp2_e + contr_from_triply_contra_3b
 
@@ -197,7 +195,7 @@ def driver(nel, cutoff, rs, gamma, kc, shift):
 
     return t_hf_e, contr_from_triply_contra_3b, tc_mp2_e
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_zero_shift()
     test_nonzero_shift()
     test_twisted_average()

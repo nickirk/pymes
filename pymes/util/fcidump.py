@@ -11,10 +11,10 @@ def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r', file="
 
     Parameters
     ----------
-    integrals: tensor in ctf format
+    integrals: np.array
         [np,np,np,np]
 
-    h: ctf tensor, [np, np]
+    h: np.array, [np, np]
 
     no: int, number of occupied orbitals in the reference, used to calculate number of electrons
 
