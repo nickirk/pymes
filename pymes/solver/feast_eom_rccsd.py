@@ -139,15 +139,8 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
 
         def process_element(e):
             Q_loc = [np.zeros(size, dtype=complex) for _ in range(len(u_))]
-            #if np.abs(z[e].imag) < 1e-3:
-            #    ze = z[e]
-            #    ze += 1j* (np.sign(z[e].imag) * 1e-3)
-            #else:
-            #    ze = z[e]
-            #ze = z[e]
             logger.debug(eom, "e = %d, z = %s, theta = %s, w = %s", e, z[e], theta[e], w[e])
             for l in range(len(u_)):
-                #logger.debug(eom, "  worker %d processing l = %d", e, l)
                 Qe_ = eom._gcrotmk(z[e], b=u_[l], diag=diag, precond=precond, max_iter=max_iter)
                 Q_loc[l] -= w[e]/2 * np.real(e_r * np.exp(1j * theta[e]) * Qe_)
             return Q_loc
@@ -166,11 +159,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
     for iter in range(eom.max_cycle):
 
         ntrial = len(u_vec)
-
-        #u_vec = QR(u_vec)
-            # u_vec are those vectors that are within the energy window
-            #u_vec = [u_vec[u] for u in valid_inds]
-            #u_vec = target_u + eom.get_init_guess(nroots-1, koopmans, diag)
 
 
         Q = prune(u_vec, max_iter=eom.ls_max_iter)
@@ -238,27 +226,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         if np.abs(e_norm - e_norm_prev) < eom.conv_tol:
             logger.info(eom, "FEAST-EOM-CCSD converged in %d iterations.", iter) 
             break
-        else:
-            if iter > 0: # and len(u_vec) <= eom.max_ntrial:
-                # eigvals might contain nan
-                max_valid_ind = np.argmax(valid_eigvals.real)
-                min_valid_ind = np.argmin(valid_eigvals.real)
-                max_ind = np.where(eigvals.real == valid_eigvals[max_valid_ind])[0][0]
-                min_ind = np.where(eigvals.real == valid_eigvals[min_valid_ind])[0][0]
-                max_eigval = eigvals[max_ind]
-                min_eigval = eigvals[min_ind]
-                max_eigvec = u_vec[max_valid_ind]
-                min_eigvec = u_vec[min_valid_ind]
-                # add more trial u vectors based on the max and min eigenvectors
-                #u_vec.append(np.random.rand(size)-0.5)
-                #u_vec.append(np.random.rand(size)-0.5)
-                u_vec.append((Hu[max_ind] - max_eigval * max_eigvec)/(max_eigval - diag + 1e-10))
-                if max_ind == min_ind:
-                    u_vec.append(np.random.rand(size)-0.5)
-                else:
-                    u_vec.append((Hu[min_ind] - min_eigval * min_eigvec)/(min_eigval - diag + 1e-10))
-                logger.debug(eom, "     # trial u vec = %d", len(u_vec))
-        
         
         e_norm_diff = np.abs(e_norm - e_norm_prev)
         e_norm_prev = e_norm
