@@ -23,7 +23,7 @@ def solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., **kwargs)
 
 def solve_sp(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, nv_part_size=None, **kwargs):
     """
-    mp2 algorithm
+    sparse mp2 algorithm: not debugged yet
     Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
     -------------
     Parameters:

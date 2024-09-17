@@ -1,4 +1,3 @@
-import ctf
 import numpy as np
 from pymes.integral import contraction
 from pymes.util import tcdump

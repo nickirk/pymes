@@ -4,7 +4,6 @@ import time
 import numpy as np
 
 
-import ctf
 
 from pymes.solver import mp2
 from pymes.model import ueg
@@ -41,7 +40,6 @@ def compute_kinetic_energy(ueg):
 
 
 def main(nel, cutoff,rs, gamma, kc, amps):
-    world=ctf.comm()
     no = int(nel/2)
     nalpha = int(nel/2)
     nbeta = int(nel/2)
@@ -89,8 +87,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     # consider only true two body operators (excluding the singly contracted
     # 3-body integrals). This integral will be used to compute the HF energy
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     only2Body=True,sp=1)
+    tV_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+                                     is_only_2b=True,sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -120,13 +118,13 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
-    tEHF = 2*ctf.einsum('i->',tEpsilon_i)
+    tEHF = 2*np.einsum('i->',tEpsilon_i)
     tV_klij = tV_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating dir and exc HF energy")
 
-    dirHFE = 2. * ctf.einsum('jiji->',tV_klij.to_nparray())
-    excHFE = -1. * ctf.einsum('ijji->',tV_klij.to_nparray())
+    dirHFE = 2. * np.einsum('jiji->',tV_klij.to_nparray())
+    excHFE = -1. * np.einsum('ijji->',tV_klij.to_nparray())
 
     print_logging_info("Summing dir and exc HF energy")
 
@@ -145,8 +143,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
     del tV_pqrs
-    tV_pqrs = ueg_model.eval2BodyIntegrals(correlator=ueg_model.trunc,\
-                                     effective2Body=True,sp=1)
+    tV_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+                                     is_effect_2b=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
 
@@ -169,7 +167,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
 
     print_logging_info("Starting MP2")
 
-    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs)
+    mp2_e, mp2Amp = mp2.solve(tEpsilon_i, tEpsilon_a, tV_pqrs[:no,:no,no:,no:], tV_pqrs[no:,no:,:no,:no])
     ccd_e = 0.
     dcd_e = 0.
 
@@ -201,15 +199,14 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
     print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
 
-    ccd_t2_norm = ctf.norm(ccd_amp)
-    dcd_t2_norm = ctf.norm(dcd_amp)
+    ccd_t2_norm = np.linalg.norm(ccd_amp)
+    dcd_t2_norm = np.linalg.norm(dcd_amp)
 
-    if world.rank() == 0:
-        f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".scan.kc.dat", "a")
-        f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-                +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "\
-                +str(ccd_e)+"  "+str(dcd_e)+" "+str(ccd_t2_norm)+" "+str(dcd_t2_norm)+\
-                " "+str(ccd_dE)+" "+str(dcd_dE)+"\n")
+    f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".scan.kc.dat", "a")
+    f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
+            +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "\
+            +str(ccd_e)+"  "+str(dcd_e)+" "+str(ccd_t2_norm)+" "+str(dcd_t2_norm)+\
+            " "+str(ccd_dE)+" "+str(dcd_dE)+"\n")
     return dcd_amp
 
 if __name__ == '__main__':
@@ -225,4 +222,3 @@ if __name__ == '__main__':
             kCutoffFraction = opt_kc[n,1]
             amps = main(nel, cutoff, rs, gamma, kCutoffFraction, amps)
             n = n+1
-    ctf.MPI_Stop()
