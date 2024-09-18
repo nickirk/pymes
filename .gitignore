@@ -12,3 +12,4 @@ fcidump*
 venv
 pymes/lib/ctf/*
 pymes/lib
+*.npy

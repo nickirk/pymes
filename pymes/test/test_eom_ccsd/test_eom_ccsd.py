@@ -5,12 +5,11 @@ from pymes.mean_field import hf
 from pymes.integral.partition import part_2_body_int
 
 def test_eom_ccsd_energy():
-    dump_files = ["pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g","FCIDUMP.H2.ccpvdz"]
-    #dump_files = ["pymes/test/test_eom_ccsd/FCIDUMP.H2.ccpvdz"]
+    dump_files = ["pymes/test/test_eom_ccsd/FCIDUMP.LiH.321g","pymes/test/test_eom_ccsd/FCIDUMP.H2.ccpvdz"]
     ref_e = [{"hf_e": -7.92958534362757, "ccsd_e": -0.0190883270951031, "ee": [0.1180867117168979, 0.154376205595602]}]
     driver(fcidump_file=dump_files[0], ref_e=ref_e[0])
 
-def driver(fcidump_file="./FCIDUMP.H2.sto6g", ref_e={"hf_e": -0.891589185800039, "ccsd_e": -0.1012250926230937}):
+def driver(fcidump_file="pymes/test/test_eom_ccsd/FCIDUMP.H2.sto6g", ref_e={"hf_e": -0.891589185800039, "ccsd_e": -0.1012250926230937}):
     hf_ref_e = ref_e["hf_e"]
     n_elec, nb, e_core, e_orb, h_pq, V_pqrs = fcidump.read(fcidump_file)
 
@@ -59,7 +58,7 @@ def test_davidson():
     eom_cc.test_davidson()
 
 def main():
-    test_davidson()
+    #test_davidson()
     test_eom_ccsd_energy()
 
 if __name__ == "__main__":

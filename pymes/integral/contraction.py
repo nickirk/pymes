@@ -19,14 +19,14 @@ def get_single_contraction(no, t_L_opqrst):
     Parameters:
     -----------
     no: int, number of occupied orbitals
-    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS]
+    t_L_orpsqt: np tensor, 
 
     Returns:
     --------
-    t_D_pqrs: ctf tensor, [nb, nb, nb, nb]
+    t_D_pqrs: np tensor, [nb, nb, nb, nb]
     """
     nb = t_L_opqrst.shape[0]
-    t_D_pqrs = ctf.tensor([nb, nb, nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
+    t_D_pqrs = np.zeros([nb, nb, nb, nb], dtype=t_L_opqrst.dtype)
     # hole lines = 1, loops = 0, sign = -1, equavilent diagrams= 3*2, spin fac = 1
     t_D_pqrs += -3.0 * 2. * np.einsum("pqriis->prqs", t_L_opqrst[:, :, :, :no, :no, :])
     # symmetrisation wrt electrons
@@ -42,15 +42,15 @@ def get_double_contraction(no, t_L_opqrst):
     Parameters:
     -----------
     no: int, number of occupied orbitals
-    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS],
-            **indices in chemists' notation due to the constraint of symmetry functionality in ctf**
+    t_L_orpsqt: np tensor, 
+            **indices in chemists' notation due to the constraint of symmetry functionality in np**
 
     Returns:
     --------
-    t_S_pq: ctf tensor, [nb,nb]
+    t_S_pq: np tensor, [nb,nb]
     """
     nb = t_L_opqrst.shape[0]
-    t_S_pq = ctf.tensor([nb, nb], dtype=t_L_opqrst.dtype, sp=t_L_opqrst.sp)
+    t_S_pq = np.zeros([nb, nb], dtype=t_L_opqrst.dtype)
     # hole lines = 2, loops = 2, sign = 1, spin fac = 2**2, equavilent diagrams= 3
     t_S_pq += 2.0**2*3.0*np.einsum("iijjpq->pq", t_L_opqrst[:no, :no, :no, :no, :, :])
 
@@ -70,8 +70,8 @@ def get_triple_contraction(no, t_L_orpsqt):
     Parameters:
     -----------
     no: int, number of occupied orbitals
-    t_L_orpsqt: ctf tensor, sym = [SY,NS,SY,NS,SY,NS],
-        **indices in chemists' notation due to the constraint of symmetry functionality in ctf**
+    t_L_orpsqt: np tensor, 
+        **indices in chemists' notation due to the constraint of symmetry functionality in np**
 
     Returns:
     --------
@@ -101,15 +101,14 @@ def recover_L(t_L_sym_opqrst, shape):
     
     Parameters:
     -----------
-    t_L_sym_opqrst: the symmetric part of a symmetric ctf sparse tensor
+    t_L_sym_opqrst: the symmetric part of a symmetric tensor
     shape: list of ints, the shape of the desired slice of the full tensor
 
     Returns:
     --------
-    t_L_opqrst: ctf full tensor, with shape equal to the requested one
+    t_L_opqrst: np full tensor, with shape equal to the requested one
     """
-    world = ctf.comm()
-    t_L_opqrst = ctf.tensor(t_L_sym_opqrst.shape, sp=1)
+    t_L_opqrst = np.zeros(t_L_sym_opqrst.shape)
     inds_sym, vals_sym = t_L_opqrst.read_local_nnz()
 
     inds_full = []
@@ -124,12 +123,12 @@ def recover_L(t_L_sym_opqrst, shape):
 
 def global_ind_2_list_inds(global_ind, shape):
     """
-    Decompose global ctf indices to individual indices
+    Decompose global np indices to individual indices
 
     Parameters:
     -----------
     global_ind: int
-    shape: list of ints, shape of the ctf tensor
+    shape: list of ints, shape of the np tensor
     
     Returns:
     --------
@@ -152,7 +151,7 @@ def list_inds_2_global_ind(list_inds, shape):
     Parameters:
     -----------
     list_inds: list of int
-    shape: list of ints, shape of the ctf tensor
+    shape: list of ints, shape of the np tensor
     
     Returns:
     --------

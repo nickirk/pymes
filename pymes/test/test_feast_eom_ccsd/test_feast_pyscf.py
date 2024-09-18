@@ -40,7 +40,7 @@ def driver():
     # EOM-EE-CCSD calculation
     eom = feast_eom_rccsd.FEAST_EOMEESinglet(mycc)
     eom.max_cycle = 20
-    eom.ls_max_iter = 5
+    eom.ls_max_iter = 10
     eom.conv_tol = 1e-7
     eom.max_ntrial = 7
     #eom.verbose = 5
@@ -54,8 +54,8 @@ def driver():
     #r1[0, 5] = 
     #guess = mycc.amplitudes_to_vector(r1, r2)
     #print(" loc = ", np.argmax(np.abs(guess)))
-    de = 3
-    e_feast, _ = eom.kernel(nroots=3, ngl_pts=8, e_c=1.40, e_r=de, e_brd=1., n_aux=1)
+    de = 1
+    e_feast, _ = eom.kernel(nroots=3, ngl_pts=8, e_c=19.688, e_r=de, e_brd=1., n_aux=1)
     print("feast energies: ", e_feast)
     assert np.isclose(e_feast[0].real, 19.68806362) 
 
