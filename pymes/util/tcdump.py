@@ -3,11 +3,6 @@ import itertools
 
 from pymes.log import print_logging_info
 
-# tcdump need a rewrite to get rid of the ctf dependency
-# since the full 3-body integrals are not used by any of the pymes solvers, 
-# this file remains unused and untested.
-print("Warning: tcdump.py is not tested and unused.")
-
 def write(t_V_orpsqt, file_name="TCDUMP", sym=True, type='r', sp=1):
 
     nOrb = t_V_orpsqt.shape[0]
@@ -56,9 +51,9 @@ def read(file_name="TCDUMP", sym=True, sp=1):
         integrals, indices, nb = _read_from_txt_tcdump(file_name,sym=sym)
     # sp=1 plus sym does  not work in ctf.
     t_V_orpsqt = np.zeros([nb,nb,nb,nb,nb,nb])
-    t_V_orpsqt.write(indices,integrals)
-    #if sp == 0:
-    #    t_V_orpsqt = ctf.tensor(t_V_orpsqt.to_nparray(), sp=0)
+    for ind, val in zip(indices, integrals):
+        o, p, q, r, s, t = ind
+        t_V_orpsqt[o, p, q, r, s, t] = val
     return t_V_orpsqt
 
 def _read_from_txt_tcdump(file_name="TCDUMP", sym=True):
@@ -134,10 +129,11 @@ def restore_6_fold_sym(inds, val, nb):
     o, p, q, r, s, t = inds[:]
     # ints_sum = []
     for per_1, per_2 in zip(itertools.permutations([o, p, q]), itertools.permutations([r, s, t])):
-        index = per_1[0] * nb ** 5 + per_2[0] * nb ** 4 + per_1[1] * nb ** 3 + per_2[1] * nb ** 2 + per_1[2] * nb ** 1 + \
-                per_2[2]
+        #index = per_1[0] * nb ** 5 + per_2[0] * nb ** 4 + per_1[1] * nb ** 3 + per_2[1] * nb ** 2 + per_1[2] * nb ** 1 + \
+        #        per_2[2]
+        index = [per_1[0], per_2[0], per_1[1], per_2[1], per_1[2], per_2[2]]
         inds_sym.append(index)
     # remove repeated indices
-    inds_sym = list(set(inds_sym))
+    #inds_sym = list(set(inds_sym))
     ints_sym = [val] * len(inds_sym)
     return inds_sym, ints_sym
