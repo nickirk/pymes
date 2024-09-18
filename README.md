@@ -90,11 +90,6 @@ Ke Liao, Huanchen Zhai, Evelin Martine Christlmaier, Thomas Schraivogel, Pablo L
 Journal of Chemical Theory and Computation (2023)
 https://doi.org/10.1021/acs.jctc.2c01207
 
-Density Matrix Renormalization Group for Transcorrelated Hamiltonians: Ground and Excited States in Molecules,
-Ke Liao, Huanchen Zhai, Evelin Martine Christlmaier, Thomas Schraivogel, Pablo López Ríos, Daniel Kats, Ali Alavi,
-Journal of Chemical Theory and Computation (2023)
-https://doi.org/10.1021/acs.jctc.2c01207
-
 Energy-filtered excited states and real-time dynamics served in a contour integral, Ke Liao, 
 https://arxiv.org/abs/2409.07354
 
