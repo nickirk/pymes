@@ -1,14 +1,19 @@
 # PyMES
 (**Py**thon package for **M**any-**E**lectron **S**imulations (PyMES))
 
-PyMES package implements many-electron methods, such as MP2, 
-CCD/DCD, CCSD/DCSD for ground states, and EOM-CCSD for excited states, using
-the CTF library for automatic tensor contractions. 
+PyMES package implements many-electron methods for ground state and excited states.
+- Ground state:
+  - MP2
+  - CCD, DCD
+  - CCSD, DCSD
+- Excited states:
+  - EOM-CCSD
+  - FEAST-EOM-CCSD
+  - CIF-based real-time EOM-CCSD
 
 Key features:
   1. Handling non-hermitian Hamiltonians, such as transcorrelated Hamiltonian;
-  2. MPI and OMP parallelisation thanks to CTF;
-  3. Treating simple model system like 3D uniform electron gas, 
+  2. Treating simple model system like 3D uniform electron gas, 
      as well as interface to popular electronic method packages via FCIDUMP.
 
 The package is currently under active development, so some 
@@ -20,90 +25,15 @@ explanations to the issues you experience when you do so.
 # Installation
 
 ## Dependancies
+- a modified [PySCF](https://github.com/nickirk/pyscf) for FEAST
 - numpy
 - scipy
 - h5py
-- Cython
-- CTF
 - spglib
 - pytest (test purpose, not needed for running the code)
 
-PyMES can be installed by pip 
-
-```bash
-pip install ./
-```
-
-PyMES depends on the C++ Cyclops Tensor Framework (CTF) library. Therefore, 
-you need to build the CTF before using pymes.
-
-## Building CTF
-Building instructions can be found at https://github.com/cyclops-community/ctf.  
-Because of popular demand we outline the steps and some useful tips in the following.  
-
-First, pull the ctf lib source using
-
-```bash
-cd pymes/lib
-git submodule init
-git submodule update
-```
-Now you should see that the ctf directory contain the source files. Then
-```bash
-cd ctf
-```
-
-Run the configure script to check if all necessary libraries etc. can be found.
-```
-./configure --install-dir=/path/to/install/dir
-```
-**Tip:** Make sure your MPI, OpenMP and dynamic BLAS and LAPACK libraries are in your PATH.  
-It might complain that static libs cannot be found, but as long as the **dynamic** ones are found
-you can proceed to next steps.
-
-**Tip:** If you use the --install-dir option, it is necessary to export 
-the path to the libraries in your bash as
-
-```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/install/dir/lib
-```
-**Tip:** Note the suffixed /lib.  
-
-Now we can build ctf with
-```
-make -j 8
-make python -j 8
-```
-**Tip:** It may be necessary to make some changes in the `Makefile`. 
-For example changing the `python` command to `python3` on line 121 
-```MakeFile
-LDFLAGS="-L$(BDIR)/lib_shared" python3 setup.py build_ext -j4 --force -b $(BDIR)/lib_python/ -t $(BDIR)/lib_python/; \
-```
-and the `pip` to `pip3` on line 133
-```MakeFile
-pip3 install --force --user -b $(BDIR)/lib_python/ . --upgrade; \
-```
-, if cython is only available in your
-`python3` or when you `make python -j 8` it
-complains that it cannot find `python`.  
-
-If that works, pip install ctf with
-```
-make python_install
-```
-**Tip:** If you don't have sudo, it may also be necessary to add to the pip install command in the Makefile the ```--user``` flag.  
-
-Now try to import 'ctf' in python
-```python3
-import ctf
-```
-to see if any errors appear. 
-
-## Running
-For example, run test_ccsd.py with 5 processes under test_ccsd with
-```
-mpirun -np 5 python3 test_ccsd.py
-```
+```pip install .```
+should install the package.
 
 # For developers
 Contributions are welcome. But to keep the code in the long-term
@@ -164,6 +94,9 @@ Density Matrix Renormalization Group for Transcorrelated Hamiltonians: Ground an
 Ke Liao, Huanchen Zhai, Evelin Martine Christlmaier, Thomas Schraivogel, Pablo López Ríos, Daniel Kats, Ali Alavi,
 Journal of Chemical Theory and Computation (2023)
 https://doi.org/10.1021/acs.jctc.2c01207
+
+Energy-filtered excited states and real-time dynamics served in a contour integral, Ke Liao, 
+https://arxiv.org/abs/2409.07354
 
 # Contributors
 Ke Liao, Thomas Schraivogel, Evelin Christlmaier, Daniel Kats

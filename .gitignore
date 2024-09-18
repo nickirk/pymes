@@ -11,3 +11,4 @@ fcidump*
 .pytest_cache
 venv
 pymes/lib/ctf/*
+pymes/lib
