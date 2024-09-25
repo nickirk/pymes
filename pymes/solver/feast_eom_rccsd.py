@@ -24,51 +24,6 @@ def feast(eom, nroots=1, e_r=None, e_c=None, e_brd=1, emin=None, emax=None, ngl_
         eom.check_sanity()
     eom.dump_flags()
 
-    if emin is not None and emax is not None:
-        e_r = (emax - emin)/2
-        e_c = emax - e_r
-    elif e_c is not None:
-        user_guess = True
-        e_guess = e_c
-    else:
-        raise ValueError("e_c or emin and emax must be specified.")
-
-
-    if emin is not None and emax is not None:
-        e_r = (emax - emin)/2
-        e_c = emax - e_r
-    elif e_c is not None:
-        user_guess = True
-        e_guess = e_c
-    else:
-        raise ValueError("e_c or emin and emax must be specified.")
-
-    if e_r is None:
-        e_r = 1    
-
-    if emin is not None and emax is not None:
-        e_r = (emax - emin)/2
-        e_c = emax - e_r
-    elif e_c is not None:
-        user_guess = True
-        e_guess = e_c
-    else:
-        raise ValueError("e_c or emin and emax must be specified.")
-
-    if e_r is None:
-        e_r = 1    
-
-    if emin is not None and emax is not None:
-        e_r = (emax - emin)/2
-        e_c = emax - e_r
-    elif e_c is not None:
-        user_guess = True
-        e_guess = e_c
-    else:
-        raise ValueError("e_c or emin and emax must be specified.")
-
-    if e_r is None:
-        e_r = 1    
 
     if emin is not None and emax is not None:
         e_r = (emax - emin)/2
