@@ -11,11 +11,11 @@ from pymes.model import ueg
 ## hamiltonian integrals for unifrom electron gas
 
 ##############################################################################
-#   1. ctf tensors starts with a lower case t
+#   1. np arrays starts with a lower case t
 #   2. indices follow each variable after a _
 #   3. numpy's nparray runs fastest with the right most index
 #   4. for small tensors, use nparrays, only when large contractions are needed
-#      then use ctf tensors. In case in the future some other tensor engines
+#      then use np arrays. In case in the future some other tensor engines
 #      might be used
 ##############################################################################
 

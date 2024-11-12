@@ -324,7 +324,7 @@ class UEG:
         Returns
         -------
         V_pqrs: tensor
-            of size [n_p, n_p, n_p, n_p], by default, CTF tensor
+            of size [n_p, n_p, n_p, n_p], by default, np array
         """
 
         start_time = time.time()

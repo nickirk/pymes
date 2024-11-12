@@ -1,7 +1,6 @@
 import time
 
 from pymes.solver import ccd
-import ctf
 
 
 class DCD(ccd.CCD):

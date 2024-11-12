@@ -34,10 +34,10 @@ def read(file_name="TCDUMP", sym=True, sp=1):
     file_name: string
                path to the tcdump file name, default TCDUMP in txt format
     sym: bool, whether to use symmetric tensor
-    sp: int, 1 for sparse and 0 for dense ctf tensor
+    sp: int, 1 for sparse and 0 for dense np array
     Returns:
     --------
-    t_V_opqrst: ctf tensor, sparse
+    t_V_opqrst: np array, sparse
                 to use the symmetric tensor functionality in ctf, the indices will be in
                 chemists' notation.
     '''
@@ -74,7 +74,7 @@ def _read_from_txt_tcdump(file_name="TCDUMP", sym=True):
             r = int(r)-1
             s = int(s)-1
             t = int(t)-1
-            # to use the symmetrise in ctf tensor, we put two indices 
+            # to use the symmetrise in np array, we put two indices 
             # that are exchangable next to each other, resulting chemists' notation for indices
 
             # manually include the 6-fold symmetries due to exchange of 3 electrons
@@ -88,7 +88,7 @@ def _read_from_txt_tcdump(file_name="TCDUMP", sym=True):
 def _read_from_hdf5_tcdump(file_name="TCDUMP.hdf5"):
     import h5py
     # if hdf5 file format is used, try to read in parallel.
-    # the tensor t_V_opqrst is stored as a sparse ctf tensor
+    # the tensor t_V_opqrst is stored as a sparse np array
     f = h5py.File(file_name, 'r')
     ints_raw = f['tcdump']['values']
     inds_raw = f['tcdump']['indices']

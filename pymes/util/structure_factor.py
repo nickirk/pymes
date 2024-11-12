@@ -14,7 +14,7 @@ ref. PHYSICAL REVIEW LETTERS 123, 156401 (2019)
 def calcReciprocalSpaceStructureFactor(tAmps_abij, pwBasis):
     '''
     tAmps_abij: amplitudes computed by solvers, eg CCD, DCD, FCIQMC
-        it should be in the ctf tensor format: tT_abij of shape [nv,nv,no,no]
+        it should be in the np array format: tT_abij of shape [nv,nv,no,no]
     pwBasis: planewave basis used to expand the orbitals or overlap 
     '''
 
@@ -23,7 +23,7 @@ def calcReciprocalSpaceStructureFactor(tAmps_abij, pwBasis):
 def calcRealSpaceStructureFactor(tAmps_abij, pwBasis, r):
     '''
     tAmps_abij: amplitudes computed by solvers, eg CCD, DCD, FCIQMC
-        it should be in the ctf tensor format: tT_abij of shape [nv,nv,no,no]
+        it should be in the np array format: tT_abij of shape [nv,nv,no,no]
     pwBasis: planewave basis used to expand the orbitals or overlap 
     r : distance between two electrons, should be a 3d vector, or an array of
         3d vectors, shape [3,n]
