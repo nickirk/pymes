@@ -5,7 +5,7 @@ import sys
 from pymes.log import print_logging_info
 
 
-def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, dtype='r', file="FCIDUMP"):
+def write(integrals, h, no, e_nuc=0., ms2=1, orbsym=1, isym=1, file="FCIDUMP"):
     """
     This function writes out integrals into a FCIDUMP file
 

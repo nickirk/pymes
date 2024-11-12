@@ -27,12 +27,12 @@ def solve_sp(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, 
     Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
     -------------
     Parameters:
-       t_epsilon_i: 1D ctf tensor. The occupied orbital energies
-       t_epsilon_a: 1D ctf tensor. The unoccupied orbital energies
-       t_V_ijab: ctf tensor. oovv 2-body integrals
-       t_V_abij: ctf tensor. vvoo 2-body integrals
+       t_epsilon_i: 1D np array. The occupied orbital energies
+       t_epsilon_a: 1D np array. The unoccupied orbital energies
+       t_V_ijab: np array. oovv 2-body integrals
+       t_V_abij: np array. vvoo 2-body integrals
        leve_shift: float.
-       sp: 0 or 1. Sparsity of ctf tensors
+       sp: 0 or 1. Sparsity of np arrays
        nv_part_size: integer. The partition size of the virtual index in calculating the MP2 energies, to save memory.
                      The default value is 0, which means no partition is used. It will be set to nv in the algorithm.
     """
@@ -111,8 +111,8 @@ def solve_sp(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, leve_shift=0., sp=0, 
 def get_orb_inds(global_ind, dims):
     """
     Args:
-        global_ind: int, the global index of an entry on a ctf tensor
-        dims: list of ints, the dimensions of the ctf tensor
+        global_ind: int, the global index of an entry on a np array
+        dims: list of ints, the dimensions of the np array
 
     Returns:
         inds: list of ints, the corresponding indices of the entry on the tensor

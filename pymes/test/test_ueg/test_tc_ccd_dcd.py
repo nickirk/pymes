@@ -11,16 +11,6 @@ from pymes.mean_field import hf
 from pymes.log import print_title, print_logging_info
 
 
-##############################################################################
-#   1. ctf tensors starts with a lower case t
-#   2. indices follow each variable after a _
-#   3. numpy's nparray runs fastest with the right most index
-#   4. for small tensors, use nparrays, only when large contractions are needed
-#      then use ctf tensors. In case in the future some other tensor engines
-#      might be used
-##############################################################################
-
-
 
 def compute_kinetic_energy(ueg):
     """
@@ -88,7 +78,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     # 3-body integrals). This integral will be used to compute the HF energy
     t_V_pqrs = ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
                                      is_only_2b=True,sp=1)
-    #tV_pqrs = ueg_model.eval_2b_integrals(sp=1)
+    #t_V_pqrs = ueg_model.eval_2b_integrals(sp=1)
 
     print_logging_info("{:.3f} seconds spent on evaluating pure 2-body integrals"\
                        .format((time.time()-time_pure_2_body_int)))
@@ -105,8 +95,8 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Calculating hole and particle energies")
     tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
 
-    tV_aibj = tV_pqrs[no:,:no,no:,:no]
-    tV_aijb = tV_pqrs[no:,:no,:no,no:]
+    tV_aibj = t_V_pqrs[no:,:no,no:,:no]
+    tV_aijb = t_V_pqrs[no:,:no,:no,no:]
     tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
 
     print_logging_info("HF orbital energies:")
@@ -117,7 +107,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ### calculate HF energy: E_{HF} = \sum_i epsilon_i +\sum_ij (2*V_{ijij}-V_{ijji})
     print_logging_info("Calculating HF energy")
     tEHF = 2*np.einsum('i->',tEpsilon_i)
-    tV_klij = tV_pqrs[:no,:no,:no,:no]
+    tV_klij = t_V_pqrs[:no,:no,:no,:no]
 
     print_logging_info("Calculating dir and exc HF energy")
 
@@ -140,10 +130,10 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_title('Evaluating effective 2-body integrals','=')
     time_eff_2_body = time.time()
     # before calculating new integrals, delete the old one to release memory
-    #tV_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
-    #                                 is_effect_2b=True,sp=1)
     t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
-                                     is_rpa_approx=True,sp=1)
+                                     is_effect_2b=True,sp=1)
+    #t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+    #                                 is_rpa_approx=True,sp=1)
     print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
                        .format((time.time()-time_eff_2_body)))
 
@@ -176,9 +166,9 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     #ls = -(np.log(rs)*0.8+1.0)
     ls = -0.2
     print_logging_info("Starting CCD")
-    fock_pq = hf.construct_hf_matrix(no, np.diag(kinetic_G), tV_pqrs)
+    fock_pq = hf.construct_hf_matrix(no, np.diag(kinetic_G), t_V_pqrs)
     myccd = ccd.CCD(no)
-    ccd_results = myccd.solve(fock_pq, tV_pqrs, level_shift=ls, \
+    ccd_results = myccd.solve(fock_pq, t_V_pqrs, level_shift=ls, \
                             sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
     # unpacking
     ccd_e = ccd_results["ccd e"]
@@ -189,7 +179,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     ls = -1
     print_logging_info("Starting DCD with level shift = ", ls)
     mydcd = dcd.DCD(no)
-    dcd_results = mydcd.solve(fock_pq, tV_pqrs, level_shift=ls,\
+    dcd_results = mydcd.solve(fock_pq, t_V_pqrs, level_shift=ls,\
                             sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
@@ -216,9 +206,6 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Total CCD E = {:.8f}".format(tEHF+ccd_e+contr_from_triply_contra_3b))
     print_logging_info("Total DCD E = {:.8f}".format(tEHF+dcd_e+contr_from_triply_contra_3b))
 
-    #f = open("tcE_"+str(nel)+"e_rs"+str(rs)+"_"+str(ueg_model.correlator.__name__)+".tc.optKc.dat", "a")
-    #f.write(str(len(ueg_model.basis_fns))+"  "+str(ueg_model.kCutoff)+"  "+str(tEHF)\
-    #        +"  "+str(contr_from_triply_contra_3b)+"  "+str(mp2_e)+"  "+str(ccd_e)+"  "+str(dcd_e)+"\n")
 
 if __name__ == '__main__':
   #for gamma in None:
@@ -226,6 +213,6 @@ if __name__ == '__main__':
   amps = None
   nel = 14
   for rs in [0.5]:
-    for cutoff in [5]:
-      kCutoffFraction = 4.99
+    for cutoff in [2]:
+      kCutoffFraction = 1
       main(nel,cutoff,rs, gamma, kCutoffFraction,amps)

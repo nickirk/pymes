@@ -19,9 +19,9 @@ class DIIS:
 
         Parameters
         ----------
-        error: list of ctf tensors, [size of amplitudes]
+        error: list of np arrays, [size of amplitudes]
                 The changes of amplitudes in the nth iteration.
-        amplitude: ctf tensors, size [size of amplitudes]
+        amplitude: np arrays, size [size of amplitudes]
                 The amplitudes from the nth iteration. Amplitudes refer
                 to the doubles amplitudes in CCD/DCD, and to the
                 singles and doubles amplitudes in CCSD/DCSD. Or in general,
@@ -30,7 +30,7 @@ class DIIS:
 
         Returns
         -------
-        opt_amp: list of ctf tensor, size [size of amplitudes]
+        opt_amp: list of np array, size [size of amplitudes]
                 The optimized amplitudes.
         """
         algo_name = "diis.mix"
