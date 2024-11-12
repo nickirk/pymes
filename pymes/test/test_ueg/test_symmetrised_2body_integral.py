@@ -15,7 +15,7 @@ from pymes.log import print_title, print_logging_info
 #   2. indices follow each variable after a _
 #   3. numpy's nparray runs fastest with the right most index
 #   4. for small tensors, use nparrays, only when large contractions are needed
-#      then use ctf tensors. In case in the future some other tensor engines
+#      then use np arrays. In case in the future some other tensor engines
 #      might be used
 ##############################################################################
 

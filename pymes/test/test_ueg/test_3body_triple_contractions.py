@@ -44,8 +44,8 @@ def main(nel, cutoff,rs, gamma, kc, tc):
     timeCoulInt = time.time()
     ueg_model.gamma = gamma
 
-    ueg_model.kCutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
-    print("kCutoff=",ueg_model.kCutoff)
+    ueg_model.k_cutoff = ueg_model.L/(2*np.pi)*2.3225029893472993/rs
+    print("kCutoff=",ueg_model.k_cutoff)
 
     # Now add the contributions from the 3-body integrals into the diagonal and
     # two body operators, also to the total energy, corresponding to 3 orders
