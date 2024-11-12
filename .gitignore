@@ -10,6 +10,5 @@ fcidump*
 .vscode
 .pytest_cache
 venv
-pymes/lib/ctf/*
-pymes/lib
 *.npy
+build
