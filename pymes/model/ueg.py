@@ -1010,7 +1010,12 @@ class UEG:
         Notes:
             # there is still uncertainty in the factor of 2 divided ##
             # but using it seems to make the tc-dcd agree with BF-DMC
-        """
-        MdlngCnst = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
-        return MdlngCnst
 
+        Args:
+            rs: float. Wigner-Seitz radius for controlling the density
+            nel: int. Number of electrons.
+
+        Returns:
+            float
+        """
+        return -1.760118928190842*rs**(-1)*nel**(-1./3)/2
