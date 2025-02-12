@@ -1002,3 +1002,15 @@ class UEG:
                         if np.abs(GSquare) > 1e-12:
                             gamma_pqG[p, q, g] = np.sqrt(4. * np.pi / GSquare / self.Omega)
         return gamma_pqG
+
+    def madelung(self, rs, nel):
+        """
+        Madelung Constant for the UEG: correction of the interaction of the electrons
+        with themselves (periodic images).
+        Notes:
+            # there is still uncertainty in the factor of 2 divided ##
+            # but using it seems to make the tc-dcd agree with BF-DMC
+        """
+        MdlngCnst = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
+        return MdlngCnst
+
