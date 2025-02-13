@@ -12,3 +12,4 @@ fcidump*
 venv
 *.npy
 build
+.venv

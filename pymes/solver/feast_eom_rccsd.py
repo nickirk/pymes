@@ -278,7 +278,7 @@ class FEAST_EOMEESinglet(EOMEE):
         combined_diag[zero_diag_inds] = 1
         M = diags(combined_diag, offsets=0)
 
-        Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=max_iter, tol=self.ls_conv_tol)
+        Qe_vec, exit_code = gcrotmk(A, b, x0=x0, M=M, maxiter=max_iter, rtol=self.ls_conv_tol)
         if exit_code != 0:
             logger.debug(self, "Linear solver not converged after max %d cycles.", exit_code)
         return Qe_vec
