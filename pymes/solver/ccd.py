@@ -1,12 +1,13 @@
 import time
 import numpy as np
 
+from functools import partial
 from pymes.solver import mp2
 from pymes.mixer import diis
 from pymes.log import print_logging_info
 from pymes.solver import drccd
 
-einsum = partial(einsum, optimize=True)
+einsum = partial(np.einsum, optimize=True)
 
 class CCD:
 
