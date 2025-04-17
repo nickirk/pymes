@@ -1,11 +1,12 @@
 import time
 import numpy as np
 
+from pymes.util import tensors_util
 from pymes.solver import mp2
 from pymes.mixer import diis
 from pymes.log import print_logging_info
 from pymes.solver import drccd
-
+from pymes.integral import eri
 
 class CCD:
 
@@ -21,11 +22,12 @@ class CCD:
         if self.is_diis:
             self.mixer = diis.DIIS(dim_space=6)
 
-    def solve(self, t_fock_pq, t_V_pqrs, level_shift=0., sp=0,
+    def solve(self, eri, level_shift=0., sp=0,
               amps=None, **kwargs
               ):
         '''
-        ccd algorithm
+        ccd algorithm:
+	    Electron Repulsion Integrals from 'eri' (ERI class).
         t_V_ijkl = V^{ij}_{kl}
         t_V_abij = V^{ab}_{ij}
         t_T_abij = T^{ab}_{ij}
@@ -35,6 +37,16 @@ class CCD:
         time_ccd = time.time()
 
         no = self.no
+
+        t_fock_pq = eri.fock
+        t_V_iabj  = eri.ovvo 
+        t_V_aijb  = eri.voov
+        t_V_ijab  = eri.oovv
+        t_V_klij  = eri.oooo
+        t_V_iajb  = eri.ovov
+        t_V_abij  = eri.vvoo
+        t_V_abcd  = eri.vvvv
+
         nv = t_fock_pq.shape[0] - no
 
         # if use Bruekner method, backup the hole and particle energies
@@ -55,19 +67,11 @@ class CCD:
         delta = 1.0
         # construct the needed integrals here on spot.
 
-        t_V_iabj = t_V_pqrs[:no, no:, no:, :no]
-        t_V_aijb = t_V_pqrs[no:, :no, :no, no:]
-        t_V_ijab = t_V_pqrs[:no, :no, no:, no:]
-        t_V_klij = t_V_pqrs[:no, :no, :no, :no]
-        t_V_iajb = t_V_pqrs[:no, no:, :no, no:]
-        t_V_abij = t_V_pqrs[no:, no:, :no, :no]
-        t_V_abcd = t_V_pqrs[no:, no:, no:, no:]
-
         print_logging_info(algo_name)
         print_logging_info("Using DCD: ", self.is_dcd, level=1)
         print_logging_info("Using dr-CCD: ", self.is_dr_ccd, level=1)
         print_logging_info("Solving doubles amplitude equation", level=1)
-        print_logging_info("Using data type %s" % t_V_pqrs.dtype, level=1)
+        print_logging_info("Using data type %s" % t_V_klij.dtype, level=1)
         print_logging_info("Using DIIS mixer: ", self.is_diis, level=1)
         print_logging_info("Using Bruekner quasi-particle energy: ", self.is_bruekner,
                            level=1)
@@ -97,9 +101,7 @@ class CCD:
                                               t_V_abij, t_V_aijb, t_V_iabj,
                                               t_V_ijab)
             else:
-                t_R_abij = 1.0 * self.get_residual(t_fock_pq, t_T_abij,
-                                                   t_V_klij, t_V_ijab,
-                                                   t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd)
+                t_R_abij = 1.0 * self.get_residual(eri, t_T_abij)
 
             if self.is_bruekner:
                 # construct amp dependent quasi-particle energies
@@ -161,11 +163,18 @@ class CCD:
         return {"ccd e": e_ccd, "t2 amp": t_T_abij, "hole e": t_epsilon_i,
                 "particle e": t_epsilon_a, "dE": dE}
 
-    def get_residual(self, t_fock_pq, t_T_abij, t_V_klij, t_V_ijab,
-                     t_V_abij, t_V_iajb, t_V_iabj, t_V_abcd):
+    def get_residual(self, eri, t_T_abij):
 
         algo_name = "ccd.get_residual"
         no = self.no
+
+        t_fock_pq = eri.fock 
+        t_V_iabj  = eri.ovvo
+        t_V_ijab  = eri.oovv
+        t_V_klij  = eri.oooo
+        t_V_iajb  = eri.ovov
+        t_V_abij  = eri.vvoo
+
         nv = t_fock_pq.shape[0] - no
         t_R_abij = np.zeros([nv, nv, no, no], dtype=t_V_klij.dtype)
 
@@ -184,8 +193,21 @@ class CCD:
         #                      + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
         t_R_abij += t_V_abij 
         t_R_abij += np.einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
-        t_R_abij += np.einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
-    
+        #t_R_abij += np.einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
+
+        # Calculate block size dynamically to optimize memory usage.
+        element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
+        total_elements = nv                     # Total elements along the first axis.
+        block_size = tensors_util.calculate_block_size(total_elements, element_size)
+
+        # Process tensor 'vvvv'-contribution in blocks.
+        for block_start in range(0, nv, block_size):
+            block_end = min(block_start + block_size, nv)
+            indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
+            t_V_xbcd = eri.get_vvvv(indx)
+            t_R_xbij = np.einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
+            t_R_abij[block_start:block_end, :, :, :] += t_R_xbij
+
         if not self.is_dcd:
             t_X_alcj = np.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
             t_R_abij += np.einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)

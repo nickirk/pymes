@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
+from pymes.mean_field import hf
 from scipy import special
 from functools import partial
 
@@ -170,6 +171,23 @@ class UEG:
         self.init_basis_indices_map()
 
         return basis_fns
+
+    def compute_kinetic_energy(self,
+                                dtype=np.float64):
+        """ Member function of class UEG to compute the kinetic component
+        of the orbital energies.
+        Returns:
+        -----------
+        kinetic_G: array object
+            Kinetic energies, dimension [n_p] (number of spatial orbitals).
+        """
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
+        n_p = int(len(self.basis_fns)/2)
+        kinetic_G = np.zeros([n_p], dtype=dtype)
+        for i in range(n_p):
+            kinetic_G[i] = self.basis_fns[2*i].kinetic
+        return kinetic_G
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
@@ -732,8 +750,57 @@ class UEG:
 
         return one_particle_energies
 
-    # collection of correlators, should them be collected into a class?
-    # each correlator has some default parameters that are dependent on
+    # Work in progress 'get_integrals'.
+
+#    def get_integrals(self):
+#        """ Member function of class UEG: 
+#        """
+#        if self.basis_fns is None:
+#            raise ValueError("Basis functions not initialized!")
+
+        # How do we do this from ERI() in case we don't want transcorrelation?
+        
+#        if self.correlator is None:
+#            raise ValueError("Correlator for the transcorrelated framework not initialized!")
+#        if self.k_cutoff is None:
+#            raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
+#        if self.gamma is None:
+#            raise ValueError("Gamma not initialized!")
+
+#        nP = int(len(self.basis_fns)/2)
+#        no = int(self.n_ele/2)
+#        nv = nP - no
+
+        # This should exist if TC is active.
+        
+#        V_pqrs = self.eval_2b_integrals(correlator=self.correlator,\
+#                                        is_only_2b=True,sp=1)
+
+#        kinetic_G = self.compute_kinetic_energy()
+        
+#        tV_ijkl = V_pqrs[:no,:no,:no,:no]
+#        tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
+
+#        tV_aibj = t_V_pqrs[no:,:no,no:,:no]
+#        tV_aijb = t_V_pqrs[no:,:no,:no,no:]
+#        tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
+
+#        contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
+#        contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()
+
+#        contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()
+#        contr_from_triply_contra_3b = ueg_model.triple_contractions_in_3_body()
+
+#        V_pqrs += self.eval_2b_integrals(correlator=ueg_model.trunc,\
+#                                        is_effect_2b=True,sp=1)
+
+#        fock_pq = hf.construct_hf_matrix(no, np.diag(kinetic_G), V_pqrs)
+
+#        return fock_pq, V_pqrs
+
+    # CORRELATORS -----------------------------------------------------
+    # Collection of correlators, should them be collected into a class?
+    # Each correlator has some default parameters that are dependent on
     # the system and they are specific to UEG, so they should be part of
     # the UEG class.
 
