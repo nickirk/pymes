@@ -197,8 +197,8 @@ class CCD:
 
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
-        total_elements = nv                     # Total elements along the first axis.
-        block_size = tensors_util.calculate_block_size(total_elements, element_size)
+        total_elements_dimension = nv           # Total elements along the first axis.
+        block_size = tensors_util.calculate_block_size(total_elements_dimension, element_size)
 
         # Process tensor 'vvvv'-contribution in blocks.
         for block_start in range(0, nv, block_size):

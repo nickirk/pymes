@@ -8,24 +8,27 @@ def test_calculate_block_size():
     Test the calculate_block_size function to ensure it calculates block sizes correctly.
     """
     # Mock parameters
-    total_elements = 100  # Total number of elements in the tensor
+    nv = 20  # Total elements along one dimension
     element_size = 8  # Assuming double precision (8 bytes per element)
     memory_fraction = 0.5
+    total_elements_dimension = nv  # Total elements along one dimension
+
     available_memory = psutil.virtual_memory().available
     usable_memory = available_memory * memory_fraction
-    expected_block_size = min(total_elements, usable_memory // element_size)
+    max_elements_per_block = usable_memory // (element_size * nv**3)
+    expected_block_size = min(total_elements_dimension, max_elements_per_block)
 
     # Call the function directly from tensors_util
-    calculated_block_size = calculate_block_size(total_elements, element_size, memory_fraction)
+    calculated_block_size = calculate_block_size(total_elements_dimension, element_size, memory_fraction)
 
     # Print internal variables for debugging
     print(f"Available memory: {available_memory} bytes")
     print(f"Memory fraction: {memory_fraction}")
     print(f"Usable memory: {usable_memory} bytes")
-    print(f"Total elements: {total_elements}")
+    print(f"Total elements along one dimension: {total_elements_dimension}")
     print(f"Calculated block size: {calculated_block_size}")
     print(f"Expected block size: {expected_block_size}")
-    print(f"Number of blocks: {int(np.ceil(total_elements / calculated_block_size))}")
+    print(f"Number of blocks: {int(np.ceil(total_elements_dimension / calculated_block_size))}")
 
     assert calculated_block_size == expected_block_size, \
         f"Expected {expected_block_size}, got {calculated_block_size}"
@@ -53,14 +56,14 @@ def test_tensor_block_processing():
     # Process tensor in blocks
     t_R_abij = np.zeros_like(t_T_abij)
     element_size = t_T_abij.dtype.itemsize
-    total_elements = nv
-    block_size = calculate_block_size(total_elements, element_size)
+    total_elements_dimension = nv
+    block_size = calculate_block_size(total_elements_dimension, element_size)
 
     # Print internal variables for debugging
     print(f"Tensor element size: {element_size} bytes")
-    print(f"Total elements along axis: {total_elements}")
+    print(f"Total elements along one dimension: {total_elements_dimension}")
     print(f"Calculated block size: {block_size}")
-    print(f"Number of blocks: {int(np.ceil(total_elements / block_size))}")
+    print(f"Number of blocks: {int(np.ceil(total_elements_dimension / block_size))}")
 
     for block_start in range(0, nv, block_size):
         block_end = min(block_start + block_size, nv)
