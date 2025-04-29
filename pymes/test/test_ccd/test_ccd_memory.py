@@ -1,7 +1,7 @@
 import numpy as np
 import psutil
 from pymes.solver.ccd import CCD
-from pymes.util.tensors_util import calculate_block_size
+from pymes.util.tensors import calculate_block_size
 
 def test_calculate_block_size():
     """

@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-from pymes.util import tensors_util
+from pymes.util import tensors
 from pymes.solver import mp2
 from pymes.mixer import diis
 from pymes.log import print_logging_info
@@ -198,7 +198,7 @@ class CCD:
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
         total_elements_dimension = nv           # Total elements along the first axis.
-        block_size = tensors_util.calculate_block_size(total_elements_dimension, element_size)
+        block_size = tensors.calculate_block_size(total_elements_dimension, element_size)
 
         # Process tensor 'vvvv'-contribution in blocks.
         for block_start in range(0, nv, block_size):

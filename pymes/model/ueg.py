@@ -5,6 +5,7 @@ import numpy as np
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
+from pymes.util.tensors import get_block_index
 from scipy import special
 from functools import partial
 
@@ -14,7 +15,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False):
         """
         Parameters
         ----------
@@ -26,6 +27,9 @@ class UEG:
             number of spin down electrons
         rs: float
             density parameter
+        is_tc: bool
+            parameter which determines whether transcorrelated framework is
+            active or not for the calculation of the integrals.
 
         Attributes
         ----------
@@ -84,6 +88,8 @@ class UEG:
         self.k_cutoff = None
 
         self.gamma = None
+
+        self.is_tc = is_tc
 
     def is_k_in_basis(self, ke):
         """
@@ -188,6 +194,117 @@ class UEG:
         for i in range(n_p):
             kinetic_G[i] = self.basis_fns[2*i].kinetic
         return kinetic_G
+    
+    def get_fock(self,
+                 dtype=np.float64):
+        """ Member function of class UEG to compute the Hartree Fock Energy,
+                    the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
+                    the Coulomb tensor.
+        Returns:
+        -----------
+        EHF: scalar object
+            Hartree Fock energy.
+        fock_pq: array object
+            Fock matrix, dimension [n_p, n_p] (number of spatial orbitals).
+        V_oooo: array object
+            'OOOO' block of the Coulomb tensor, dimension [n_occ, n_occ, n_occ, n_occ]
+        V_vovo: array object
+            'VOVO' block of the Coulomb tensor, dimension [n_virt, n_occ, n_virt, n_occ]
+        V_voov: array object
+            'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt]
+        """
+        algo_name = "UEG.get_fock"
+        print_logging_info(algo_name, level=0)
+        start_time = time.time()
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
+        if self.is_tc:
+            print_logging_info("Using TC method", level=1)
+            if self.correlator is None:
+                raise ValueError("Correlator for the transcorrelated framework not initialized!")
+            if self.k_cutoff is None:
+                raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
+            if self.gamma is None:
+                raise ValueError("Gamma not initialized!")
+        else:
+            print_logging_info("Using non-TC method", level=1)
+        
+        nP = int(len(self.basis_fns) / 2)
+        no = int(self.n_ele / 2)
+        nv = nP - no
+        # initialize the fock matrix.
+        fock_pq = np.zeros([nP, nP], dtype=dtype)
+        # initialize the Coulomb tensor.
+        V_oooo = np.zeros([no, no, no, no], dtype=dtype)
+        V_vovo = np.zeros([nv, no, nv, no], dtype=dtype)
+        V_voov = np.zeros([nv, no, no, nv], dtype=dtype)
+        # initialize the Hartree Fock energy.
+        EHF = 0.0
+
+        # get the components of the Coulomb tensor.
+        if self.is_tc:
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo = self.get_2b_int( idx, \
+                                 is_only_2b=True)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo = self.get_2b_int( idx, \
+                                 is_only_2b=True)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov = self.get_2b_int( idx, \
+                                 is_only_2b=True)
+        else:
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo = self.get_2b_int( idx, \
+                                 is_only_coulomb=True)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo = self.get_2b_int( idx, \
+                                 is_only_coulomb=True)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov = self.get_2b_int( idx, \
+                                 is_only_coulomb=True)
+
+        # get the kinetic energies of the basis functions.
+        kinetic_G = self.compute_kinetic_energy()
+
+        # get the orbital energies (with/without pure 2b int. from transcorrelation).
+        tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
+        tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
+
+        # get the Hartree Fock energy.
+        EHF = hf.calc_hf_e_part(tEpsilon_i, V_oooo)
+
+        # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
+        if self.is_tc:
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            
+        # get doubly and tryply contractions of the 3-body integrals,
+        #     correct orbital energies,
+        #     and add the mean field contribution from the 3-body integrals 
+        #     to the Hartree Fock energy.
+        if self.is_tc:
+            contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
+            contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
+
+            tEpsilon_i += contr_from_doubly_contra_3b[:no]
+            tEpsilon_a += contr_from_doubly_contra_3b[no:]
+
+            EHF += contr_from_triply_contra_3b
+
+        # get the Hartree Fock matrix.
+        fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
+
+        print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
+                           "calculating the Hartree Fock energy and the Fock matrix", level=1)
+
+        return EHF, fock_pq, V_oooo, V_vovo, V_voov
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals

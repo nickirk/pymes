@@ -10,13 +10,26 @@ def calc_hf_e(no, e_core, t_h_pq, t_V_pqrs):
     t_e_hf = t_e_hf + (dirHFE + excHFE) + e_core
     return t_e_hf
 
-
 def construct_hf_matrix(no, t_h_pq, t_V_pqrs):
     t_fock_pq = t_h_pq.copy()
     t_fock_pq += 2. * np.einsum("piqi -> pq", t_V_pqrs[:, :no, :, :no])
     t_fock_pq += -1. * np.einsum("piiq -> pq", t_V_pqrs[:, :no, :no, :])
     return t_fock_pq
 
+def calc_hf_e_part(tEpsilon_i, tV_ijkl):
+    tHFE   =  2. * np.einsum('i->', tEpsilon_i)
+    dirHFE =  2. * np.einsum('jiji->', tV_ijkl)
+    excHFE = -1. * np.einsum('ijji->', tV_ijkl)
+    tHFE   = tHFE-(dirHFE + excHFE)
+    return tHFE
+
+def construct_hf_matrix_part(no, t_h_pq, t_V_ijkl, t_V_aibj, t_V_aijb):
+    t_fock_pq = t_h_pq.copy()
+    t_fock_pq[:no, :no] +=  2. * np.einsum("piqi -> pq", t_V_ijkl)
+    t_fock_pq[:no, :no] += -1. * np.einsum("piiq -> pq", t_V_ijkl)
+    t_fock_pq[no:, no:] +=  2. * np.einsum("piqi -> pq", t_V_aibj)
+    t_fock_pq[no:, no:] += -1. * np.einsum("piiq -> pq", t_V_aijb)
+    return t_fock_pq
 
 def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     e = kinetic_G[0:no]
@@ -28,7 +41,6 @@ def calcOccupiedOrbE(kinetic_G, tV_ijkl, no):
     e = e + dirE
     e = e + exE
     return e
-
 
 def calcVirtualOrbE(kinetic_G, t_V_aibj, t_V_aijb, no, nv):
     e = kinetic_G[no:]
