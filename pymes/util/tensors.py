@@ -31,6 +31,7 @@ def get_block_index( block_string, n_p, n_occ):
     """
     Calculates the corresponding index tuple for the corresponding block of the tensor:
 
+    'full' = [:, :, :, :]
     'oooo' = [:no, :no, :no, :no]
     'ovvo' = [:no, no:, no:, :no]
     'voov' = [no:, :no, :no, no:]
@@ -54,8 +55,10 @@ def get_block_index( block_string, n_p, n_occ):
     no = int(n_occ)
     
     block = block_string.capitalize()
-
-    if block == 'OOOO':
+    
+    if block == 'FULL':
+          idx = tuple(0,nP,0,nP,0,nP,0,nP)
+    elif block == 'OOOO':
           idx = tuple(0,no,0,no,0,no,0,no)
     elif block == 'OVVO':
           idx = tuple(0,no,no,nP,no,nP,0,no)

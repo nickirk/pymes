@@ -1,3 +1,5 @@
+from pymes.util.tensors import get_block_index
+
 class ERI:
 
     def __init__(self, model=None):
@@ -5,13 +7,15 @@ class ERI:
         self.n_elec = self.model.n_ele if model else None
         self.n_orb = len(self.model.basis_fns)//2 if model else None
         self.n_occ = self.n_elec // 2
+        self.EHF  = None
         self.fock = None
         self.oooo = None
         self.ovvo = None
         self.voov = None 
         self.oovv = None
-        self.ovov = None
         self.vvoo = None
+        self.ovov = None
+        self.vovo = None
         self.vvvv = None
     
     def calc_eri(self, incore=True):
@@ -24,29 +28,46 @@ class ERI:
         Returns:
         eri (numpy.ndarray): The calculated ERIs.
         """
+
+        nP = self.n_orb
+        no = self.n_occ
+
         if incore:
-            self.fock = self.model.fock()
-            V_pqrs = self.model.get_g2b()
+
+            EHF, fock, t_V_ijkl, t_V_aibj, t_V_aijb = self.model.get_fock()
+            self.EHF  = EHF
+            self.fock = fock
+            self.oooo = t_V_ijkl
+            self.vovo = t_V_aibj
+            self.voov = t_V_aijb
+
+            idx    = get_block_index( 'full', nP, no)
+            V_pqrs = self.model.get_2b_int( idx )
+
             self.part_eri(self.fock, V_pqrs)
+
         else:
-            # Placeholder for on-the-fly calculation
-            self.oooo = self.model.get_g2b('oooo')
-            self.ovvo=  self.model.get_g2b('ovvo')
-            self.voov=  self.model.get_g2b('voov')
-            self.oovv=  self.model.get_g2b('oovv')
-            self.ovov=  self.model.get_g2b('ovov')
-            self.vvoo=  self.model.get_g2b('vvoo')
+            self.EHF, fock, self.oooo, self.vovo, self.voov = self.model.get_fock()
+            idx    = get_block_index( 'ovvo', nP, no)
+            self.ovvo =  self.model.get_2b_int( idx )
+            idx    = get_block_index( 'oovv', nP, no)
+            self.oovv =  self.model.get_2b_int( idx )
+            idx    = get_block_index( 'ovov', nP, no)
+            self.ovov =  self.model.get_2b_int( idx)
+            idx    = get_block_index( 'vvoo', nP, no)
+            self.vvoo =  self.model.get_2b_int( idx )
 
     def part_eri(self, fock, V_pqrs):    
         no = self.n_occ
         self.fock = fock
-        self.oooo= V_pqrs[:no, :no, :no, :no]
-        self.ovvo= V_pqrs[:no, no:, no:, :no]
-        self.voov= V_pqrs[no:, :no, :no, no:]
-        self.oovv= V_pqrs[:no, :no, no:, no:]
-        self.ovov= V_pqrs[:no, no:, :no, no:]
-        self.vvoo= V_pqrs[no:, no:, :no, :no]
-        self.vvvv= V_pqrs[no:, no:, no:, no:]
+        self.oooo = V_pqrs[:no, :no, :no, :no]
+        self.ovvo = V_pqrs[:no, no:, no:, :no]
+        self.voov = V_pqrs[no:, :no, :no, no:]
+        self.oovv = V_pqrs[:no, :no, no:, no:]
+        self.vvoo = V_pqrs[no:, no:, :no, :no]
+        self.ovov = V_pqrs[:no, no:, :no, no:]
+        self.vovo = V_pqrs[no:, :no, no:, :no]
+        self.vvvv = V_pqrs[no:, no:, no:, no:]
     
     def get_vvvv(self, idx=None):
         """
