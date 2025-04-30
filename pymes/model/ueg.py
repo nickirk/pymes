@@ -254,14 +254,11 @@ class UEG:
                                  is_only_2b=True)
         else:
             idx    = get_block_index( 'oooo', nP, no)
-            V_oooo = self.get_2b_int( idx, \
-                                 is_only_coulomb=True)
+            V_oooo = self.get_2b_int( idx )
             idx    = get_block_index( 'vovo', nP, no)
-            V_vovo = self.get_2b_int( idx, \
-                                 is_only_coulomb=True)
+            V_vovo = self.get_2b_int( idx )
             idx    = get_block_index( 'voov', nP, no)
-            V_voov = self.get_2b_int( idx, \
-                                 is_only_coulomb=True)
+            V_voov = self.get_2b_int( idx )
 
         # get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
@@ -305,6 +302,155 @@ class UEG:
                            "calculating the Hartree Fock energy and the Fock matrix", level=1)
 
         return EHF, fock_pq, V_oooo, V_vovo, V_voov
+    
+    def get_2b_int(self, idx, 
+                   is_only_2b=False, 
+                   is_effect_2b=False,
+                   dtype=np.float64):
+        """ Member function of class UEG to compute the 2-body integrals
+        (Coulomb integrals) and the additional 2-body integrals from
+        the transcorrelated method: pure 2-body integrals, effective 2-body
+        integrals from the singly contracted 3-body integrals.
+        Parameters
+        ----------
+        idx: tuple of int
+            indices of the block of the Coulomb tensor to be computed.
+        is_only_2b: bool
+            parameter which determines to include only the additional
+            pure 2-body tc integrals, besides the Coulomb integrals.
+        is_effect_2b: bool
+            parameter which determines to include the effective 2-body integrals 
+            as a result of single contractions from the 3-body integrals. 
+            There are four types of single contractions in the 3-body integrals: 
+            RPA type and 3 exchange types.
+        
+        Returns
+        -------
+        V_pqrs: tensor object (tensor by default)
+            of size [ idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
+        """
+        algo_name = "UEG.get_2b_int"
+        print_logging_info(algo_name, level=0)
+        start_time = time.time()
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
+        if self.is_tc:
+            print_logging_info("Using TC method", level=1)
+            if self.correlator is None:
+                raise ValueError("Correlator for the transcorrelated framework not initialized!")
+            if self.k_cutoff is None:
+                raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
+            if self.gamma is None:
+                raise ValueError("Gamma not initialized!")
+        else:
+            print_logging_info("Using non-TC method", level=1)
+
+        nP = int(len(self.basis_fns) / 2)
+        no = int(self.n_ele / 2)
+        nv = nP - no
+
+        # initialize the Coulomb tensor.
+        V_pqrs = np.zeros([idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7]], dtype=dtype)
+
+        num_k_in_each_dir = self.imax * 2 + 1
+
+        for p in range(idx[0], idx[1]):
+            print_logging_info("Elapsed time = {:.3f} s: calculating "
+                               .format(time.time() - start_time)
+                               + "the {} of {} orbitals"
+                               .format(p,nP), level=1)
+            for r in range(idx[2], idx[3]):
+                d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
+                d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
+                u_mat = 0.
+                if self.is_tc and self.correlator is not None:
+                    u_mat = self.sumNablaUSquare(d_k_vec)
+
+                for q in range(idx[4], idx[5]):
+                    int_ks = self.basis_fns[q * 2].k - d_int_k
+                    # if self.is_k_in_basis(int_ks):
+                    # [s] index to self.basis_indices_map.
+                    loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax) + \
+                            num_k_in_each_dir * (int_ks[1] + self.imax) + \
+                            int_ks[2] + self.imax
+                    # check if ks-vector is in the basis set.
+                    if len(self.basis_indices_map) > loc_s >= 0:
+                        # check if s index of ks-vector is in the range of
+                        # the block of the Coulomb tensor to be computed.
+                        s = int(self.basis_indices_map[loc_s])
+                        if s < idx[6] or s >= idx[7]:
+                            continue
+                    else:
+                        continue
+
+                    dk_square = d_k_vec.dot(d_k_vec)
+                    w = 0.
+
+                    if self.is_tc and self.correlator is not None:
+                        if is_only_2b:
+                            if np.abs(dk_square) > 0.:
+                                rs_dk = self.basis_fns[r * 2].kp \
+                                        - self.basis_fns[s * 2].kp
+                                w = 4. * np.pi / dk_square \
+                                    + u_mat \
+                                    + dk_square * self.correlator(dk_square) \
+                                    - (rs_dk.dot(d_k_vec)) \
+                                    * self.correlator(dk_square)
+                                w = w / self.Omega
+                            else:
+                                w = u_mat / self.Omega
+                        elif is_effect_2b:
+                            if np.abs(dk_square) > 0.:
+                                w = - (self.n_ele) * dk_square \
+                                    * self.correlator(dk_square) ** 2 / self.Omega \
+                                    + 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * r].kp, d_k_vec) \
+                                    - 2. * self.contract_exchange_3_body(
+                                    self.basis_fns[2 * p].kp, d_k_vec) \
+                                    + 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
+                            else:
+                                w = (2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec))
+                            w = w / self.Omega                          
+                        else:
+                            if np.abs(dk_square) > 0.:
+                                rs_dk = self.basis_fns[r * 2].kp \
+                                        - self.basis_fns[s * 2].kp
+                                # Coulomb:
+                                w =  4. * np.pi / dk_square
+                                # Transcorrelated pure 2-body:
+                                w += + u_mat \
+                                     + dk_square * self.correlator(dk_square) \
+                                     - (rs_dk.dot(d_k_vec)) \
+                                     * self.correlator(dk_square)
+                                # Transcorrelated effective 2-body:
+                                w += - (self.n_ele) * dk_square \
+                                     * self.correlator(dk_square) ** 2 / self.Omega \
+                                     + 2. * self.contract_exchange_3_body(
+                                     self.basis_fns[2 * r].kp, d_k_vec) \
+                                     - 2. * self.contract_exchange_3_body(
+                                     self.basis_fns[2 * p].kp, d_k_vec) \
+                                     + 2. * self.contractP_KWithQ(
+                                     self.basis_fns[2 * r].kp, d_k_vec)
+                            else:
+                                w  = u_mat
+                                w += (2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec))
+                            w = w / self.Omega
+                    else:
+                        if np.abs(dk_square) > 0.:
+                            w = 4. * np.pi / dk_square / self.Omega
+                    V_pqrs[p,q,r,s] = w
+
+        if (self.is_tc and not is_only_2b):
+            # symmetrize the integral with respect to electron 1 and 2
+            V_sym_pqrs = np.zeros(V_pqrs.shape)
+            V_sym_pqrs += 0.5 * (V_pqrs + V_pqrs.transpose((1,0,3,2)))
+            V_pqrs = V_sym_pqrs
+
+        print_logging_info("{:.3f} s spent on ".format(time.time() - start_time)+__name__, level=1)
+        return V_pqrs 
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
