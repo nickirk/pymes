@@ -54,26 +54,26 @@ def get_block_index( block_string, n_p, n_occ):
     nP = int(n_p)
     no = int(n_occ)
     
-    block = block_string.capitalize()
+    block = block_string.upper()
     
     if block == 'FULL':
-          idx = tuple(0,nP,0,nP,0,nP,0,nP)
+          idx = tuple((0,nP,0,nP,0,nP,0,nP))
     elif block == 'OOOO':
-          idx = tuple(0,no,0,no,0,no,0,no)
+          idx = tuple((0,no,0,no,0,no,0,no))
     elif block == 'OVVO':
-          idx = tuple(0,no,no,nP,no,nP,0,no)
+          idx = tuple((0,no,no,nP,no,nP,0,no))
     elif block == 'VOOV':
-          idx = tuple(no,nP,0,no,0,no,no,nP)
+          idx = tuple((no,nP,0,no,0,no,no,nP))
     elif block == 'OOVV':
-          idx = tuple(0,no,0,no,no,nP,no,nP)
+          idx = tuple((0,no,0,no,no,nP,no,nP))
     elif block == 'VVOO':
-          idx = tuple(no,nP,no,nP,0,no,0,no)
+          idx = tuple((no,nP,no,nP,0,no,0,no))
     elif block == 'VOVO':
-          idx = tuple(no,nP,0,no,no,nP,0,no)
+          idx = tuple((no,nP,0,no,no,nP,0,no))
     elif block == 'OVOV':
-          idx = tuple(0,no,no,nP,0,no,no,nP)
+          idx = tuple((0,no,no,nP,0,no,no,nP))
     elif block == 'VVVV':
-          idx = tuple(no,nP,no,nP,no,nP,no,nP)
+          idx = tuple((no,nP,no,nP,no,nP,no,nP))
     else:
           raise ValueError("Tensor block not valid!")
       

@@ -224,8 +224,8 @@ class UEG:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
             if self.k_cutoff is None:
                 raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
-            if self.gamma is None:
-                raise ValueError("Gamma not initialized!")
+            #if self.gamma is None:
+            #    raise ValueError("Gamma not initialized!")
         else:
             print_logging_info("Using non-TC method", level=1)
         
@@ -269,6 +269,7 @@ class UEG:
 
         # get the Hartree Fock energy.
         EHF = hf.calc_hf_e_part(tEpsilon_i, V_oooo)
+        print("HF energy = ", EHF)
 
         # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
         if self.is_tc:
@@ -293,6 +294,7 @@ class UEG:
             tEpsilon_i += contr_from_doubly_contra_3b[:no]
             tEpsilon_a += contr_from_doubly_contra_3b[no:]
 
+            print( 'ET =', contr_from_triply_contra_3b)
             EHF += contr_from_triply_contra_3b
 
         # get the Hartree Fock matrix.
@@ -340,8 +342,8 @@ class UEG:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
             if self.k_cutoff is None:
                 raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
-            if self.gamma is None:
-                raise ValueError("Gamma not initialized!")
+            #if self.gamma is None:
+            #    raise ValueError("Gamma not initialized!")
         else:
             print_logging_info("Using non-TC method", level=1)
 
@@ -350,7 +352,7 @@ class UEG:
         nv = nP - no
 
         # initialize the Coulomb tensor.
-        V_pqrs = np.zeros([idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7]], dtype=dtype)
+        V_pqrs = np.zeros([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 
         num_k_in_each_dir = self.imax * 2 + 1
 
@@ -359,14 +361,14 @@ class UEG:
                                .format(time.time() - start_time)
                                + "the {} of {} orbitals"
                                .format(p,nP), level=1)
-            for r in range(idx[2], idx[3]):
+            for r in range(idx[4], idx[5]):
                 d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
                 d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
                 u_mat = 0.
                 if self.is_tc and self.correlator is not None:
                     u_mat = self.sumNablaUSquare(d_k_vec)
 
-                for q in range(idx[4], idx[5]):
+                for q in range(idx[2], idx[3]):
                     int_ks = self.basis_fns[q * 2].k - d_int_k
                     # if self.is_k_in_basis(int_ks):
                     # [s] index to self.basis_indices_map.
@@ -401,17 +403,29 @@ class UEG:
                                 w = u_mat / self.Omega
                         elif is_effect_2b:
                             if np.abs(dk_square) > 0.:
-                                w = - (self.n_ele) * dk_square \
-                                    * self.correlator(dk_square) ** 2 / self.Omega \
-                                    + 2. * self.contract_exchange_3_body(
-                                    self.basis_fns[2 * r].kp, d_k_vec) \
-                                    - 2. * self.contract_exchange_3_body(
-                                    self.basis_fns[2 * p].kp, d_k_vec) \
-                                    + 2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * r].kp, d_k_vec)
+                                w_pqrs = - 1.0 * (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * r].kp, d_k_vec) \
+                                        - 2. *self.contract_exchange_3_body(
+                                        self.basis_fns[2 * p].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = - 1.0 * (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * s].kp, d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * q].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * s].kp, d_k_vec)
+                                w = 0.5 * ( w_pqrs + w_qpsr )
                             else:
-                                w = (2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * r].kp, d_k_vec))
+                                w_pqrs = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * s].kp, d_k_vec)
+                                w = 0.5 * (w_pqrs + w_qpsr)
                             w = w / self.Omega                          
                         else:
                             if np.abs(dk_square) > 0.:
@@ -425,30 +439,43 @@ class UEG:
                                      - (rs_dk.dot(d_k_vec)) \
                                      * self.correlator(dk_square)
                                 # Transcorrelated effective 2-body:
-                                w += - (self.n_ele) * dk_square \
-                                     * self.correlator(dk_square) ** 2 / self.Omega \
-                                     + 2. * self.contract_exchange_3_body(
-                                     self.basis_fns[2 * r].kp, d_k_vec) \
-                                     - 2. * self.contract_exchange_3_body(
-                                     self.basis_fns[2 * p].kp, d_k_vec) \
-                                     + 2. * self.contractP_KWithQ(
-                                     self.basis_fns[2 * r].kp, d_k_vec)
+                                w_pqrs = - 1.0 * (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * r].kp, d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * p].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = - 1. * (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * s].kp, d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * q].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * s].kp, d_k_vec)
+                                w += 0.5 * ( w_pqrs + w_qpsr )
                             else:
                                 w  = u_mat
-                                w += (2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * r].kp, d_k_vec))
+                                w_pqrs = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * s].kp, d_k_vec)
+                                w += 0.5 * (w_pqrs + w_qpsr) 
                             w = w / self.Omega
                     else:
                         if np.abs(dk_square) > 0.:
                             w = 4. * np.pi / dk_square / self.Omega
-                    V_pqrs[p,q,r,s] = w
-
-        if (self.is_tc and not is_only_2b):
-            # symmetrize the integral with respect to electron 1 and 2
-            V_sym_pqrs = np.zeros(V_pqrs.shape)
-            V_sym_pqrs += 0.5 * (V_pqrs + V_pqrs.transpose((1,0,3,2)))
-            V_pqrs = V_sym_pqrs
-
+                    # get local indices of the 'sliced' tensor'.
+                    loc_p_idx = p - idx[0]
+                    loc_q_idx = q - idx[2]
+                    loc_r_idx = r - idx[4]
+                    loc_s_idx = s - idx[6]
+                    V_pqrs[loc_p_idx,
+                           loc_q_idx,
+                           loc_r_idx,
+                           loc_s_idx] = w
         print_logging_info("{:.3f} s spent on ".format(time.time() - start_time)+__name__, level=1)
         return V_pqrs 
 
