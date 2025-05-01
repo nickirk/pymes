@@ -36,14 +36,8 @@ class ERI:
 
         if incore:
 
-            tEHF, tEpsilon_i, tEpsilon_a, t_fock, t_V_ijkl, t_V_aibj, t_V_aijb = self.model.get_fock()
-            self.EHF      = tEHF
-            self.eps_occ  = tEpsilon_i
-            self.eps_virt = tEpsilon_a
-            self.fock     = t_fock
-            self.oooo     = t_V_ijkl
-            self.vovo     = t_V_aibj
-            self.voov     = t_V_aijb
+            self.EHF, self.eps_occ, self.eps_virt, self.fock, \
+                self.oooo, self.vovo, self.voov = self.model.get_fock()
 
             idx    = get_block_index( 'full', nP, no)
             V_pqrs = self.model.get_2b_int( idx )
@@ -89,7 +83,6 @@ class ERI:
             idx[6] (int): The start of 3rd index
             idx[7] (int): The end of 3rd index
 
-        
         Returns:
         vvvv (numpy.ndarray): The extracted vvvv block of ERIs.
         """
@@ -99,4 +92,10 @@ class ERI:
             else:
                 return self.vvvv[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
         else:
-            raise ValueError("VVVV block is not calculated or available.")
+            if idx is None:
+                nP  = self.n_orb
+                no  = self.n_occ
+                idx = get_block_index('vvvv', nP, no)
+                return self.model.get_2b_int( idx )
+            else:
+                return self.model.get_2b_int( idx )

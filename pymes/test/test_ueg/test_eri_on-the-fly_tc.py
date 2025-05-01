@@ -8,6 +8,7 @@ from pymes.solver import mp2
 from pymes.model import ueg
 from pymes.mean_field import hf
 from pymes.integral import eri
+from pymes.util.tensors import get_block_index, calculate_block_size
 from pymes.log import print_title, print_logging_info
 
 
@@ -79,7 +80,7 @@ def main(nel, cutoff, rs, gamma, kc, amps):
        ueg_model.gamma = gamma
     
     myERI = eri.ERI(ueg_model)
-    myERI.calc_eri(incore=True)
+    myERI.calc_eri(incore=False)
 
     print_logging_info("{:.3f} seconds spent on constructing in-core ERI."\
                        .format((time.time()-time_init_eri)))
@@ -193,7 +194,25 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     compare_tensors(myERI.ovov, t_V_pqrs[:no,no:,:no,no:])
 
     print_logging_info("Comparing [vvvv] block", level=0)
-    compare_tensors(myERI.vvvv, t_V_pqrs[no:,no:,no:,no:])
+    print_logging_info("Full block: ", level=1)
+    idx = get_block_index('vvvv', nP, no)
+    tV_abcd = myERI.get_vvvv( idx )
+    compare_tensors(tV_abcd, t_V_pqrs[no:,no:,no:,no:])
+    print_logging_info("Block by slices: ", level=1)
+    # Calculate block size dynamically to optimize memory usage.
+    element_size = myERI.vvoo.dtype.itemsize  # Size of one element in bytes
+    total_elements_dimension = nv           # Total elements along the first axis.
+    block_size = calculate_block_size(total_elements_dimension, element_size)
+    # Calculate manually the block size.
+    block_size = 1
+    # Process tensor 'vvvv'-contribution in blocks.
+    for block_start in range(0, nv, block_size):
+        block_end = min(block_start + block_size, nv)
+        indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
+        tV_xbcd = myERI.get_vvvv(indx)
+        print_logging_info("Block nro.: ", block_start, level=1)
+        compare_tensors(tV_xbcd, t_V_pqrs[indx[0]:indx[1], indx[2]:indx[3], \
+                                        indx[4]:indx[5], indx[6]:indx[7]])
  
     print_title('Evaluating the MP2 energies','=')
     print_title('Evaluating the MP2 energy from ERI','-')

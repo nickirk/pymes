@@ -39,13 +39,14 @@ class CCD:
         no = self.no
 
         t_fock_pq = eri.fock
+        t_V_klij  = eri.oooo
         t_V_iabj  = eri.ovvo 
         t_V_aijb  = eri.voov
         t_V_ijab  = eri.oovv
-        t_V_klij  = eri.oooo
-        t_V_iajb  = eri.ovov
         t_V_abij  = eri.vvoo
-        t_V_abcd  = eri.vvvv
+        #t_V_iajb  = eri.ovov
+        #t_V_aibj  = eri.vovo
+        #t_V_abcd  = eri.vvvv
 
         nv = t_fock_pq.shape[0] - no
 
