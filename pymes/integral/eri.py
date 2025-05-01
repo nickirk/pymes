@@ -7,16 +7,18 @@ class ERI:
         self.n_elec = self.model.n_ele if model else None
         self.n_orb = len(self.model.basis_fns)//2 if model else None
         self.n_occ = self.n_elec // 2
-        self.EHF  = None
-        self.fock = None
-        self.oooo = None
-        self.ovvo = None
-        self.voov = None 
-        self.oovv = None
-        self.vvoo = None
-        self.ovov = None
-        self.vovo = None
-        self.vvvv = None
+        self.EHF   = None
+        self.eps_occ  = None
+        self.eps_virt = None
+        self.fock  = None
+        self.oooo  = None
+        self.ovvo  = None
+        self.voov  = None 
+        self.oovv  = None
+        self.vvoo  = None
+        self.ovov  = None
+        self.vovo  = None
+        self.vvvv  = None
     
     def calc_eri(self, incore=True):
         """
@@ -34,12 +36,14 @@ class ERI:
 
         if incore:
 
-            EHF, fock, t_V_ijkl, t_V_aibj, t_V_aijb = self.model.get_fock()
-            self.EHF  = EHF
-            self.fock = fock
-            self.oooo = t_V_ijkl
-            self.vovo = t_V_aibj
-            self.voov = t_V_aijb
+            tEHF, tEpsilon_i, tEpsilon_a, t_fock, t_V_ijkl, t_V_aibj, t_V_aijb = self.model.get_fock()
+            self.EHF      = tEHF
+            self.eps_occ  = tEpsilon_i
+            self.eps_virt = tEpsilon_a
+            self.fock     = t_fock
+            self.oooo     = t_V_ijkl
+            self.vovo     = t_V_aibj
+            self.voov     = t_V_aijb
 
             idx    = get_block_index( 'full', nP, no)
             V_pqrs = self.model.get_2b_int( idx )
@@ -47,7 +51,8 @@ class ERI:
             self.part_eri(self.fock, V_pqrs)
 
         else:
-            self.EHF, fock, self.oooo, self.vovo, self.voov = self.model.get_fock()
+            self.EHF, self.eps_occ, self.eps_virt, self.fock, \
+                self.oooo, self.vovo, self.voov = self.model.get_fock()
             idx    = get_block_index( 'ovvo', nP, no)
             self.ovvo =  self.model.get_2b_int( idx )
             idx    = get_block_index( 'oovv', nP, no)
