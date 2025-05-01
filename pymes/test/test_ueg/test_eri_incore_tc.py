@@ -106,6 +106,9 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     tV_ijkl = t_V_pqrs[:no,:no,:no,:no]
     tV_aibj = t_V_pqrs[no:,:no,no:,:no]
     tV_aijb = t_V_pqrs[no:,:no,:no,no:]
+    tV_ijab = t_V_pqrs[:no,:no,no:,no:]
+    tV_abij = t_V_pqrs[no:,no:,:no,:no]
+
     print_logging_info("Calculating hole and particle energies", level =0)
     tEpsilon_i = hf.calcOccupiedOrbE(kinetic_G, tV_ijkl, no)
     tEpsilon_a = hf.calcVirtualOrbE(kinetic_G, tV_aibj, tV_aijb, no, nv)
@@ -125,12 +128,12 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     print_logging_info("{:.3f} seconds spent on evaluating HF energy"\
                        .format((time.time()-time_ehf)))
 
- #   print_title('Evaluating effective 2-body integrals','-')
- #   time_eff_2_body = time.time()
- #   t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
- #                                           is_effect_2b=True,sp=1)
- #   print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
- #                      .format((time.time()-time_eff_2_body)))
+    print_title('Evaluating effective 2-body integrals','-')
+    time_eff_2_body = time.time()
+    t_V_pqrs += ueg_model.eval_2b_integrals(correlator=ueg_model.trunc,\
+                                            is_effect_2b=True,sp=1)
+    print_logging_info("{:.3f} seconds spent on evaluating effective 2-body integrals"\
+                       .format((time.time()-time_eff_2_body)))
     
     print_title('Correcting the orbital energies','-')
     contr_from_doubly_contra_3b = ueg_model.double_contractions_in_3_body()
@@ -150,6 +153,11 @@ def main(nel, cutoff, rs, gamma, kc, amps):
 
     # Compare STANDARD WAY with the ERI class.
     print_title('Compare the STANDARD WAY and ERI class','=')
+
+    # Compare the Ref. energy.
+    print_title('Comparing the reference energy','-')
+    if (np.abs((tEHF +contr_from_triply_contra_3b ) - myERI.EHF) < 1e-5):
+        print_logging_info("Ref. energies are consistent.", level=1)
 
     # Compare orbital energies.
     print_title('Comparing the occupied orbital energies','-')
@@ -189,13 +197,23 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     compare_tensors(myERI.vvvv, t_V_pqrs[no:,no:,no:,no:])
  
     print_title('Evaluating the MP2 energies','=')
+    print_title('Evaluating the MP2 energy from ERI','-')
     print_logging_info("Starting MP2", level=0)
-    time_mp2 = time.time()
-    mp2_energy, mp2_Amp = mp2.solve(myERI.eps_occ, myERI.eps_virt, \
+    time_mp2_ERI = time.time()
+    mp2_energy_ERI, mp2_Amp = mp2.solve(myERI.eps_occ, myERI.eps_virt, \
                                     myERI.oovv, myERI.vvoo)
     print_logging_info("{:.3f} seconds spent on MP2"\
-                       .format((time.time()-time_mp2)), level=0)
-    print_logging_info("MP2 energy = {:.8f}".format(mp2_energy), lvel=0)
+                       .format((time.time()-time_mp2_ERI)), level=0)
+    print_logging_info("MP2 energy = {:.8f}".format(mp2_energy_ERI), lvel=0)
+    print_title('Evaluating the MP2 energy from the STANDARD WAY','-')
+    time_mp2_ERI = time.time()
+    mp2_energy, mp2_Amp = mp2.solve( tEpsilon_i, tEpsilon_a, \
+                                    t_V_abij=tV_abij, t_V_ijab=tV_ijab)
+    print_logging_info("{:.3f} seconds spent on MP2"\
+                       .format((time.time()-time_mp2_ERI)), level=0)
+    print_title('Comparing the MP2 energies','-')
+    if (np.abs(mp2_energy - mp2_energy_ERI) < 1e-5):
+        print_logging_info("MP2 energies are consistent.", level=1)
 
 
 if __name__ == '__main__':

@@ -411,32 +411,32 @@ class UEG:
                             else:
                                 w = u_mat / self.Omega
                         elif is_effect_2b:
-                            w = 0. # FOR DEBUGGING.
- #                           if np.abs(dk_square) > 0.:
- #                               w_pqrs = - 0.5 * (self.n_ele) * dk_square \
- #                                       * self.correlator(dk_square) ** 2 / self.Omega \
- #                                       + 1. * self.contract_exchange_3_body(
- #                                       self.basis_fns[2 * r].kp, d_k_vec) \
- #                                       - 1. *self.contract_exchange_3_body(
- #                                       self.basis_fns[2 * p].kp, d_k_vec) \
- #                                       + 1. * self.contractP_KWithQ(
- #                                       self.basis_fns[2 * r].kp, d_k_vec)
- #                               w_qpsr = - 0.5 * (self.n_ele) * dk_square \
- #                                       * self.correlator(dk_square) ** 2 / self.Omega \
- #                                       + 1. * self.contract_exchange_3_body(
- #                                       self.basis_fns[2 * s].kp, d_k_vec) \
- #                                       - 1. * self.contract_exchange_3_body(
- #                                       self.basis_fns[2 * q].kp, d_k_vec) \
- #                                       + 1. * self.contractP_KWithQ(
- #                                       self.basis_fns[2 * s].kp, d_k_vec)
- #                               w = 0.5 * ( w_pqrs + w_qpsr )
- #                           else:
- #                               w_pqrs = 1. * self.contractP_KWithQ(
- #                                   self.basis_fns[2 * r].kp, d_k_vec)
- #                               w_qpsr = 1. * self.contractP_KWithQ(
- #                                   self.basis_fns[2 * s].kp, d_k_vec)
- #                               w = 0.5 * (w_pqrs + w_qpsr)
- #                            w = w / self.Omega                          
+#                            w = 0. # FOR DEBUGGING.
+                            if np.abs(dk_square) > 0.:
+                                w_pqrs = - (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * r].kp, d_k_vec) \
+                                        - 2. *self.contract_exchange_3_body(
+                                        self.basis_fns[2 * p].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = - (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * s].kp, -d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * q].kp, -d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * s].kp, -d_k_vec)
+                                w = 0.5 * ( w_pqrs + w_qpsr )
+                            else:
+                                w_pqrs = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * s].kp, -d_k_vec)
+                                w = 0.5 * (w_pqrs + w_qpsr)
+                            w = w / self.Omega                          
                         else:
                             if np.abs(dk_square) > 0.:
                                 rs_dk = self.basis_fns[r * 2].kp \
@@ -449,30 +449,30 @@ class UEG:
                                      - (rs_dk.dot(d_k_vec)) \
                                      * self.correlator(dk_square)
                                 # Transcorrelated effective 2-body:
-#                                w_pqrs = - 0.5 * (self.n_ele) * dk_square \
-#                                        * self.correlator(dk_square) ** 2 / self.Omega \
-#                                        + 1. * self.contract_exchange_3_body(
-#                                        self.basis_fns[2 * r].kp, d_k_vec) \
-#                                        - 1. * self.contract_exchange_3_body(
-#                                        self.basis_fns[2 * p].kp, d_k_vec) \
-#                                        + 1. * self.contractP_KWithQ(
-#                                        self.basis_fns[2 * r].kp, d_k_vec)
-#                                w_qpsr = - 0.5 * (self.n_ele) * dk_square \
-#                                        * self.correlator(dk_square) ** 2 / self.Omega \
-#                                        + 1. * self.contract_exchange_3_body(
-#                                        self.basis_fns[2 * s].kp, d_k_vec) \
-#                                        - 1. * self.contract_exchange_3_body(
-#                                        self.basis_fns[2 * q].kp, d_k_vec) \
-#                                        + 1. * self.contractP_KWithQ(
-#                                        self.basis_fns[2 * s].kp, d_k_vec)
-#                                w += 0.5 * ( w_pqrs + w_qpsr )
+                                w_pqrs = - (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * r].kp, d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * p].kp, d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = - (self.n_ele) * dk_square \
+                                        * self.correlator(dk_square) ** 2 / self.Omega \
+                                        + 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * s].kp, -d_k_vec) \
+                                        - 2. * self.contract_exchange_3_body(
+                                        self.basis_fns[2 * q].kp, -d_k_vec) \
+                                        + 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * s].kp, -d_k_vec)
+                                w += 0.5 * ( w_pqrs + w_qpsr )
                             else:
                                 w  = u_mat
-#                                w_pqrs = 1. * self.contractP_KWithQ(
-#                                    self.basis_fns[2 * r].kp, d_k_vec)
-#                                w_qpsr = 1. * self.contractP_KWithQ(
-#                                    self.basis_fns[2 * s].kp, d_k_vec)
-#                                w += 0.5 * (w_pqrs + w_qpsr) 
+                                w_pqrs = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * r].kp, d_k_vec)
+                                w_qpsr = 2. * self.contractP_KWithQ(
+                                    self.basis_fns[2 * s].kp, -d_k_vec)
+                                w += 0.5 * (w_pqrs + w_qpsr) 
                             w = w / self.Omega
                     else:
                         if np.abs(dk_square) > 0.:
