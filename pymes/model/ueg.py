@@ -64,6 +64,10 @@ class UEG:
         if self.n_alpha != self.n_beta:
             warnings.warn("The number of electrons is not even, currently only\
                           closed shell systems are supported!")
+        #: number of electrons for closed shell systems
+        if ( not planewave.is_closed_shell(self.n_ele) ):
+            raise ValueError("The number of electrons is not a closed shell system, currently only\
+                          closed shell systems are supported!")
         #: electronic density
         self.rs = rs
         #: length of the cubic simulation cell containing n_ele electrons
