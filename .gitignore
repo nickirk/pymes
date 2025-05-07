@@ -9,7 +9,8 @@ figures
 fcidump*
 .vscode
 .pytest_cache
-venv
+venv*
 *.npy
 build
-.venv_pymes
+.venv*
+*/*/*/tmp
