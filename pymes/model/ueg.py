@@ -6,6 +6,7 @@ from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
+#from pymes.util.multithreading import get_num_threads
 from scipy import special
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -192,6 +193,7 @@ class UEG:
         kinetic_G: array object
             Kinetic energies, dimension [n_p] (number of spatial orbitals).
         """
+        algo_name = "UEG.compute_kinetic_energy"
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
         n_p = int(len(self.basis_fns)/2)
@@ -267,7 +269,7 @@ class UEG:
             V_voov = self.get_2b_int( idx, \
                                  is_only_2b=True)
         else:
-            print_logging_info("Calculating the Coulomb tensor [ooo][vovo][voov]", level=1)
+            print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo = self.get_2b_int( idx )
             idx    = get_block_index( 'vovo', nP, no)
@@ -369,12 +371,82 @@ class UEG:
         no = int(self.n_ele / 2)
         nv = nP - no
 
-        # initialize the Coulomb tensor.
+        # Initialize the Coulomb tensor.
         V_pqrs = np.zeros([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
+
+        # Divide the range of p-indices into blocks for parallel processing.
+        range_p_idx = idx[1] - idx[0]
+        num_threads = min(27, range_p_idx)
+        p_block_thread_size = range_p_idx // num_threads
+        p_block_threads = [(start, min(start + p_block_thread_size, idx[1])) \
+                           for start in range(idx[0], idx[1], p_block_thread_size)]
+        
+        # Initialize the ThreadPoolExecutor parallel window.
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [ executor.submit(self.single_thread_get_2b_int, p_block, idx, \
+                                        is_only_2b, is_effect_2b, dtype) \
+                        for p_block in p_block_threads ]
+            results = [future.result() for future in futures]
+
+        # Combine the results from all threads into the final tensor.
+        for i, p_block in enumerate(p_block_threads):
+            # Calculate the local indices of the 'sliced' tensor.
+            start, end = p_block
+            loc_p_start = start - idx[0]
+            loc_p_end   = end   - idx[0]
+            # Assign the results to the corresponding slice of V_pqrs.
+            V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
+
+        end_time = time.time()
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) +
+                            "calculating the 2-body integrals.", level=1)
+
+        return V_pqrs
+    
+    def single_thread_get_2b_int(self, idxp, idx, \
+                                is_only_2b=False, \
+                                is_effect_2b=False, dtype=np.float64):
+        """
+        Member function of class UEG to compute the 2-body integrals
+        (Coulomb integrals) and the additional 2-body integrals from
+        the transcorrelated method: pure 2-body integrals, effective 2-body
+        integrals from the singly contracted 3-body integrals.
+        It is a single-threaded version of the get_2b_int function, a helper
+        function to be called by each worker in the ThreadPoolExecutor.
+
+        Parameters
+        ----------
+        idxp: tuple of int
+            range of the outer index to be handled by the worker.
+        idx: tuple of int
+            indices of the block of the Coulomb tensor to be computed.
+        is_only_2b: bool
+            parameter which determines to include only the additional
+            pure 2-body tc integrals, besides the Coulomb integrals.
+        is_effect_2b: bool
+            parameter which determines to include the effective 2-body integrals 
+            as a result of single contractions from the 3-body integrals. 
+            There are four types of single contractions in the 3-body integrals: 
+            RPA type and 3 exchange types.
+        dtype: data type
+            for the returning integral elements. By default, np.float64 is used.
+
+        Returns
+        -------
+        t_V_pqrs: tensor object (tensor by default)
+            of size [ idxp[0], idxp[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
+        
+        """
+
+        print_logging_info("----Calculating the 2-body integrals in the range of p-indices: " \
+                            + "{}, {}".format(idxp[0], idxp[1]), level=1)
+        
+        t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 
         num_k_in_each_dir = self.imax * 2 + 1
 
-        for p in range(idx[0], idx[1]):
+        for p in range(idxp[0], idxp[1]):
             for r in range(idx[4], idx[5]):
                 d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
                 d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
@@ -416,7 +488,6 @@ class UEG:
                             else:
                                 w = u_mat / self.Omega
                         elif is_effect_2b:
-#                            w = 0. # FOR DEBUGGING.
                             if np.abs(dk_square) > 0.:
                                 w_pqrs = - (self.n_ele) * dk_square \
                                         * self.correlator(dk_square) ** 2 / self.Omega \
@@ -483,15 +554,15 @@ class UEG:
                         if np.abs(dk_square) > 0.:
                             w = 4. * np.pi / dk_square / self.Omega
                     # get local indices of the 'sliced' tensor'.
-                    loc_p_idx = p - idx[0]
+                    loc_p_idx = p - idxp[0]
                     loc_q_idx = q - idx[2]
                     loc_r_idx = r - idx[4]
                     loc_s_idx = s - idx[6]
-                    V_pqrs[loc_p_idx,
-                           loc_q_idx,
-                           loc_r_idx,
-                           loc_s_idx] = w
-        return V_pqrs 
+                    t_V_pqrs[loc_p_idx,
+                                  loc_q_idx,
+                                  loc_r_idx,
+                                  loc_s_idx] = w
+        return t_V_pqrs 
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
