@@ -8,6 +8,7 @@ from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
 from scipy import special
 from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 
 einsum = partial(np.einsum, optimize=True)
 
@@ -255,7 +256,7 @@ class UEG:
 
         # get the components of the Coulomb tensor.
         if self.is_tc:
-            print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [ooo][vovo][voov]", level=1)
+            print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo = self.get_2b_int( idx, \
                                  is_only_2b=True)
