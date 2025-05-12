@@ -98,4 +98,9 @@ class ERI:
                 idx = get_block_index('vvvv', nP, no)
                 return self.model.get_2b_int( idx )
             else:
-                return self.model.get_2b_int( idx )
+                no  = self.n_occ
+                global_idx = tuple((no+idx[0], no+idx[1], \
+                                    no+idx[2], no+idx[3], \
+                                    no+idx[4], no+idx[5], \
+                                    no+idx[6], no+idx[7]))
+                return self.model.get_2b_int( global_idx )

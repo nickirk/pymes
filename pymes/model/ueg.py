@@ -291,7 +291,7 @@ class UEG:
 
         # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
         if self.is_tc:
-            print_logging_info("Calculating the effective 2-body integrals [ooo][vovo][voov]", level=1)
+            print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo += self.get_2b_int( idx, \
                                     is_effect_2b=True)
@@ -397,8 +397,8 @@ class UEG:
             V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
 
         end_time = time.time()
-        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) +
-                            "calculating the 2-body integrals.", level=1)
+        #print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) +
+        #                    "calculating the 2-body integrals.", level=1)
 
         return V_pqrs
     
@@ -437,8 +437,8 @@ class UEG:
         
         """
 
-        print_logging_info("----Calculating the 2-body integrals in the range of p-indices: " \
-                            + "{}, {}".format(idxp[0], idxp[1]), level=1)
+        #print_logging_info("----Calculating the 2-body integrals in the range of p-indices: " \
+        #                    + "{}, {}".format(idxp[0], idxp[1]), level=1)
         
         t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 

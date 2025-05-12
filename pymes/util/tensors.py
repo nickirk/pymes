@@ -78,3 +78,40 @@ def get_block_index( block_string, n_p, n_occ):
           raise ValueError("Tensor block not valid!")
       
     return idx
+
+def write_one_index_tensor(tensor, filename):
+      """
+      Write a one-index tensor to a file in a human-readable format.
+      """
+      with open(filename, 'w') as f:
+          if tensor is None:
+              f.write("None\n")
+          else:
+              for i in range(tensor.shape[0]):
+                  f.write(f"{i} {tensor[i]}\n")
+
+def write_two_index_tensor(tensor, filename):
+    """
+    Write a two-index tensor to a file in a human-readable format.
+    """
+    with open(filename, 'w') as f:
+        if tensor is None:
+            f.write("None\n")
+        else:
+            for i in range(tensor.shape[0]):
+                  for j in range(tensor.shape[1]):
+                        f.write(f"{i} {j} {tensor[i, j]}\n")
+
+def write_four_index_tensor(tensor, filename):
+    """
+    Write a four-index tensor to a file in a human-readable format.
+    """
+    with open(filename, 'w') as f:
+        if tensor is None:
+            f.write("None\n")
+        else:
+            for i in range(tensor.shape[0]):
+                  for j in range(tensor.shape[1]):
+                        for k in range(tensor.shape[2]):
+                              for l in range(tensor.shape[3]):
+                                    f.write(f"{i} {j} {k} {l} {tensor[i, j, k, l]}\n")

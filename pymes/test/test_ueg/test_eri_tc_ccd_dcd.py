@@ -9,9 +9,12 @@ from pymes.model import ueg
 from pymes.solver import ccd, dcd
 from pymes.mean_field import hf
 from pymes.integral import eri
+from pymes.util.tensors import write_one_index_tensor, \
+                                write_two_index_tensor, \
+                                write_four_index_tensor
 from pymes.log import print_title, print_logging_info
 
-def main(nel, cutoff, rs, gamma, kc, amps):
+def main(nel, cutoff, rs, gamma, kc, amps, eri_incore, write_tensors):
     no     = int(nel/2)
     nalpha = int(nel/2)
     nbeta  = int(nel/2)
@@ -63,7 +66,7 @@ def main(nel, cutoff, rs, gamma, kc, amps):
        ueg_model.gamma = gamma
     
     myERI = eri.ERI(ueg_model)
-    myERI.calc_eri(incore=True)
+    myERI.calc_eri(incore=eri_incore)
 
     print_logging_info("{:.3f} seconds spent on constructing in-core ERI."\
                        .format((time.time()-time_init_eri)))
@@ -81,6 +84,7 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     print_logging_info("MP2 energy = {:.8f}".format(mp2_energy), lvel=0)
 
     print_title(' CCD ','=')
+
     print_logging_info('Evaluating the CCD energy from ERI', level=0)
     print_logging_info("Starting CCD", level=0)
     ccd_e = 0.
@@ -88,27 +92,32 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     myCCD = ccd.CCD(no)
     ccd_results = myCCD.solve(myERI, level_shift=ls, \
                               sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
+    
     print_logging_info("Unpacking CCD results", level=0)
     ccd_e = ccd_results["ccd e"]
     ccd_amp = ccd_results["t2 amp"]
     ccd_dE = ccd_results["dE"]
+
     print_logging_info("Manipulating CCD T2 amplitude norms", level=0)
     ccd_t2_norm = 2.*np.einsum("abij,abij->", ccd_amp,ccd_amp)
     ccd_t2_norm -= np.einsum("abij,baij->", ccd_amp,ccd_amp)
     ccd_t2_norm = ccd_t2_norm**(1./2)
 
     print_title(' DCD ','=')
+
     print_logging_info('Evaluating the DCD energy from ERI', level=0)
     ls = -1
     print_logging_info("Starting DCD with level shift = ", ls , level=0)
     dcd_e = 0.
     myDCD = dcd.DCD(no)
     dcd_results = myDCD.solve(myERI, level_shift=ls, \
-                              sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
+                              sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
+    
     print_logging_info("Unpacking DCD results", level=0)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]
+
     print_logging_info("Manipulating DCD T2 amplitude norms", level=0)
     dcd_t2_norm = 2.*np.einsum("abij,abij->", dcd_amp,dcd_amp)
     dcd_t2_norm -= np.einsum("abij,baij->", dcd_amp,dcd_amp)
@@ -126,13 +135,28 @@ def main(nel, cutoff, rs, gamma, kc, amps):
     print_logging_info("Total CCD E = {:.8f}".format(myERI.EHF+ccd_e))
     print_logging_info("Total DCD E = {:.8f}".format(myERI.EHF+dcd_e))
 
+    if write_tensors:
+        print_logging_info("Writing tensors to files", level=0)
+        write_one_index_tensor( myERI.eps_occ, "OCC.txt")
+        write_one_index_tensor( myERI.eps_virt, "VIRT.txt")
+        write_two_index_tensor( myERI.fock, "FOCK.txt")
+        write_four_index_tensor(myERI.oooo, "OOOO.txt")
+        write_four_index_tensor(myERI.vovo, "VOVO.txt")
+        write_four_index_tensor(myERI.ovov, "OVOV.txt")
+        write_four_index_tensor(myERI.voov, "VOOV.txt")
+        write_four_index_tensor(myERI.ovvo, "OVVO.txt")
+        write_four_index_tensor(myERI.vvoo, "VVOO.txt")
+        write_four_index_tensor(myERI.oovv, "OOVV.txt")
+        write_four_index_tensor(myERI.vvvv, "VVVV.txt")
+
 
 if __name__ == '__main__':
-  #for gamma in None:
+  eri_incore = True
+  write_tensors = False
   gamma = None
   amps  = None
   nel   = 14
   for rs in [0.5]:
     for cutoff in [2]:
       kCutoffFraction = 1
-      main(nel,cutoff,rs, gamma, kCutoffFraction,amps)
+      main(nel, cutoff, rs, gamma, kCutoffFraction, amps, eri_incore, write_tensors)

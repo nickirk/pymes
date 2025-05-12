@@ -195,8 +195,8 @@ def main(nel, cutoff, rs, gamma, kc, amps):
 
     print_logging_info("Comparing [vvvv] block", level=0)
     print_logging_info("Full block: ", level=1)
-    idx = get_block_index('vvvv', nP, no)
-    tV_abcd = myERI.get_vvvv( idx )
+    #idx = get_block_index('vvvv', nP, no)
+    tV_abcd = myERI.get_vvvv()
     compare_tensors(tV_abcd, t_V_pqrs[no:,no:,no:,no:])
     print_logging_info("Block by slices: ", level=1)
     # Calculate block size dynamically to optimize memory usage.
@@ -211,8 +211,10 @@ def main(nel, cutoff, rs, gamma, kc, amps):
         indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
         tV_xbcd = myERI.get_vvvv(indx)
         print_logging_info("Block nro.: ", block_start, level=1)
-        compare_tensors(tV_xbcd, t_V_pqrs[indx[0]:indx[1], indx[2]:indx[3], \
-                                        indx[4]:indx[5], indx[6]:indx[7]])
+        compare_tensors(tV_xbcd, t_V_pqrs[no+indx[0]:no+indx[1], \
+                                          no+indx[2]:no+indx[3], \
+                                          no+indx[4]:no+indx[5], \
+                                          no+indx[6]:no+indx[7]])
  
     print_title('Evaluating the MP2 energies','=')
     print_title('Evaluating the MP2 energy from ERI','-')
