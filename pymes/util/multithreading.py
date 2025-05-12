@@ -26,8 +26,18 @@ def get_thread_index_block( idx ):
     if idx[0] == idx[1]:
         return [(idx[0], idx[1])]
     
+    import os
+
+    # Get the value of the NUM_THREADS environment variable.
+    cpu_threads = os.getenv('NUM_THREADS')
+    
+    # Check if the variable is set, and if not,
+    # set it to the number of available CPU cores + 4
+    # as default concurrent.futures 3.13
+    if cpu_threads is None:
+        cpu_threads = (os.cpu_count() or 1) + 4
+    
     idx_range      = idx[1] - idx[0]
-    cpu_threads    = 10
     num_threads    = min(cpu_threads, idx_range)
     idx_block_size = int(idx_range / num_threads)
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \
