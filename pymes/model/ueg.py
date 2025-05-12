@@ -6,7 +6,7 @@ from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
-#from pymes.util.multithreading import get_num_threads
+from pymes.util.multithreading import get_thread_index_block
 from scipy import special
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -375,22 +375,20 @@ class UEG:
         V_pqrs = np.zeros([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 
         # Divide the range of p-indices into blocks for parallel processing.
-        range_p_idx = idx[1] - idx[0]
-        num_threads = min(27, range_p_idx)
-        p_block_thread_size = range_p_idx // num_threads
-        p_block_threads = [(start, min(start + p_block_thread_size, idx[1])) \
-                           for start in range(idx[0], idx[1], p_block_thread_size)]
         
+        p_idx_range = tuple((idx[0], idx[1]))
+        num_threads, p_idx_threads = get_thread_index_block( p_idx_range )
+
         # Initialize the ThreadPoolExecutor parallel window.
 
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             futures = [ executor.submit(self.single_thread_get_2b_int, p_block, idx, \
                                         is_only_2b, is_effect_2b, dtype) \
-                        for p_block in p_block_threads ]
+                        for p_block in p_idx_threads ]
             results = [future.result() for future in futures]
 
         # Combine the results from all threads into the final tensor.
-        for i, p_block in enumerate(p_block_threads):
+        for i, p_block in enumerate(p_idx_threads):
             # Calculate the local indices of the 'sliced' tensor.
             start, end = p_block
             loc_p_start = start - idx[0]
