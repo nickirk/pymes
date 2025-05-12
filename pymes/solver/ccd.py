@@ -196,6 +196,7 @@ class CCD:
         t_R_abij += np.einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
         #t_R_abij += np.einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
 
+
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
         total_elements_dimension = nv           # Total elements along the first axis.
