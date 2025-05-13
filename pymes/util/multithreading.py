@@ -1,4 +1,5 @@
 import os
+from math import ceil
 
 def get_thread_index_block( idx ):
     """
@@ -35,11 +36,16 @@ def get_thread_index_block( idx ):
     # set it to the number of available CPU cores + 4
     # as default concurrent.futures 3.13
     if cpu_threads is None:
-        cpu_threads = (os.cpu_count() or 1) + 4
+        cpu_threads = (os.cpu_count() or 1) - 4
+        if cpu_threads < 1:
+            cpu_threads = 1
     
     idx_range      = idx[1] - idx[0]
     num_threads    = min(cpu_threads, idx_range)
-    idx_block_size = int(idx_range / num_threads)
+    print(f"Number of cpu threads: {cpu_threads}")
+    num_threads    = 10
+    idx_block_size = ceil( idx_range / num_threads )
+    print(f"Index block size: {idx_block_size}")
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \
                         for start in range(idx[0], idx[1], idx_block_size)]
     return num_threads, idx_blocks

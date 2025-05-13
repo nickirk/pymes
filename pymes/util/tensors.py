@@ -1,4 +1,5 @@
 import psutil
+from math import ceil
 
 def calculate_block_size(total_elements_dimension, element_size, memory_fraction=0.5):
         """
@@ -24,7 +25,7 @@ def calculate_block_size(total_elements_dimension, element_size, memory_fraction
         total_elements = int(total_elements_dimension**4)
         available_memory = psutil.virtual_memory().available
         usable_memory = available_memory * memory_fraction
-        max_elements = usable_memory // ( element_size * total_elements_dimension**3)
+        max_elements = ceil( usable_memory / ( element_size * total_elements_dimension**3))
         return min(total_elements_dimension, max_elements)
 
 def get_block_index( block_string, n_p, n_occ):

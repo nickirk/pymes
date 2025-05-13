@@ -379,6 +379,9 @@ class UEG:
         p_idx_range = tuple((idx[0], idx[1]))
         num_threads, p_idx_threads = get_thread_index_block( p_idx_range )
 
+        #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
+        #print_logging_info("-- Number of threads = {}".format(num_threads), level=2)
+
         # Initialize the ThreadPoolExecutor parallel window.
 
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -437,8 +440,8 @@ class UEG:
         
         """
 
-        #print_logging_info("----Calculating the 2-body integrals in the range of p-indices: " \
-        #                    + "{}, {}".format(idxp[0], idxp[1]), level=1)
+        #print_logging_info("-- Calculating the 2-body integrals in the range of p-indices: " \
+        #                    + "{}, {}".format(idxp[0], idxp[1]), level=2)
         
         t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 
@@ -1410,4 +1413,4 @@ class UEG:
         Returns:
             float
         """
-        return -1.760118928190842*rs**(-1)*nel**(-1./3)/2
+        return -1.760118928190842*rs**(-1)*nel**(-1./3)
