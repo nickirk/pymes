@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from functools import partial
 
 from pymes.util import tensors
 from pymes.solver import mp2
@@ -7,6 +8,8 @@ from pymes.mixer import diis
 from pymes.log import print_logging_info
 from pymes.solver import drccd
 from pymes.integral import eri
+
+einsum = partial(np.einsum, optimize=True)
 
 class CCD:
 
@@ -109,21 +112,21 @@ class CCD:
                 t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
                 #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") \
                 #- t_T_abij.i("baij")
-                t_tilde_T_abij += 2.0 * t_T_abij - np.einsum("baij -> abij", t_T_abij)
+                t_tilde_T_abij += 2.0 * t_T_abij - einsum("baij -> abij", t_T_abij)
                 t_epsilon_i = t_epsilon_i \
-                              + 1. / 2 * np.einsum("ilcd,cdil->i", t_V_ijab,
+                              + 1. / 2 * einsum("ilcd,cdil->i", t_V_ijab,
                                                     t_tilde_T_abij)
                 t_epsilon_a = t_epsilon_a \
-                              - 1. / 2 * np.einsum("klad,adkl->a", t_V_ijab,
+                              - 1. / 2 * einsum("klad,adkl->a", t_V_ijab,
                                                     t_tilde_T_abij)
 
                 # update the denominator accordingly
                 #t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
                 #- t_epsilon_a.i("a") - t_epsilon_a.i("b")
-                t_D_abij = np.einsum('i, j, a, b -> abij', t_epsilon_i, t_epsilon_i, -t_epsilon_a, -t_epsilon_a)
+                t_D_abij = einsum('i, j, a, b -> abij', t_epsilon_i, t_epsilon_i, -t_epsilon_a, -t_epsilon_a)
                 t_D_abij = 1. / (t_D_abij + level_shift)
 
-            t_delta_T_abij = np.einsum('abij,abij->abij', t_R_abij, t_D_abij)
+            t_delta_T_abij = einsum('abij,abij->abij', t_R_abij, t_D_abij)
             t_T_abij += delta * t_delta_T_abij
 
             if self.is_diis:
@@ -187,14 +190,14 @@ class CCD:
         # t_I_klij = np.zeros([nv,nv,no,no], dtype=t_V_klij.dtype,sp=t_V_klij.sp)
         t_I_klij += t_V_klij
         if not self.is_dcd:
-            t_I_klij += np.einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
+            t_I_klij += einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
 
         #t_R_abij.i("abij") << t_V_abij.i("abij") \
         #                      + t_I_klij.i("klij") * t_T_abij.i("abkl")\
         #                      + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
         t_R_abij += t_V_abij 
-        t_R_abij += np.einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
-        #t_R_abij += np.einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
+        t_R_abij += einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
+        #t_R_abij += einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
 
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
@@ -206,12 +209,12 @@ class CCD:
             block_end = min(block_start + block_size, nv)
             indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
             t_V_xbcd = eri.get_vvvv(indx)
-            t_R_xbij = np.einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
+            t_R_xbij = einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
             t_R_abij[block_start:block_end, :, :, :] += t_R_xbij
 
         if not self.is_dcd:
-            t_X_alcj = np.einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
-            t_R_abij += np.einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
+            t_X_alcj = einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
+            t_R_abij += einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
 
         # intermediates
         # t_tilde_T_abij
@@ -219,12 +222,12 @@ class CCD:
         t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
                                     
         #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") - t_T_abij.i("baij")
-        t_tilde_T_abij = 2.0 * t_T_abij - np.einsum("baij -> abij", t_T_abij)
+        t_tilde_T_abij = 2.0 * t_T_abij - einsum("baij -> abij", t_T_abij)
 
         # Xai_kbcj for the quadratic terms
-        t_Xai_cbkj = np.einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
+        t_Xai_cbkj = einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
 
-        t_R_abij += np.einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
+        t_R_abij += einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
 
         t_fock_ab = t_fock_pq[no:, no:]
         t_fock_ij = t_fock_pq[:no, :no]
@@ -233,14 +236,14 @@ class CCD:
             t_X_ac = t_fock_ab
             t_X_ki = t_fock_ij
         else:
-            t_X_ac = t_fock_ab - 1. / 2 * np.einsum("adkl, lkdc -> ac",
+            t_X_ac = t_fock_ab - 1. / 2 * einsum("adkl, lkdc -> ac",
                                                      t_tilde_T_abij, t_V_ijab)
-            t_X_ki = t_fock_ij + 1. / 2 * np.einsum("cdil, lkdc -> ki",
+            t_X_ki = t_fock_ij + 1. / 2 * einsum("cdil, lkdc -> ki",
                                                      t_tilde_T_abij, t_V_ijab)
 
         if not self.is_dcd:
-            t_X_ac -= 1. / 2. * np.einsum("adkl, lkdc -> ac", t_tilde_T_abij, t_V_ijab)
-            t_X_ki += 1. / 2. * np.einsum("cdil, lkdc -> ki",
+            t_X_ac -= 1. / 2. * einsum("adkl, lkdc -> ac", t_tilde_T_abij, t_V_ijab)
+            t_X_ki += 1. / 2. * einsum("cdil, lkdc -> ki",
                                            t_tilde_T_abij, t_V_ijab)
 
         t_Ex_abij = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype)
@@ -251,16 +254,16 @@ class CCD:
         #    - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
         #    - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
         #    + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
-        t_Ex_abij += np.einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
-        t_Ex_abij -= np.einsum("ki, abkj -> abij", t_X_ki, t_T_abij)
-        t_Ex_abij -= np.einsum("kaic, cbkj -> abij", t_V_iajb, t_T_abij)
-        t_Ex_abij -= np.einsum("kbic, ackj -> abij", t_V_iajb, t_T_abij)
-        t_Ex_abij += np.einsum("acik, kbcj -> abij", t_tilde_T_abij, t_V_iabj)
+        t_Ex_abij += einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
+        t_Ex_abij -= einsum("ki, abkj -> abij", t_X_ki, t_T_abij)
+        t_Ex_abij -= einsum("kaic, cbkj -> abij", t_V_iajb, t_T_abij)
+        t_Ex_abij -= einsum("kbic, ackj -> abij", t_V_iajb, t_T_abij)
+        t_Ex_abij += einsum("acik, kbcj -> abij", t_tilde_T_abij, t_V_iabj)
 
         if not self.is_dcd:
-            t_Xai_aibj = np.einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
-            t_Ex_abij -= np.einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
-            t_Ex_abij += np.einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
+            t_Xai_aibj = einsum("klcd, daki -> alci", t_V_ijab, t_T_abij)
+            t_Ex_abij -= einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
+            t_Ex_abij += einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
         #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
 
@@ -280,6 +283,6 @@ class CCD:
         """
         calculate the CCD energy, using the converged amplitudes
         """
-        t_dir_ccd_e = 2. * np.einsum("abij, ijab ->", t_T_abij, t_V_ijab)
-        t_ex_ccd_e = -1. * np.einsum("abij, ijba ->", t_T_abij, t_V_ijab)
+        t_dir_ccd_e = 2. * einsum("abij, ijab ->", t_T_abij, t_V_ijab)
+        t_ex_ccd_e = -1. * einsum("abij, ijba ->", t_T_abij, t_V_ijab)
         return t_dir_ccd_e, t_ex_ccd_e
