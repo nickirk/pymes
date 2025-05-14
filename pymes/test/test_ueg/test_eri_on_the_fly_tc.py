@@ -78,6 +78,7 @@ def main(nel, cutoff, rs, gamma, kc, amps):
        ueg_model.correlator = ueg_model.trunc
        ueg_model.k_cutoff = kc
        ueg_model.gamma = gamma
+       ueg_model.init_kPrime()
     
     myERI = eri.ERI(ueg_model)
     myERI.calc_eri(incore=False)

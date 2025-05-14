@@ -257,6 +257,7 @@ class UEG:
         EHF = 0.0
 
         # get the components of the Coulomb tensor.
+        start_time_coulomb = time.time()
         if self.is_tc:
             print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
             idx    = get_block_index( 'oooo', nP, no)
@@ -276,6 +277,9 @@ class UEG:
             V_vovo = self.get_2b_int( idx )
             idx    = get_block_index( 'voov', nP, no)
             V_voov = self.get_2b_int( idx )
+        end_time_coulomb = time.time()
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
+                            "calculating the Coulomb tensor.", level=2)
 
         # get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
@@ -291,6 +295,7 @@ class UEG:
 
         # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
         if self.is_tc:
+            start_time_effect_2b = time.time()
             print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo += self.get_2b_int( idx, \
@@ -301,12 +306,16 @@ class UEG:
             idx    = get_block_index( 'voov', nP, no)
             V_voov += self.get_2b_int( idx, \
                                     is_effect_2b=True)
+            end_time_effect_2b = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
+                                "calculating the effective 2-body integrals.", level=2)
             
         # get doubly and tryply contractions of the 3-body integrals,
         #     correct orbital energies,
         #     and add the mean field contribution from the 3-body integrals 
         #     to the Hartree Fock energy.
         if self.is_tc:
+            start_time_3b = time.time()
             print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
             contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
@@ -317,6 +326,9 @@ class UEG:
 
             print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=2)
             EHF += contr_from_triply_contra_3b
+            end_time_3b = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
+                                "calculating the doubly and triply contractions of the 3-body integrals.", level=2)
 
         # get the Hartree Fock matrix.
         print_logging_info("Calculating the Fock matrix", level=1)
@@ -990,12 +1002,11 @@ class UEG:
         RPA2Body = fac * einsum("opqrsq->oprs", integrals)
         return RPA2Body
 
-    def sumNablaUSquare(self, k, cutoff=30):
+    def sumNablaUSquare(self, k):
         # need to test convergence of this cutoff
         if self.kPrime is None:
-            self.kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
-                                    for j in range(-cutoff, cutoff + 1) for k in \
-                                    range(-cutoff, cutoff + 1)])
+            raise ValueError("kPrime not initialized!")
+        
         k1 = 2 * np.pi * self.kPrime / self.L
         k2 = k - k1
 
@@ -1006,6 +1017,30 @@ class UEG:
         result = einsum("n->", result) / self.Omega
 
         return result
+    
+    def init_kPrime(self, cutoff=30):
+        """
+        Member function of class UEG
+        This function generates the k' vectors for the transcorrelated
+        integrals. The k' vectors are generated in the range of -cutoff to 
+        cutoff in each direction. The k' vectors are stored in the class
+        variable kPrime.
+
+        Note: need to test convergence of this cutoff
+
+        Parameters
+        ----------
+        cutoff: int
+            The cutoff value.
+        
+        Returns
+        -------
+        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
+        """
+        kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
+                           for j in range(-cutoff, cutoff + 1) for k in \
+                            range(-cutoff, cutoff + 1)])
+        self.kPrime = kPrime
 
     def triple_contractions_in_3_body(self):
         """
