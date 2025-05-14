@@ -43,7 +43,6 @@ def get_thread_index_block( idx ):
     idx_range      = idx[1] - idx[0]
     num_threads    = min(cpu_threads, idx_range)
     #print(f"Number of cpu threads: {cpu_threads}")
-    num_threads    = 10
     idx_block_size = ceil( idx_range / num_threads )
     #print(f"Index block size: {idx_block_size}")
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \

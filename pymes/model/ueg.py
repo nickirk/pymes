@@ -449,13 +449,23 @@ class UEG:
 
         for p in range(idxp[0], idxp[1]):
             for r in range(idx[4], idx[5]):
+                #local_start = time.time()
                 d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
                 d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
+                #local_end = time.time()
+                #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                #                      "calculating the d_k_vec and d_int_k for p = {}, r = {}"
+                #                      .format(p, r), level=2)
                 u_mat = 0.
                 if self.is_tc and self.correlator is not None:
+                    #local_start = time.time()
                     u_mat = self.sumNablaUSquare(d_k_vec)
+                    #local_end = time.time()
+                    #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                    #                    "calculating the u_mat for p = {}, r = {}")
 
                 for q in range(idx[2], idx[3]):
+                    #local_start = time.time()
                     int_ks = self.basis_fns[q * 2].k - d_int_k
                     # if self.is_k_in_basis(int_ks):
                     # [s] index to self.basis_indices_map.
@@ -471,12 +481,16 @@ class UEG:
                             continue
                     else:
                         continue
-
+                    #local_end = time.time()
+                    #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                    #                    "calculating the s index for p = {}, r = {}, q = {}"
+                    #                    .format(p, r, q), level=2)
                     dk_square = d_k_vec.dot(d_k_vec)
                     w = 0.
 
                     if self.is_tc and self.correlator is not None:
                         if is_only_2b:
+                            #local_start = time.time()
                             if np.abs(dk_square) > 0.:
                                 rs_dk = self.basis_fns[r * 2].kp \
                                         - self.basis_fns[s * 2].kp
@@ -488,6 +502,10 @@ class UEG:
                                 w = w / self.Omega
                             else:
                                 w = u_mat / self.Omega
+                            #local_end = time.time()
+                            #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                            #                    "calculating the w for p = {}, r = {}, q = {}"
+                            #                    .format(p, r, q), level=2)
                         elif is_effect_2b:
                             if np.abs(dk_square) > 0.:
                                 w_pqrs = - (self.n_ele) * dk_square \
