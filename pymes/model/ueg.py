@@ -6,10 +6,10 @@ from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
-from pymes.util.multithreading import get_thread_index_block
+from pymes.util.parallel_tasks import get_task_index_block
 from scipy import special
 from functools import partial
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 einsum = partial(np.einsum, optimize=True)
 
@@ -279,7 +279,7 @@ class UEG:
             V_voov = self.get_2b_int( idx )
         end_time_coulomb = time.time()
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
-                            "calculating the Coulomb tensor.", level=2)
+                            "calculating the Coulomb tensor.", level=1)
 
         # get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
@@ -308,7 +308,7 @@ class UEG:
                                     is_effect_2b=True)
             end_time_effect_2b = time.time()
             print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
-                                "calculating the effective 2-body integrals.", level=2)
+                                "calculating the effective 2-body integrals.", level=1)
             
         # get doubly and tryply contractions of the 3-body integrals,
         #     correct orbital energies,
@@ -324,11 +324,11 @@ class UEG:
             Epsilon_i += contr_from_doubly_contra_3b[:no]
             Epsilon_a += contr_from_doubly_contra_3b[no:]
 
-            print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=2)
+            print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
             EHF += contr_from_triply_contra_3b
             end_time_3b = time.time()
             print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
-                                "calculating the doubly and triply contractions of the 3-body integrals.", level=2)
+                                "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
 
         # get the Hartree Fock matrix.
         print_logging_info("Calculating the Fock matrix", level=1)
@@ -368,7 +368,7 @@ class UEG:
             of size [ idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
         """
         algo_name = "UEG.get_2b_int"
-        start_time = time.time()
+        #start_time = time.time()
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
         if self.is_tc:
@@ -389,21 +389,29 @@ class UEG:
         # Divide the range of p-indices into blocks for parallel processing.
         
         p_idx_range = tuple((idx[0], idx[1]))
-        num_threads, p_idx_threads = get_thread_index_block( p_idx_range )
+        num_tasks, p_idx_worker = get_task_index_block( p_idx_range )
 
         #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-        #print_logging_info("-- Number of threads = {}".format(num_threads), level=2)
+        #print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
 
-        # Initialize the ThreadPoolExecutor parallel window.
+        # Initialize the ProcessPoolExecutor parallel window.
 
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = [ executor.submit(self.single_thread_get_2b_int, p_block, idx, \
+        with ProcessPoolExecutor(max_workers=num_tasks) as executor:
+            # Submit the tasks to the executor for parallel processing.
+            futures = [ executor.submit(self.single_task_get_2b_int, p_block, idx, \
                                         is_only_2b, is_effect_2b, dtype) \
-                        for p_block in p_idx_threads ]
-            results = [future.result() for future in futures]
+                        for p_block in p_idx_worker ]
+            # Gather the results as they are completed.
+            results = [None] * len(p_idx_worker)
+            for future in as_completed(futures):
+                i = futures.index(future)
+                results[i] = future.result()
+            # Wait for all futures to complete and get the results.
+            #results = [future.result() for future in futures]
+
 
         # Combine the results from all threads into the final tensor.
-        for i, p_block in enumerate(p_idx_threads):
+        for i, p_block in enumerate(p_idx_worker):
             # Calculate the local indices of the 'sliced' tensor.
             start, end = p_block
             loc_p_start = start - idx[0]
@@ -411,13 +419,13 @@ class UEG:
             # Assign the results to the corresponding slice of V_pqrs.
             V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
 
-        end_time = time.time()
-        #print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) +
-        #                    "calculating the 2-body integrals.", level=1)
+        #end_time = time.time()
+        #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
+        #                    "calculating the 2-body integrals.", level=2)
 
         return V_pqrs
     
-    def single_thread_get_2b_int(self, idxp, idx, \
+    def single_task_get_2b_int(self, idxp, idx, \
                                 is_only_2b=False, \
                                 is_effect_2b=False, dtype=np.float64):
         """
@@ -452,7 +460,7 @@ class UEG:
         
         """
 
-        #print_logging_info("-- Calculating the 2-body integrals in the range of p-indices: " \
+        #print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
         #                    + "{}, {}".format(idxp[0], idxp[1]), level=2)
         
         t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
@@ -465,16 +473,16 @@ class UEG:
                 d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
                 d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
                 #local_end = time.time()
-                #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
                 #                      "calculating the d_k_vec and d_int_k for p = {}, r = {}"
-                #                      .format(p, r), level=2)
+                #                      .format(p, r), level=3)
                 u_mat = 0.
                 if self.is_tc and self.correlator is not None:
                     #local_start = time.time()
                     u_mat = self.sumNablaUSquare(d_k_vec)
                     #local_end = time.time()
-                    #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
-                    #                    "calculating the u_mat for p = {}, r = {}")
+                    #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
+                    #                    "calculating the u_mat for p = {}, r = {}", level=3)
 
                 for q in range(idx[2], idx[3]):
                     #local_start = time.time()
@@ -494,9 +502,9 @@ class UEG:
                     else:
                         continue
                     #local_end = time.time()
-                    #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                    #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
                     #                    "calculating the s index for p = {}, r = {}, q = {}"
-                    #                    .format(p, r, q), level=2)
+                    #                    .format(p, r, q), level=3)
                     dk_square = d_k_vec.dot(d_k_vec)
                     w = 0.
 
@@ -515,9 +523,9 @@ class UEG:
                             else:
                                 w = u_mat / self.Omega
                             #local_end = time.time()
-                            #print_logging_info("Elapsed time = {:.3f} s: ".format(local_end - local_start) +
+                            #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
                             #                    "calculating the w for p = {}, r = {}, q = {}"
-                            #                    .format(p, r, q), level=2)
+                            #                    .format(p, r, q), level=3)
                         elif is_effect_2b:
                             if np.abs(dk_square) > 0.:
                                 w_pqrs = - (self.n_ele) * dk_square \
@@ -585,6 +593,7 @@ class UEG:
                         if np.abs(dk_square) > 0.:
                             w = 4. * np.pi / dk_square / self.Omega
                     # get local indices of the 'sliced' tensor'.
+                    #start_local_time = time.time()
                     loc_p_idx = p - idxp[0]
                     loc_q_idx = q - idx[2]
                     loc_r_idx = r - idx[4]
@@ -593,6 +602,9 @@ class UEG:
                                   loc_q_idx,
                                   loc_r_idx,
                                   loc_s_idx] = w
+                    #end_local_time = time.time()
+                    #print_logging_info("Elapsed time = {:.5f} s: ".format(end_local_time - start_local_time) +
+                    #                    "assigning w for p = {}, r = {}, q = {}, s = {}", level=3)
         return t_V_pqrs 
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
@@ -957,9 +969,12 @@ class UEG:
         p_prim = np.array([self.basis_fns[i * 2].kp for i in \
                           range(int(self.n_ele / 2))])
         p_vec = p_vec - p_prim
-        kVecSquare = einsum("i,i->", kVec, kVec)
-        pVecSquare = einsum("ni,ni->n", p_vec, p_vec)
+        kVecSquare  = einsum("i,i->", kVec, kVec)
+        pVecSquare  = einsum("ni,ni->n", p_vec, p_vec)
         pVecDotKVec = einsum("ni,i->n", p_vec, kVec)
+        #kVecSquare  = np.sum( (kVec * kVec), axis=-1)
+        #pVecSquare  = np.sum( (p_vec * p_vec), axis=-1)
+        #pVecDotKVec = np.sum( (p_vec * kVec), axis=-1) 
         result = pVecDotKVec * self.correlator(kVecSquare) \
                  * self.correlator(pVecSquare)
         result = einsum("n->", result) / self.Omega
@@ -989,6 +1004,9 @@ class UEG:
         dotProduct = einsum("ni,ni->n", vec1, vec2)
         vec1Square = einsum("ni,ni->n", vec1, vec1)
         vec2Square = einsum("ni,ni->n", vec2, vec2)
+        #dotProduct = np.sum((vec1 * vec2), axis=-1)
+        #vec1Square = np.sum((vec1 * vec1), axis=-1)
+        #vec2Square = np.sum((vec2 * vec2), axis=-1)
         result = dotProduct * self.correlator(vec1Square) \
                  * self.correlator(vec2Square)
 
@@ -1003,7 +1021,7 @@ class UEG:
         return RPA2Body
 
     def sumNablaUSquare(self, k):
-        # need to test convergence of this cutoff
+
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         

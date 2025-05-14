@@ -1,7 +1,7 @@
 import os
 from math import ceil
 
-def get_thread_index_block( idx ):
+def get_task_index_block( idx ):
     """
     Function to partition a one-dimensional array of indices idx[0]
     to idx[1] into blocks for each thread.
@@ -27,8 +27,6 @@ def get_thread_index_block( idx ):
     if idx[0] == idx[1]:
         return [(idx[0], idx[1])]
     
-    import os
-
     # Get the value of the NUM_THREADS environment variable.
     cpu_threads = os.getenv('NUM_THREADS')
     
@@ -41,10 +39,10 @@ def get_thread_index_block( idx ):
             cpu_threads = 1
     
     idx_range      = idx[1] - idx[0]
-    num_threads    = min(cpu_threads, idx_range)
+    num_tasks    = min(cpu_threads, idx_range)
     #print(f"Number of cpu threads: {cpu_threads}")
-    idx_block_size = ceil( idx_range / num_threads )
+    idx_block_size = ceil( idx_range / num_tasks )
     #print(f"Index block size: {idx_block_size}")
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \
                         for start in range(idx[0], idx[1], idx_block_size)]
-    return num_threads, idx_blocks
+    return num_tasks, idx_blocks
