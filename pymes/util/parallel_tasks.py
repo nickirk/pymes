@@ -1,4 +1,5 @@
 import os
+import sys
 from math import ceil
 
 def get_task_index_block( idx ):
@@ -39,10 +40,47 @@ def get_task_index_block( idx ):
             cpu_threads = 1
     
     idx_range      = idx[1] - idx[0]
-    num_tasks    = min(cpu_threads, idx_range)
+    num_tasks      = min(cpu_threads, idx_range)
     #print(f"Number of cpu threads: {cpu_threads}")
     idx_block_size = ceil( idx_range / num_tasks )
     #print(f"Index block size: {idx_block_size}")
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \
                         for start in range(idx[0], idx[1], idx_block_size)]
     return num_tasks, idx_blocks
+
+def get_obj_tot_size(obj, seen=None):
+
+    """
+    Function to calculate the total memory size of an object, including its attributes.
+    This function is recursive and handles various data types, including dictionaries,
+    lists, and custom objects.
+    Used to check the size of the object in memory when using the multiprocessing module.
+
+    Parameters
+    ----------
+    obj : object
+        The object whose size is to be calculated.
+    seen : set, optional
+        A set to keep track of already seen objects to avoid infinite recursion.
+    Returns
+    -------
+    size : int
+        The total memory size of the object in bytes.
+    """
+
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    size = sys.getsizeof(obj)
+    if isinstance(obj, dict):
+        size += sum(get_obj_tot_size(v, seen) for v in obj.values())
+        size += sum(get_obj_tot_size(k, seen) for k in obj.keys())
+    elif hasattr(obj, '__dict__'):
+        size += get_obj_tot_size(vars(obj), seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum(get_obj_tot_size(i, seen) for i in obj)
+    
+    return size

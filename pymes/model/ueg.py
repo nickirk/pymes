@@ -6,7 +6,7 @@ from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
-from pymes.util.parallel_tasks import get_task_index_block
+from pymes.util.parallel_tasks import get_task_index_block, get_obj_tot_size
 from scipy import special
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -393,6 +393,8 @@ class UEG:
 
         #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
         #print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
+        #total_self_size = get_obj_tot_size(self)
+        #print_logging_info("-- Total size of the self object: {} bytes".format(total_self_size), level=2)
 
         # Initialize the ProcessPoolExecutor parallel window.
 
