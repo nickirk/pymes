@@ -14,7 +14,10 @@ from pymes.util.tensors import write_one_index_tensor, \
                                 write_four_index_tensor
 from pymes.log import print_title, print_logging_info
 
-def main(nel, cutoff, rs, gamma, kc, amps, eri_incore, write_tensors):
+def main(nel, cutoff, rs, gamma, kc, amps, \
+          eri_incore=True, \
+          write_tensors=False):
+    
     no     = int(nel/2)
     nalpha = int(nel/2)
     nbeta  = int(nel/2)
@@ -160,4 +163,6 @@ if __name__ == '__main__':
   for rs in [0.5]:
     for cutoff in [2]:
       kCutoffFraction = 1
-      main(nel, cutoff, rs, gamma, kCutoffFraction, amps, eri_incore, write_tensors)
+      main(nel, cutoff, rs, gamma, kCutoffFraction, amps, \
+           eri_incore=eri_incore, \
+           write_tensors=write_tensors)
