@@ -96,7 +96,8 @@ class ERI:
                 nP  = self.n_orb
                 no  = self.n_occ
                 idx = get_block_index('vvvv', nP, no)
-                return self.model.get_2b_int( idx )
+                self.vvvv = self.model.get_2b_int( idx )
+                return self.vvvv
             else:
                 no  = self.n_occ
                 global_idx = tuple((no+idx[0], no+idx[1], \
