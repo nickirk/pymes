@@ -2,14 +2,15 @@ import time
 import warnings
 
 import numpy as np
+import multiprocessing as mp
+
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
-from pymes.util.parallel_tasks import get_task_index_block, get_obj_tot_size
+from pymes.util.parallel_tasks import get_task_index_block, get_obj_tot_size, task_info
 from scipy import special
 from functools import partial
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 einsum = partial(np.einsum, optimize=True)
 
@@ -225,7 +226,7 @@ class UEG:
             'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt]
         """
         algo_name = "UEG.get_fock"
-        print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock Energy.", level=0)
+        print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock Energy", level=0)
         start_time = time.time()
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
@@ -260,21 +261,27 @@ class UEG:
         start_time_coulomb = time.time()
         if self.is_tc:
             print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=2)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo = self.get_2b_int( idx, \
                                  is_only_2b=True)
+            print_logging_info("Calculating [vovo] block", level=2)
             idx    = get_block_index( 'vovo', nP, no)
             V_vovo = self.get_2b_int( idx, \
                                  is_only_2b=True)
+            print_logging_info("Calculating [voov] block", level=2)
             idx    = get_block_index( 'voov', nP, no)
             V_voov = self.get_2b_int( idx, \
                                  is_only_2b=True)
         else:
             print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=2)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo = self.get_2b_int( idx )
+            print_logging_info("Calculating [vovo] block", level=2)
             idx    = get_block_index( 'vovo', nP, no)
             V_vovo = self.get_2b_int( idx )
+            print_logging_info("Calculating [voov] block", level=2)
             idx    = get_block_index( 'voov', nP, no)
             V_voov = self.get_2b_int( idx )
         end_time_coulomb = time.time()
@@ -297,12 +304,15 @@ class UEG:
         if self.is_tc:
             start_time_effect_2b = time.time()
             print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=2)
             idx    = get_block_index( 'oooo', nP, no)
             V_oooo += self.get_2b_int( idx, \
                                     is_effect_2b=True)
+            print_logging_info("Calculating [vovo] block", level=2)
             idx    = get_block_index( 'vovo', nP, no)
             V_vovo += self.get_2b_int( idx, \
                                     is_effect_2b=True)
+            print_logging_info("Calculating [voov] block", level=2)
             idx    = get_block_index( 'voov', nP, no)
             V_voov += self.get_2b_int( idx, \
                                     is_effect_2b=True)
@@ -391,35 +401,68 @@ class UEG:
         p_idx_range = tuple((idx[0], idx[1]))
         num_tasks, p_idx_worker = get_task_index_block( p_idx_range )
 
-        #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-        #print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
+        print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
+        print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
         #total_self_size = get_obj_tot_size(self)
         #print_logging_info("-- Total size of the self object: {} bytes".format(total_self_size), level=2)
 
+        # ============================================================================
+        #from concurrent.futures import ProcessPoolExecutor, as_completed
         # Initialize the ProcessPoolExecutor parallel window.
+        #with ProcessPoolExecutor(max_workers=num_tasks) as executor:
+        #    # Submit the tasks to the executor for parallel processing.
+        #    futures = [ executor.submit(self.single_task_get_2b_int, p_block, idx, \
+        #                                is_only_2b, is_effect_2b, dtype) \
+        #                for p_block in p_idx_worker ]
+        #    # Gather the results as they are completed.
+        #    results = [None] * len(p_idx_worker)
+        #    for future in as_completed(futures):
+        #        i = futures.index(future)
+        #        results[i] = future.result()
+        #    # Wait for all futures to complete and get the results.
+        #    #results = [future.result() for future in futures]
 
-        with ProcessPoolExecutor(max_workers=num_tasks) as executor:
-            # Submit the tasks to the executor for parallel processing.
-            futures = [ executor.submit(self.single_task_get_2b_int, p_block, idx, \
-                                        is_only_2b, is_effect_2b, dtype) \
-                        for p_block in p_idx_worker ]
-            # Gather the results as they are completed.
-            results = [None] * len(p_idx_worker)
-            for future in as_completed(futures):
-                i = futures.index(future)
-                results[i] = future.result()
-            # Wait for all futures to complete and get the results.
-            #results = [future.result() for future in futures]
 
+        ## Combine the results from all threads into the final tensor.
+        #for i, p_block in enumerate(p_idx_worker):
+        #    # Calculate the local indices of the 'sliced' tensor.
+        #    start, end = p_block
+        #    loc_p_start = start - idx[0]
+        #    loc_p_end   = end   - idx[0]
+        #    # Assign the results to the corresponding slice of V_pqrs.
+        #    V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
+        #=============================================================================
 
-        # Combine the results from all threads into the final tensor.
+        # ============================================================================
+        #import joblib
+        ## Use joblib for parallel processing.
+           # Use joblib for parallel processing.
+        #results = Parallel(n_jobs=num_tasks, backend="multiprocessing")(
+        #    delayed(self.single_task_get_2b_int)(p_block, idx, is_only_2b, is_effect_2b, dtype)
+        #    for p_block in p_idx_worker
+        #    )
+
+        ## Combine the results into the final tensor.
+        #for i, p_block in enumerate(p_idx_worker):
+        #    start, end = p_block
+        #    loc_p_start = start - idx[0]
+        #    loc_p_end = end - idx[0]
+        #    V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
+        #=============================================================================
+
+        # Use multiprocessing for parallel processing.
+        with mp.Pool(processes=num_tasks) as pool:
+            futures = [pool.apply_async(self.single_task_get_2b_int, \
+                                        args=( p_block, idx, is_only_2b, is_effect_2b, dtype)) \
+                                    for p_block in p_idx_worker]
+            results = [future.get() for future in futures]
+        # Combine the results into the final tensor.
         for i, p_block in enumerate(p_idx_worker):
-            # Calculate the local indices of the 'sliced' tensor.
             start, end = p_block
             loc_p_start = start - idx[0]
-            loc_p_end   = end   - idx[0]
-            # Assign the results to the corresponding slice of V_pqrs.
+            loc_p_end = end - idx[0]
             V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
+
 
         #end_time = time.time()
         #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
@@ -462,8 +505,9 @@ class UEG:
         
         """
 
-        #print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
-        #                    + "{}, {}".format(idxp[0], idxp[1]), level=2)
+        print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
+                            + "{}, {}".format(idxp[0], idxp[1]), level=2)
+        task_info()
         
         t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 

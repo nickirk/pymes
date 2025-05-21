@@ -39,9 +39,8 @@ class ERI:
             self.EHF, self.eps_occ, self.eps_virt, self.fock, \
                 self.oooo, self.vovo, self.voov = self.model.get_fock()
 
-            idx    = get_block_index( 'full', nP, no)
-            V_pqrs = self.model.get_2b_int( idx )
-
+            idx = get_block_index('full', nP, no)
+            V_pqrs = self.model.get_2b_int(idx) 
             self.part_eri(self.fock, V_pqrs)
 
         else:

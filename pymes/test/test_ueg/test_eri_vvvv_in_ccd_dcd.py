@@ -3,6 +3,7 @@
 import time
 import numpy as np
 from functools import partial
+import psutil
 
 from pymes.util import tensors
 from pymes.model import ueg
@@ -87,6 +88,9 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     total_elements_dimension = nv           # Total elements along the first axis.
     block_size = tensors.calculate_block_size(total_elements_dimension, element_size)
 
+    available_memory = psutil.virtual_memory().available
+
+    print_logging_info("Available memory = {:.2f} GB".format(available_memory / (1024**3)), level=0)
     print_logging_info("Element size = {} bytes".format(element_size), level=0)
     print_logging_info("Block size = {}".format(block_size), level=0)
 

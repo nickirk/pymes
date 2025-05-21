@@ -1,6 +1,10 @@
 import os
 import sys
+import multiprocessing as mp
+
 from math import ceil
+from pymes.log import print_logging_info
+
 
 def get_task_index_block( idx ):
     """
@@ -84,3 +88,12 @@ def get_obj_tot_size(obj, seen=None):
         size += sum(get_obj_tot_size(i, seen) for i in obj)
     
     return size
+
+def task_info():
+    """
+    Function to print the processor information from the multiprocessing module.
+    """
+    
+    print_logging_info(f"Module name: {mp.__name__}", level=3)
+    print_logging_info(f"Parent process: {mp.current_process().name}", level=3)
+    print_logging_info(f"Process ID: {mp.current_process().pid}", level=3)
