@@ -94,6 +94,7 @@ def task_info():
     Function to print the processor information from the multiprocessing module.
     """
     
-    print_logging_info(f"Module name: {mp.__name__}", level=3)
-    print_logging_info(f"Parent process: {mp.current_process().name}", level=3)
-    print_logging_info(f"Process ID: {mp.current_process().pid}", level=3)
+    print_logging_info(f"Module  name : {mp.__name__}", level=3)
+    print_logging_info(f"Process name : {mp.current_process().name}", level=3)
+    print_logging_info(f"Parent proc. ID : {os.getppid()}", level=3)
+    print_logging_info(f"Curr.  proc. ID : {mp.current_process().pid}", level=3)
