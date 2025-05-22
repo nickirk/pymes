@@ -1,5 +1,6 @@
 import os
 import sys
+import psutil
 import multiprocessing as mp
 
 from math import ceil
@@ -17,8 +18,8 @@ def get_process_index_block( idx ):
         List of indices to be partitioned.
     Returns
     -------
-    num_threads : int
-        The number of threads used for partitioning.
+    num_process : int
+        The number of process used for partitioning.
     idx_blocks : list of tuples
         List of tuples, where each tuple contains the start and end indices for each block.
     """
@@ -98,3 +99,4 @@ def process_info():
     print_logging_info(f"Process name : {mp.current_process().name}", level=3)
     print_logging_info(f"Parent proc. ID : {os.getppid()}", level=3)
     print_logging_info(f"Curr.  proc. ID : {mp.current_process().pid}", level=3)
+    print_logging_info(f"Available memory : {psutil.virtual_memory().available / (1024**3):.2f} GB", level=3)

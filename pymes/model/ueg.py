@@ -413,6 +413,7 @@ class UEG:
             # ========================================== #
 
             # Use multiprocessing for parallel processing.
+            
             with mp.Pool(processes=num_proc) as pool:
                 workers = [pool.apply_async(self.get_2b_int_worker_function, \
                                     args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
@@ -420,12 +421,12 @@ class UEG:
                 for worker in workers:
                     worker.wait()
 
+            # Copy the results from the shared memory to the final tensor.
+            V_pqrs = np.copy(t_V_pqrs) 
+
             #end_time = time.time()
             #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
             #                    "calculating the 2-body integrals.", level=2)
-
-            # Copy the results from the shared memory to the final tensor.
-            V_pqrs = np.copy(t_V_pqrs) 
 
         finally:
             # Close the shared memory object.   

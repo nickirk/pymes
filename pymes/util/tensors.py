@@ -1,7 +1,7 @@
 import psutil
 from math import ceil
 
-def calculate_block_size(total_elements_dimension, element_size, memory_fraction=0.5):
+def calculate_block_size(total_elements_dimension, element_size, memory_fraction=0.5, is_shared_memory=False):
         """
         Calculate the block size for tensor slicing one dimension based on available memory:
         A tensor [nd, nd, nd, nd] has a total of nd^4 elements and each element has a size of
@@ -24,7 +24,10 @@ def calculate_block_size(total_elements_dimension, element_size, memory_fraction
         """
         total_elements = int(total_elements_dimension**4)
         available_memory = psutil.virtual_memory().available
-        usable_memory = available_memory * memory_fraction
+        if is_shared_memory:
+            usable_memory = available_memory * memory_fraction
+        else:
+            usable_memory = available_memory * memory_fraction * 0.5
         max_elements = ceil( usable_memory / ( element_size * total_elements_dimension**3))
         return min(total_elements_dimension, max_elements)
 

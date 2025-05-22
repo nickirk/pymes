@@ -86,7 +86,8 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     # Calculate block size dynamically to optimize memory usage.
     element_size = T_abij.dtype.itemsize  # Size of one element in bytes
     total_elements_dimension = nv           # Total elements along the first axis.
-    block_size = tensors.calculate_block_size(total_elements_dimension, element_size)
+    block_size = tensors.calculate_block_size(total_elements_dimension, element_size,
+                                              is_shared_memory=True)
 
     available_memory = psutil.virtual_memory().available
 
