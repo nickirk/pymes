@@ -414,11 +414,11 @@ class UEG:
 
             # Use multiprocessing for parallel processing.
             with mp.Pool(processes=num_proc) as pool:
-                futures = [pool.apply_async(self.get_2b_int_worker_function, \
+                workers = [pool.apply_async(self.get_2b_int_worker_function, \
                                     args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
                                     for p_block in p_idx_worker]
-                for future in futures:
-                    future.wait()
+                for worker in workers:
+                    worker.wait()
 
             #end_time = time.time()
             #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
