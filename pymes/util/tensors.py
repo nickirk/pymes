@@ -24,10 +24,9 @@ def calculate_block_size(total_elements_dimension, element_size, memory_fraction
         """
         total_elements = int(total_elements_dimension**4)
         available_memory = psutil.virtual_memory().available
+        usable_memory = available_memory * memory_fraction
         if is_shared_memory:
-            usable_memory = available_memory * memory_fraction
-        else:
-            usable_memory = available_memory * memory_fraction * 0.5
+            usable_memory *= 0.45
         max_elements = ceil( usable_memory / ( element_size * total_elements_dimension**3))
         return min(total_elements_dimension, max_elements)
 
