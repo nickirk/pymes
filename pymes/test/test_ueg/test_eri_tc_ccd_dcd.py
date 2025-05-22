@@ -2,7 +2,7 @@
 
 import time
 import numpy as np
-
+import psutil
 
 from pymes.solver import mp2
 from pymes.model import ueg
@@ -40,6 +40,13 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
         print_logging_info("Using the non-TC method.")
     print_logging_info("{:.3f} seconds spent on setting up model"\
                        .format((time.time()-time_set_sys)))
+    
+    # Print the number of cores and memory available.
+    print_title("Computing CPU Information Summary",'=')
+    num_cores = psutil.cpu_count(logical=False)
+    mem = psutil.virtual_memory().available / (1024**3)
+    print_logging_info("Number of cores available: {}".format(num_cores))
+    print_logging_info("Memory available: {:.2f} GB".format(mem))
 
     # Initializing the basis set.
     time_init_basis = time.time()
@@ -107,6 +114,16 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     ccd_t2_norm -= np.einsum("abij,baij->", ccd_amp,ccd_amp)
     ccd_t2_norm = ccd_t2_norm**(1./2)
 
+    print_title("Summary of CCD results","=")
+    print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
+                        ueg_model.k_cutoff))
+    print_logging_info("Ref. E = {:.8f}".format(myERI.EHF))
+    print_logging_info("MP2 E = {:.8f}".format(mp2_energy))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("CCD T2 norm = ",ccd_t2_norm)
+    print_logging_info("Total CCD E = {:.8f}".format(myERI.EHF+ccd_e))
+    print_logging_info("CCD dE = {:.8f}".format(ccd_dE))
+
     print_title(' DCD ','=')
 
     print_logging_info('Evaluating the DCD energy from ERI', level=0)
@@ -127,17 +144,15 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     dcd_t2_norm -= np.einsum("abij,baij->", dcd_amp,dcd_amp)
     dcd_t2_norm = dcd_t2_norm**(1./2)
 
-    print_title("Summary of results","=")
+    print_title("Summary of DCD results","=")
     print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
                         ueg_model.k_cutoff))
     print_logging_info("Ref. E = {:.8f}".format(myERI.EHF))
     print_logging_info("MP2 E = {:.8f}".format(mp2_energy))
-    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
-    print_logging_info("CCD T2 norm = ",ccd_t2_norm)
     print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
     print_logging_info("DCD T2 norm = ",dcd_t2_norm)
-    print_logging_info("Total CCD E = {:.8f}".format(myERI.EHF+ccd_e))
     print_logging_info("Total DCD E = {:.8f}".format(myERI.EHF+dcd_e))
+    print_logging_info("DCD dE = {:.8f}".format(dcd_dE))
 
     if write_tensors:
         print_logging_info("Writing tensors to files", level=0)

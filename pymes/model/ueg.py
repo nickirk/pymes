@@ -408,8 +408,8 @@ class UEG:
             num_proc, p_idx_worker = get_process_index_block( p_idx_range )
 
             # ========== Debugging Info ========== #
-            print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-            print_logging_info("-- Number of process = {}".format(num_proc), level=2)
+            #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
+            #print_logging_info("-- Number of process = {}".format(num_proc), level=2)
             # ========================================== #
 
             # Use multiprocessing for parallel processing.
@@ -473,9 +473,9 @@ class UEG:
         
         """
         # =========== Debugging Info ========== #
-        print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
-                            + "{}, {}".format(idxp[0], idxp[1]), level=2)
-        process_info()
+        #print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
+        #                    + "{}, {}".format(idxp[0], idxp[1]), level=2)
+        #process_info()
         # ========================================== #
 
         try:
