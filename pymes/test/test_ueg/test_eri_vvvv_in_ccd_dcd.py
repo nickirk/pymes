@@ -93,6 +93,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     print_logging_info("Available memory = {:.2f} GB".format(available_memory / (1024**3)), level=0)
     print_logging_info("Element size = {} bytes".format(element_size), level=0)
     print_logging_info("Block size = {}".format(block_size), level=0)
+    print_logging_info("Block mem. size = {} GB".format(block_size * nv**3  * element_size / (1024**3)), level=0)
 
     # Process tensor 'vvvv'-contribution in blocks.
     for block_start in range(0, nv, block_size):

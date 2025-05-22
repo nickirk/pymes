@@ -11,6 +11,7 @@ from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import get_task_index_block, get_obj_tot_size, task_info
 from scipy import special
 from functools import partial
+from multiprocessing import shared_memory
 
 einsum = partial(np.einsum, optimize=True)
 
@@ -394,15 +395,21 @@ class UEG:
         nv = nP - no
 
         # Initialize the Coulomb tensor.
-        V_pqrs = np.zeros([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
+        try:
+            num_elements = (idx[1] - idx[0]) * (idx[3] - idx[2]) * \
+                            (idx[5] - idx[4]) * (idx[7] - idx[6])
+            shm = shared_memory.SharedMemory(create=True, size = num_elements * np.dtype(dtype).itemsize)
+            V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
+                            dtype=dtype, buffer=shm.buf)
+            V_pqrs.fill(0.0)
 
         # Divide the range of p-indices into blocks for parallel processing.
         
-        p_idx_range = tuple((idx[0], idx[1]))
-        num_tasks, p_idx_worker = get_task_index_block( p_idx_range )
+            p_idx_range = tuple((idx[0], idx[1]))
+            num_tasks, p_idx_worker = get_task_index_block( p_idx_range )
 
-        print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-        print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
+            print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
+            print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
         #total_self_size = get_obj_tot_size(self)
         #print_logging_info("-- Total size of the self object: {} bytes".format(total_self_size), level=2)
 
@@ -451,26 +458,30 @@ class UEG:
         #=============================================================================
 
         # Use multiprocessing for parallel processing.
-        with mp.Pool(processes=num_tasks) as pool:
-            futures = [pool.apply_async(self.single_task_get_2b_int, \
-                                        args=( p_block, idx, is_only_2b, is_effect_2b, dtype)) \
+            with mp.Pool(processes=num_tasks) as pool:
+                futures = [pool.apply_async(self.single_task_get_2b_int, \
+                                    args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
                                     for p_block in p_idx_worker]
-            results = [future.get() for future in futures]
-        # Combine the results into the final tensor.
-        for i, p_block in enumerate(p_idx_worker):
-            start, end = p_block
-            loc_p_start = start - idx[0]
-            loc_p_end = end - idx[0]
-            V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
-
+                for future in futures:
+                    future.wait()
 
         #end_time = time.time()
         #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
         #                    "calculating the 2-body integrals.", level=2)
 
-        return V_pqrs
+        # Copy the results from the shared memory to the final tensor.
+
+            sh_V_pqrs = np.copy(V_pqrs) 
+
+        finally:
+            # Close the shared memory object.   
+            shm.close()
+            # Unlink the shared memory object.
+            shm.unlink()
+
+        return sh_V_pqrs
     
-    def single_task_get_2b_int(self, idxp, idx, \
+    def single_task_get_2b_int(self, smem_name, idxp, idx, \
                                 is_only_2b=False, \
                                 is_effect_2b=False, dtype=np.float64):
         """
@@ -483,6 +494,8 @@ class UEG:
 
         Parameters
         ----------
+        shared_mem: str
+            name of the shared memory object to store the results.
         idxp: tuple of int
             range of the outer index to be handled by the worker.
         idx: tuple of int
@@ -508,8 +521,11 @@ class UEG:
         print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
                             + "{}, {}".format(idxp[0], idxp[1]), level=2)
         task_info()
-        
-        t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
+
+        shared_mem = shared_memory.SharedMemory(name=smem_name)       
+        t_V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
+                          dtype=dtype, buffer=shared_mem.buf)
+        #t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
 
         num_k_in_each_dir = self.imax * 2 + 1
 
@@ -640,7 +656,8 @@ class UEG:
                             w = 4. * np.pi / dk_square / self.Omega
                     # get local indices of the 'sliced' tensor'.
                     #start_local_time = time.time()
-                    loc_p_idx = p - idxp[0]
+                    #loc_p_idx = p - idxp[0]
+                    loc_p_idx = p - idx[0]
                     loc_q_idx = q - idx[2]
                     loc_r_idx = r - idx[4]
                     loc_s_idx = s - idx[6]
@@ -651,7 +668,8 @@ class UEG:
                     #end_local_time = time.time()
                     #print_logging_info("Elapsed time = {:.5f} s: ".format(end_local_time - start_local_time) +
                     #                    "assigning w for p = {}, r = {}, q = {}, s = {}", level=3)
-        return t_V_pqrs 
+        shared_mem.close()
+        #return t_V_pqrs 
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
