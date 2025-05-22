@@ -6,7 +6,7 @@ from math import ceil
 from pymes.log import print_logging_info
 
 
-def get_task_index_block( idx ):
+def get_process_index_block( idx ):
     """
     Function to partition a one-dimensional array of indices idx[0]
     to idx[1] into blocks for each thread.
@@ -44,13 +44,13 @@ def get_task_index_block( idx ):
             cpu_threads = 1
     
     idx_range      = idx[1] - idx[0]
-    num_tasks      = min(cpu_threads, idx_range)
+    num_process      = min(cpu_threads, idx_range)
     #print(f"Number of cpu threads: {cpu_threads}")
-    idx_block_size = ceil( idx_range / num_tasks )
+    idx_block_size = ceil( idx_range / num_process )
     #print(f"Index block size: {idx_block_size}")
     idx_blocks     = [(start, min(start + idx_block_size, idx[1])) \
                         for start in range(idx[0], idx[1], idx_block_size)]
-    return num_tasks, idx_blocks
+    return num_process, idx_blocks
 
 def get_obj_tot_size(obj, seen=None):
 
@@ -89,7 +89,7 @@ def get_obj_tot_size(obj, seen=None):
     
     return size
 
-def task_info():
+def process_info():
     """
     Function to print the processor information from the multiprocessing module.
     """

@@ -8,7 +8,7 @@ from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.util.tensors import get_block_index
-from pymes.util.parallel_tasks import get_task_index_block, get_obj_tot_size, task_info
+from pymes.util.parallel_tasks import get_process_index_block, get_obj_tot_size, process_info
 from scipy import special
 from functools import partial
 from multiprocessing import shared_memory
@@ -394,84 +394,38 @@ class UEG:
         no = int(self.n_ele / 2)
         nv = nP - no
 
-        # Initialize the Coulomb tensor.
         try:
+            # Initialize the Coulomb tensor and the shared memory object.
             num_elements = (idx[1] - idx[0]) * (idx[3] - idx[2]) * \
                             (idx[5] - idx[4]) * (idx[7] - idx[6])
             shm = shared_memory.SharedMemory(create=True, size = num_elements * np.dtype(dtype).itemsize)
-            V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
+            t_V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
                             dtype=dtype, buffer=shm.buf)
-            V_pqrs.fill(0.0)
+            t_V_pqrs.fill(0.0)
 
-        # Divide the range of p-indices into blocks for parallel processing.
-        
+            # Divide the range of p-indices into blocks for parallel processing.
             p_idx_range = tuple((idx[0], idx[1]))
-            num_tasks, p_idx_worker = get_task_index_block( p_idx_range )
+            num_proc, p_idx_worker = get_process_index_block( p_idx_range )
 
+            # ========== Debugging Info ========== #
             print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-            print_logging_info("-- Number of threads = {}".format(num_tasks), level=2)
-        #total_self_size = get_obj_tot_size(self)
-        #print_logging_info("-- Total size of the self object: {} bytes".format(total_self_size), level=2)
+            print_logging_info("-- Number of process = {}".format(num_proc), level=2)
+            # ========================================== #
 
-        # ============================================================================
-        #from concurrent.futures import ProcessPoolExecutor, as_completed
-        # Initialize the ProcessPoolExecutor parallel window.
-        #with ProcessPoolExecutor(max_workers=num_tasks) as executor:
-        #    # Submit the tasks to the executor for parallel processing.
-        #    futures = [ executor.submit(self.single_task_get_2b_int, p_block, idx, \
-        #                                is_only_2b, is_effect_2b, dtype) \
-        #                for p_block in p_idx_worker ]
-        #    # Gather the results as they are completed.
-        #    results = [None] * len(p_idx_worker)
-        #    for future in as_completed(futures):
-        #        i = futures.index(future)
-        #        results[i] = future.result()
-        #    # Wait for all futures to complete and get the results.
-        #    #results = [future.result() for future in futures]
-
-
-        ## Combine the results from all threads into the final tensor.
-        #for i, p_block in enumerate(p_idx_worker):
-        #    # Calculate the local indices of the 'sliced' tensor.
-        #    start, end = p_block
-        #    loc_p_start = start - idx[0]
-        #    loc_p_end   = end   - idx[0]
-        #    # Assign the results to the corresponding slice of V_pqrs.
-        #    V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
-        #=============================================================================
-
-        # ============================================================================
-        #import joblib
-        ## Use joblib for parallel processing.
-           # Use joblib for parallel processing.
-        #results = Parallel(n_jobs=num_tasks, backend="multiprocessing")(
-        #    delayed(self.single_task_get_2b_int)(p_block, idx, is_only_2b, is_effect_2b, dtype)
-        #    for p_block in p_idx_worker
-        #    )
-
-        ## Combine the results into the final tensor.
-        #for i, p_block in enumerate(p_idx_worker):
-        #    start, end = p_block
-        #    loc_p_start = start - idx[0]
-        #    loc_p_end = end - idx[0]
-        #    V_pqrs[loc_p_start:loc_p_end, :, :, :] = results[i]
-        #=============================================================================
-
-        # Use multiprocessing for parallel processing.
-            with mp.Pool(processes=num_tasks) as pool:
-                futures = [pool.apply_async(self.single_task_get_2b_int, \
+            # Use multiprocessing for parallel processing.
+            with mp.Pool(processes=num_proc) as pool:
+                futures = [pool.apply_async(self.get_2b_int_worker_function, \
                                     args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
                                     for p_block in p_idx_worker]
                 for future in futures:
                     future.wait()
 
-        #end_time = time.time()
-        #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
-        #                    "calculating the 2-body integrals.", level=2)
+            #end_time = time.time()
+            #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
+            #                    "calculating the 2-body integrals.", level=2)
 
-        # Copy the results from the shared memory to the final tensor.
-
-            sh_V_pqrs = np.copy(V_pqrs) 
+            # Copy the results from the shared memory to the final tensor.
+            V_pqrs = np.copy(t_V_pqrs) 
 
         finally:
             # Close the shared memory object.   
@@ -479,9 +433,9 @@ class UEG:
             # Unlink the shared memory object.
             shm.unlink()
 
-        return sh_V_pqrs
+        return V_pqrs
     
-    def single_task_get_2b_int(self, smem_name, idxp, idx, \
+    def get_2b_int_worker_function(self, shmem_name, idxp, idx, \
                                 is_only_2b=False, \
                                 is_effect_2b=False, dtype=np.float64):
         """
@@ -517,159 +471,162 @@ class UEG:
             of size [ idxp[0], idxp[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
         
         """
-
+        # =========== Debugging Info ========== #
         print_logging_info("- Calculating the 2-body integrals in the range of p-indices: " \
                             + "{}, {}".format(idxp[0], idxp[1]), level=2)
-        task_info()
+        process_info()
+        # ========================================== #
 
-        shared_mem = shared_memory.SharedMemory(name=smem_name)       
-        t_V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
-                          dtype=dtype, buffer=shared_mem.buf)
-        #t_V_pqrs = np.zeros([idxp[1]-idxp[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], dtype=dtype)
-
-        num_k_in_each_dir = self.imax * 2 + 1
-
-        for p in range(idxp[0], idxp[1]):
-            for r in range(idx[4], idx[5]):
-                #local_start = time.time()
-                d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
-                d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
-                #local_end = time.time()
-                #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
-                #                      "calculating the d_k_vec and d_int_k for p = {}, r = {}"
-                #                      .format(p, r), level=3)
-                u_mat = 0.
-                if self.is_tc and self.correlator is not None:
+        try:
+            shrdmem = shared_memory.SharedMemory(name=shmem_name)       
+            tV_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
+                          dtype=dtype, buffer=shrdmem.buf)
+           
+            num_k_in_each_dir = self.imax * 2 + 1
+           
+            for p in range(idxp[0], idxp[1]):
+                for r in range(idx[4], idx[5]):
                     #local_start = time.time()
-                    u_mat = self.sumNablaUSquare(d_k_vec)
+                    d_int_k = self.basis_fns[r * 2].k - self.basis_fns[p * 2].k
+                    d_k_vec = self.basis_fns[r * 2].kp - self.basis_fns[p * 2].kp
                     #local_end = time.time()
                     #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
-                    #                    "calculating the u_mat for p = {}, r = {}", level=3)
-
-                for q in range(idx[2], idx[3]):
-                    #local_start = time.time()
-                    int_ks = self.basis_fns[q * 2].k - d_int_k
-                    # if self.is_k_in_basis(int_ks):
-                    # [s] index to self.basis_indices_map.
-                    loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax) + \
-                            num_k_in_each_dir * (int_ks[1] + self.imax) + \
-                            int_ks[2] + self.imax
-                    # check if ks-vector is in the basis set.
-                    if len(self.basis_indices_map) > loc_s >= 0:
-                        # check if s index of ks-vector is in the range of
-                        # the block of the Coulomb tensor to be computed.
-                        s = int(self.basis_indices_map[loc_s])
-                        if s < idx[6] or s >= idx[7]:
-                            continue
-                    else:
-                        continue
-                    #local_end = time.time()
-                    #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
-                    #                    "calculating the s index for p = {}, r = {}, q = {}"
-                    #                    .format(p, r, q), level=3)
-                    dk_square = d_k_vec.dot(d_k_vec)
-                    w = 0.
-
+                    #                      "calculating the d_k_vec and d_int_k for p = {}, r = {}"
+                    #                      .format(p, r), level=3)
+                    u_mat = 0.
                     if self.is_tc and self.correlator is not None:
-                        if is_only_2b:
-                            #local_start = time.time()
-                            if np.abs(dk_square) > 0.:
-                                rs_dk = self.basis_fns[r * 2].kp \
-                                        - self.basis_fns[s * 2].kp
-                                w = 4. * np.pi / dk_square \
-                                    + u_mat \
-                                    + dk_square * self.correlator(dk_square) \
-                                    - (rs_dk.dot(d_k_vec)) \
-                                    * self.correlator(dk_square)
-                                w = w / self.Omega
-                            else:
-                                w = u_mat / self.Omega
-                            #local_end = time.time()
-                            #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
-                            #                    "calculating the w for p = {}, r = {}, q = {}"
-                            #                    .format(p, r, q), level=3)
-                        elif is_effect_2b:
-                            if np.abs(dk_square) > 0.:
-                                w_pqrs = - (self.n_ele) * dk_square \
-                                        * self.correlator(dk_square) ** 2 / self.Omega \
-                                        + 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * r].kp, d_k_vec) \
-                                        - 2. *self.contract_exchange_3_body(
-                                        self.basis_fns[2 * p].kp, d_k_vec) \
-                                        + 2. * self.contractP_KWithQ(
+                        #local_start = time.time()
+                        u_mat = self.sumNablaUSquare(d_k_vec)
+                        #local_end = time.time()
+                        #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
+                        #                    "calculating the u_mat for p = {}, r = {}", level=3)
+           
+                    for q in range(idx[2], idx[3]):
+                        #local_start = time.time()
+                        int_ks = self.basis_fns[q * 2].k - d_int_k
+                        # if self.is_k_in_basis(int_ks):
+                        # [s] index to self.basis_indices_map.
+                        loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax) + \
+                                num_k_in_each_dir * (int_ks[1] + self.imax) + \
+                                int_ks[2] + self.imax
+                        # check if ks-vector is in the basis set.
+                        if len(self.basis_indices_map) > loc_s >= 0:
+                            # check if s index of ks-vector is in the range of
+                            # the block of the Coulomb tensor to be computed.
+                            s = int(self.basis_indices_map[loc_s])
+                            if s < idx[6] or s >= idx[7]:
+                                continue
+                        else:
+                            continue
+                        #local_end = time.time()
+                        #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
+                        #                    "calculating the s index for p = {}, r = {}, q = {}"
+                        #                    .format(p, r, q), level=3)
+                        dk_square = d_k_vec.dot(d_k_vec)
+                        w = 0.
+           
+                        if self.is_tc and self.correlator is not None:
+                            if is_only_2b:
+                                #local_start = time.time()
+                                if np.abs(dk_square) > 0.:
+                                    rs_dk = self.basis_fns[r * 2].kp \
+                                            - self.basis_fns[s * 2].kp
+                                    w = 4. * np.pi / dk_square \
+                                        + u_mat \
+                                        + dk_square * self.correlator(dk_square) \
+                                        - (rs_dk.dot(d_k_vec)) \
+                                        * self.correlator(dk_square)
+                                    w = w / self.Omega
+                                else:
+                                    w = u_mat / self.Omega
+                                #local_end = time.time()
+                                #print_logging_info("Elapsed time = {:.5f} s: ".format(local_end - local_start) +
+                                #                    "calculating the w for p = {}, r = {}, q = {}"
+                                #                    .format(p, r, q), level=3)
+                            elif is_effect_2b:
+                                if np.abs(dk_square) > 0.:
+                                    w_pqrs = - (self.n_ele) * dk_square \
+                                            * self.correlator(dk_square) ** 2 / self.Omega \
+                                            + 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * r].kp, d_k_vec) \
+                                            - 2. *self.contract_exchange_3_body(
+                                            self.basis_fns[2 * p].kp, d_k_vec) \
+                                            + 2. * self.contractP_KWithQ(
+                                            self.basis_fns[2 * r].kp, d_k_vec)
+                                    w_qpsr = - (self.n_ele) * dk_square \
+                                            * self.correlator(dk_square) ** 2 / self.Omega \
+                                            + 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * s].kp, -d_k_vec) \
+                                            - 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * q].kp, -d_k_vec) \
+                                            + 2. * self.contractP_KWithQ(
+                                            self.basis_fns[2 * s].kp, -d_k_vec)
+                                    w = 0.5 * ( w_pqrs + w_qpsr )
+                                else:
+                                    w_pqrs = 2. * self.contractP_KWithQ(
                                         self.basis_fns[2 * r].kp, d_k_vec)
-                                w_qpsr = - (self.n_ele) * dk_square \
-                                        * self.correlator(dk_square) ** 2 / self.Omega \
-                                        + 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * s].kp, -d_k_vec) \
-                                        - 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * q].kp, -d_k_vec) \
-                                        + 2. * self.contractP_KWithQ(
+                                    w_qpsr = 2. * self.contractP_KWithQ(
                                         self.basis_fns[2 * s].kp, -d_k_vec)
-                                w = 0.5 * ( w_pqrs + w_qpsr )
+                                    w = 0.5 * (w_pqrs + w_qpsr)
+                                w = w / self.Omega                          
                             else:
-                                w_pqrs = 2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * r].kp, d_k_vec)
-                                w_qpsr = 2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * s].kp, -d_k_vec)
-                                w = 0.5 * (w_pqrs + w_qpsr)
-                            w = w / self.Omega                          
+                                if np.abs(dk_square) > 0.:
+                                    rs_dk = self.basis_fns[r * 2].kp \
+                                            - self.basis_fns[s * 2].kp
+                                    # Coulomb:
+                                    w =  4. * np.pi / dk_square
+                                    # Transcorrelated pure 2-body:
+                                    w += + u_mat \
+                                         + dk_square * self.correlator(dk_square) \
+                                         - (rs_dk.dot(d_k_vec)) \
+                                         * self.correlator(dk_square)
+                                    # Transcorrelated effective 2-body:
+                                    w_pqrs = - (self.n_ele) * dk_square \
+                                            * self.correlator(dk_square) ** 2 / self.Omega \
+                                            + 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * r].kp, d_k_vec) \
+                                            - 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * p].kp, d_k_vec) \
+                                            + 2. * self.contractP_KWithQ(
+                                            self.basis_fns[2 * r].kp, d_k_vec)
+                                    w_qpsr = - (self.n_ele) * dk_square \
+                                            * self.correlator(dk_square) ** 2 / self.Omega \
+                                            + 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * s].kp, -d_k_vec) \
+                                            - 2. * self.contract_exchange_3_body(
+                                            self.basis_fns[2 * q].kp, -d_k_vec) \
+                                            + 2. * self.contractP_KWithQ(
+                                            self.basis_fns[2 * s].kp, -d_k_vec)
+                                    w += 0.5 * ( w_pqrs + w_qpsr )
+                                else:
+                                    w  = u_mat
+                                    w_pqrs = 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * r].kp, d_k_vec)
+                                    w_qpsr = 2. * self.contractP_KWithQ(
+                                        self.basis_fns[2 * s].kp, -d_k_vec)
+                                    w += 0.5 * (w_pqrs + w_qpsr) 
+                                w = w / self.Omega
                         else:
                             if np.abs(dk_square) > 0.:
-                                rs_dk = self.basis_fns[r * 2].kp \
-                                        - self.basis_fns[s * 2].kp
-                                # Coulomb:
-                                w =  4. * np.pi / dk_square
-                                # Transcorrelated pure 2-body:
-                                w += + u_mat \
-                                     + dk_square * self.correlator(dk_square) \
-                                     - (rs_dk.dot(d_k_vec)) \
-                                     * self.correlator(dk_square)
-                                # Transcorrelated effective 2-body:
-                                w_pqrs = - (self.n_ele) * dk_square \
-                                        * self.correlator(dk_square) ** 2 / self.Omega \
-                                        + 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * r].kp, d_k_vec) \
-                                        - 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * p].kp, d_k_vec) \
-                                        + 2. * self.contractP_KWithQ(
-                                        self.basis_fns[2 * r].kp, d_k_vec)
-                                w_qpsr = - (self.n_ele) * dk_square \
-                                        * self.correlator(dk_square) ** 2 / self.Omega \
-                                        + 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * s].kp, -d_k_vec) \
-                                        - 2. * self.contract_exchange_3_body(
-                                        self.basis_fns[2 * q].kp, -d_k_vec) \
-                                        + 2. * self.contractP_KWithQ(
-                                        self.basis_fns[2 * s].kp, -d_k_vec)
-                                w += 0.5 * ( w_pqrs + w_qpsr )
-                            else:
-                                w  = u_mat
-                                w_pqrs = 2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * r].kp, d_k_vec)
-                                w_qpsr = 2. * self.contractP_KWithQ(
-                                    self.basis_fns[2 * s].kp, -d_k_vec)
-                                w += 0.5 * (w_pqrs + w_qpsr) 
-                            w = w / self.Omega
-                    else:
-                        if np.abs(dk_square) > 0.:
-                            w = 4. * np.pi / dk_square / self.Omega
-                    # get local indices of the 'sliced' tensor'.
-                    #start_local_time = time.time()
-                    #loc_p_idx = p - idxp[0]
-                    loc_p_idx = p - idx[0]
-                    loc_q_idx = q - idx[2]
-                    loc_r_idx = r - idx[4]
-                    loc_s_idx = s - idx[6]
-                    t_V_pqrs[loc_p_idx,
-                                  loc_q_idx,
-                                  loc_r_idx,
-                                  loc_s_idx] = w
-                    #end_local_time = time.time()
-                    #print_logging_info("Elapsed time = {:.5f} s: ".format(end_local_time - start_local_time) +
-                    #                    "assigning w for p = {}, r = {}, q = {}, s = {}", level=3)
-        shared_mem.close()
-        #return t_V_pqrs 
+                                w = 4. * np.pi / dk_square / self.Omega
+                        # get local indices of the 'sliced' tensor'.
+                        #start_local_time = time.time()
+                        loc_p_idx = p - idx[0]
+                        loc_q_idx = q - idx[2]
+                        loc_r_idx = r - idx[4]
+                        loc_s_idx = s - idx[6]
+                        tV_pqrs[loc_p_idx,
+                                loc_q_idx,
+                                loc_r_idx,
+                                loc_s_idx] = w
+                        #end_local_time = time.time()
+                        #print_logging_info("Elapsed time = {:.5f} s: ".format(end_local_time - start_local_time) +
+                        #                    "assigning w for p = {}, r = {}, q = {}, s = {}", level=3)
+        except Exception as e:
+            print_logging_info("Error in worker process: {}".format(e), level=0)
+            raise e
+        finally:
+            shrdmem.close()
 
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
