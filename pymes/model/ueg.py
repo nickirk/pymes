@@ -13,7 +13,200 @@ from scipy import special
 from functools import partial
 from multiprocessing import shared_memory
 
+try:
+    from numba import jit, prange
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+    print_logging_info("Numba is not available. The code will run without JIT acceleration.", level=0)
+
 einsum = partial(np.einsum, optimize=True)
+
+if NUMBA_AVAILABLE:
+
+    @jit(nopython=True)
+    def opt_trunc_correlator(kSquare, k_cutoffSquare, gamma, L):
+        """ Numba JIT-compiled version of the trunc_correlator function for better performance.
+        Computes the truncated correlator function u(k^2), where k is SCALAR.
+        Parameters
+        ----------
+        kSquare: float
+            square of the plane wave vector k.
+        k_cutoff: float
+            plane wave vector cutoff inside the correlator function trunc.
+        gamma: float
+            parameter in the correlator function.
+        L: float
+            length of the cubic simulation cell.
+        Returns
+        -------
+        corr: float
+            value of the truncated correlator function u(k^2).
+        """
+        if kSquare <= k_cutoffSquare * (1 + 0.00001):
+            corr = 0.0
+        elif kSquare > 1e-12:
+            corr = -4. * np.pi / (kSquare ** 2)
+        else:
+            corr = 0.0
+        return corr * gamma
+    
+    @jit(nopython=True)
+    def opt_contract_exchange_3_body():
+        """ Numba JIT-compiled version of the contract_exchange_3_body function for better performance.
+        Computes the single contraction of the exchange type from the 3-body integrals.
+        Parameters
+        ----------
+        To be added.
+        Returns
+        -------
+        To be added.
+        """
+        pass
+
+    @jit(nopython=True)
+    def opt_contractP_KWithQ():
+        """ Numba JIT-compiled version of the contractP_KWithQ function for better performance.
+        Computes the contraction over index 's' in the 3-body integrals.
+        Parameters
+        ----------
+        To be added.
+        Returns
+        -------
+        To be added.
+        """
+        pass
+    
+    @jit(nopython=True)
+    def opt_sumNablaUSquare(kVec, Omega, L, kPrime, k_cutoffSquare, gamma):
+        """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
+        Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
+        Parameters
+        ----------
+        kVec: nparray of float dtype
+            difference of two k-vectors (k_p - k_q)
+        Omega: float
+            volume of the cubic simulation cell
+        L: float
+            length of the cubic simulation cell
+        kPrime: nparray of float dtype
+            an array to store shifted k-vectors for later lookup.
+        k_cutoffSquare: float
+            plane wave vector cutoff inside the correlaor function trunc.
+        gamma: float
+            parameter in the correlator function.
+        Returns
+        -------
+        u_mat: float
+            value of the sum of the squared gradients of the correlator function
+            in k-space.
+        """
+        k1 = 2 * np.pi * kPrime / L
+        k2 = kVec - k1
+        umat = 0.0
+        for i in range(k1.shape[0]):
+            k2 = kVec - k1[i]
+            k1Square = k1[i,0]**2 + k1[i,1]**2 + k1[i,2]**2
+            k2Square = k2[0]**2 + k2[1]**2 + k2[2]**2
+            k1Dotk2 = k1[i,0]*k2[0] + k1[i,1]*k2[1] + k1[i,2]*k2[2]
+            corr_k1 = opt_trunc_correlator(k1Square, k_cutoffSquare, gamma, L)
+            corr_k2 = opt_trunc_correlator(k2Square, k_cutoffSquare, gamma, L)
+            umat += k1Dotk2 * corr_k1 * corr_k2
+
+        return umat / Omega
+
+    @jit(nopython=True, parallel=True)
+    def opt_get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
+                        kPrime, basis_indices_map,
+                        basis_occ_Kp, basis_Kvec, basis_Kp,
+                        is_only_2b, is_effect_2b, is_tc, dtype=np.float64):
+        """ Numba JIT-compiled version of the get_2b_int function for better performance.
+        Parameters
+        ----------
+        idx: tuple of int
+            indices of the block of the Coulomb tensor to be computed.
+        n_ele: int
+            number of electrons
+        Omega: float
+            volume of the cubic simulation cell
+        L: float
+            length of the cubic simulation cell
+        imax: int
+            maximum k-point index in each direction
+        k_cutoff: float
+            plane wave vector cutoff inside the correlaor function trunc.
+        gamma: float
+            parameter in the correlator function
+        kPrime: nparray of float dtype
+            an array to store shifted k-vectors for later lookup.
+        basis_indices_map: nparray of int dtype
+            an array to store indices of basis functions (plane waves) for
+            later lookup. Size Nx*Ny*Nz, Nx, Ny, Nz are the k-vector points
+            in x, y, z directions.
+        basis_occ_Kp: nparray of float dtype
+            an array to store shifted k-vectors of occupied orbitals.
+        basis_Kvec: nparray of int dtype
+            an array to store k-vectors of all basis functions.
+        basis_Kp: nparray of float dtype
+            an array to store shifted k-vectors of all basis functions.
+        is_only_2b: bool
+            parameter which determines to include only the additional
+            pure 2-body tc integrals, besides the Coulomb integrals.
+        is_effect_2b: bool
+            parameter which determines to include the effective 2-body integrals 
+            as a result of single contractions from the 3-body integrals. 
+            There are four types of single contractions in the 3-body integrals: 
+            RPA type and 3 exchange types.
+        is_tc: bool
+            parameter which determines whether transcorrelated framework is
+            active or not for the calculation of the integrals.
+
+        Returns
+        -------
+        V_pqrs: tensor object (tensor by default)
+            of size [ idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
+        """
+        num_k_in_each_dir = imax * 2 + 1
+        V_pqrs = np.zeros((idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]), dtype=dtype)
+        k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2 
+        for p in prange(idx[0], idx[1]):
+            for r in range(idx[4], idx[5]):
+                d_int_k = basis_Kvec[r] - basis_Kvec[p]
+                d_k_vec = basis_Kp[r] - basis_Kp[p]
+                u_mat = 0.
+                if is_tc:
+                    u_mat = opt_sumNablaUSquare(d_k_vec, Omega, L, kPrime, k_cutoffSquare,  gamma)
+                for q in range(idx[2], idx[3]):
+                    int_ks = basis_Kvec[q] - d_int_k
+                    # [s] index to basis_indices_map.
+                    loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + imax) + \
+                            num_k_in_each_dir * (int_ks[1] + imax) + \
+                            int_ks[2] + imax
+                    # check if ks-vector is in the basis set.
+                    if len(basis_indices_map) > loc_s >= 0:
+                        # check if s index of ks-vector is in the range of
+                        # the block of the Coulomb tensor to be computed.
+                        s = int(basis_indices_map[loc_s])
+                        if s < idx[6] or s >= idx[7]:
+                            continue
+                    else:
+                        continue
+                    dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
+                    w = 0.0
+                    if is_tc:
+                        if is_only_2b:
+                        elif is_effect_2b:
+                        else:
+                    else:
+                    loc_p_idx = p - idx[0]
+                    loc_q_idx = q - idx[2]
+                    loc_r_idx = r - idx[4]
+                    loc_s_idx = s - idx[6]
+                    V_pqrs[loc_p_idx,
+                            loc_q_idx,
+                            loc_r_idx,
+                            loc_s_idx] = w
+        return V_pqrs   
 
 class UEG:
     """ This class defines a model system of 3d uniform electron gas
@@ -394,47 +587,67 @@ class UEG:
         no = int(self.n_ele / 2)
         nv = nP - no
 
-        try:
-            # Initialize the Coulomb tensor and the shared memory object.
-            num_elements = (idx[1] - idx[0]) * (idx[3] - idx[2]) * \
-                            (idx[5] - idx[4]) * (idx[7] - idx[6])
-            shm = shared_memory.SharedMemory(create=True, size = num_elements * np.dtype(dtype).itemsize)
-            t_V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
-                            dtype=dtype, buffer=shm.buf)
-            t_V_pqrs.fill(0.0)
+        if NUMBA_AVAILABLE and self.correlator is not None and self.correlator.__name__ == 'trunc':
+            # Using Numba JIT-compiled version for better performance.
+            # 1. Unpack data into Numba-compatible structures (NumPy arrays).
+            n_ele = self.n_ele
+            Omega = self.Omega
+            L     = self.L
+            imax  = self.imax
+            k_cutoff = self.k_cutoff if self.k_cutoff is not None else  int(np.ceil(np.sqrt(self.cutoff)))
+            gamma  = self.gamma if self.gamma is not None else 1.0
+            kPrime = self.kPrime.astype(np.float64)
+            basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
+            basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
+            basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
+            return opt_get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
+                                    kPrime, self.basis_indices_map,
+                                    basis_occ_Kp, basis_Kvec, basis_Kp,
+                                    is_only_2b, is_effect_2b, self.is_tc,
+                                    dtype=dtype)
+        else:
+            # Using multiprocessing with shared memory.
+            try:
+                # Initialize the Coulomb tensor and the shared memory object.
+                num_elements = (idx[1] - idx[0]) * (idx[3] - idx[2]) * \
+                                (idx[5] - idx[4]) * (idx[7] - idx[6])
+                shm = shared_memory.SharedMemory(create=True, size = num_elements * np.dtype(dtype).itemsize)
+                t_V_pqrs = np.ndarray([idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]], \
+                                dtype=dtype, buffer=shm.buf)
+                t_V_pqrs.fill(0.0)
 
-            # Divide the range of p-indices into blocks for parallel processing.
-            p_idx_range = tuple((idx[0], idx[1]))
-            num_proc, p_idx_worker = get_process_index_block( p_idx_range )
+                # Divide the range of p-indices into blocks for parallel processing.
+                p_idx_range = tuple((idx[0], idx[1]))
+                num_proc, p_idx_worker = get_process_index_block( p_idx_range )
 
-            # ========== Debugging Info ========== #
-            #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
-            #print_logging_info("-- Number of process = {}".format(num_proc), level=2)
-            # ========================================== #
+                # ========== Debugging Info ========== #
+                #print_logging_info("-- p-indices range: {}".format(p_idx_range), level=2) 
+                #print_logging_info("-- Number of process = {}".format(num_proc), level=2)
+                # ========================================== #
 
-            # Use multiprocessing for parallel processing.
-            
-            with mp.Pool(processes=num_proc) as pool:
-                workers = [pool.apply_async(self.get_2b_int_worker_function, \
-                                    args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
-                                    for p_block in p_idx_worker]
-                for worker in workers:
-                    worker.wait()
+                # Use multiprocessing for parallel processing.
 
-            # Copy the results from the shared memory to the final tensor.
-            V_pqrs = np.copy(t_V_pqrs) 
+                with mp.Pool(processes=num_proc) as pool:
+                    workers = [pool.apply_async(self.get_2b_int_worker_function, \
+                                        args=(shm.name, p_block, idx, is_only_2b, is_effect_2b, dtype)) \
+                                        for p_block in p_idx_worker]
+                    for worker in workers:
+                        worker.wait()
 
-            #end_time = time.time()
-            #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
-            #                    "calculating the 2-body integrals.", level=2)
+                # Copy the results from the shared memory to the final tensor.
+                V_pqrs = np.copy(t_V_pqrs) 
 
-        finally:
-            # Close the shared memory object.   
-            shm.close()
-            # Unlink the shared memory object.
-            shm.unlink()
+                #end_time = time.time()
+                #print_logging_info("Elapsed time = {:.5f} s: ".format(end_time - start_time) +
+                #                    "calculating the 2-body integrals.", level=2)
 
-        return V_pqrs
+            finally:
+                # Close the shared memory object.   
+                shm.close()
+                # Unlink the shared memory object.
+                shm.unlink()
+
+            return V_pqrs
     
     def get_2b_int_worker_function(self, shmem_name, idxp, idx, \
                                 is_only_2b=False, \
