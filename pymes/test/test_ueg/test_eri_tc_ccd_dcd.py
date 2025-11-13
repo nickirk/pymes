@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -u
 
 import time
+import sys
 import numpy as np
 import psutil
 
@@ -13,6 +14,16 @@ from pymes.util.tensors import write_one_index_tensor, \
                                 write_two_index_tensor, \
                                 write_four_index_tensor
 from pymes.log import print_title, print_logging_info
+
+try:
+    from numba import config, get_num_threads
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+    print_logging_info("ERROR: NUMBA is not available.", level=0)
+    sys.exit(1)
+
+sys.stdout.flush()
 
 def main(nel, cutoff, rs, gamma, kc, amps, \
           eri_incore=True, \
@@ -40,13 +51,17 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
         print_logging_info("Using the non-TC method.")
     print_logging_info("{:.3f} seconds spent on setting up model"\
                        .format((time.time()-time_set_sys)))
+    sys.stdout.flush()
     
     # Print the number of cores and memory available.
     print_title("Computing CPU Information Summary",'=')
     num_cores = psutil.cpu_count(logical=False)
+    num_threads = get_num_threads() if NUMBA_AVAILABLE else 'N/A'
     mem = psutil.virtual_memory().available / (1024**3)
     print_logging_info("Number of cores available: {}".format(num_cores))
+    print_logging_info("Number of NUMBA threads: {}".format(num_threads))
     print_logging_info("Memory available: {:.2f} GB".format(mem))
+    sys.stdout.flush()
 
     # Initializing the basis set.
     time_init_basis = time.time()
@@ -59,11 +74,16 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     nv = nP - no
     print_title('Basis set', '=')
     print_logging_info('Number of spin orbitals = {}'\
-                       .format(int(len(ueg_model.basis_fns))))
+                        .format(int(len(ueg_model.basis_fns))))
     print_logging_info('Number of spatial orbitals (plane waves) = {}'\
-                       .format(num_spatial_orb))
+                        .format(num_spatial_orb))
+    print_logging_info('Number of occupied orbitals = {}'\
+                        .format(no))
+    print_logging_info('Number of virtual orbitals = {}'\
+                        .format(nv))
     print_logging_info("{:.3f} seconds spent on generating basis."\
                        .format((time.time()-time_init_basis)))
+    sys.stdout.flush()
 
     # Initializing the ERI integrals.
     print_title('Evaluating the Electron Repulsion Integrals','=')
@@ -83,6 +103,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
                        .format((time.time()-time_init_eri)))
 
     HFE = myERI.EHF
+    sys.stdout.flush()
  
     print_title(' MP2 ','=')
     print_logging_info('Evaluating the MP2 energy from ERI', level=0)
@@ -93,6 +114,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     print_logging_info("{:.3f} seconds spent on MP2"\
                        .format((time.time()-time_mp2)), level=0)
     print_logging_info("MP2 energy = {:.8f}".format(mp2_energy), lvel=0)
+    sys.stdout.flush()
 
     print_title(' CCD ','=')
 
@@ -123,6 +145,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     print_logging_info("CCD T2 norm = ",ccd_t2_norm)
     print_logging_info("Total CCD E = {:.8f}".format(myERI.EHF+ccd_e))
     print_logging_info("CCD dE = {:.8f}".format(ccd_dE))
+    sys.stdout.flush()
 
     print_title(' DCD ','=')
 
@@ -153,6 +176,24 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     print_logging_info("DCD T2 norm = ",dcd_t2_norm)
     print_logging_info("Total DCD E = {:.8f}".format(myERI.EHF+dcd_e))
     print_logging_info("DCD dE = {:.8f}".format(dcd_dE))
+    sys.stdout.flush()
+
+    print_title("Summary of CCD/DCD results","=")
+    print_logging_info("Num spin orb={}, rs={}, kCutoff={}".format(len(ueg_model.basis_fns),rs,\
+                        ueg_model.k_cutoff))
+    print_logging_info("Ref. E = {:.8f}".format(myERI.EHF))
+    print_logging_info("MP2 E = {:.8f}".format(mp2_energy))
+    print_logging_info("CCD correlation E = {:.8f}".format(ccd_e))
+    print_logging_info("CCD T2 norm = ",ccd_t2_norm)
+    print_logging_info("DCD correlation E = {:.8f}".format(dcd_e))
+    print_logging_info("DCD T2 norm = ",dcd_t2_norm)
+    print_logging_info("Total CCD E = {:.8f}".format(myERI.EHF+ccd_e))
+    print_logging_info("Total DCD E = {:.8f}".format(myERI.EHF+dcd_e))
+    sys.stdout.flush()
+
+    #print_title("Summary of NUMBA JIT-Compulation","=")
+    #if NUMBA_AVAILABLE:
+        #print(ueg._get_2b_int.parallel_diagnostics(level=4))
 
     if write_tensors:
         print_logging_info("Writing tensors to files", level=0)

@@ -1,4 +1,5 @@
 import time
+import sys
 import numpy as np
 from functools import partial
 
@@ -100,6 +101,11 @@ class CCD:
 
         while np.abs(dE) > delta_e and iteration <= max_iter:
             iteration += 1
+
+            start_time_ccd_iter = time.time()
+            if iteration <= max_iter:
+                print_logging_info("Iteration = ", iteration, level=1)
+
             if self.is_dr_ccd:
                 t_R_abij = drccd.get_residual(t_epsilon_i, t_epsilon_a, t_T_abij,
                                               t_V_abij, t_V_aijb, t_V_iabj,
@@ -143,8 +149,11 @@ class CCD:
             t2_l1_norm = np.linalg.norm(t_T_abij)
             residual_norm = np.linalg.norm(t_delta_T_abij)
 
+            end_time_ccd_iter = time.time()
+            print_logging_info("Iteration time = {:.3f} seconds.".format(
+                end_time_ccd_iter - start_time_ccd_iter), level=2)
+
             if iteration <= max_iter:
-                print_logging_info("Iteration = ", iteration, level=1)
                 print_logging_info("Correlation Energy = {:.12f}".format(e_ccd),
                                    level=2)
                 print_logging_info("dE = {:.12e}".format(dE), level=2)
@@ -152,8 +161,10 @@ class CCD:
                                    level=2)
                 print_logging_info("Norm Residual = {:.12f}".format(residual_norm),
                                    level=2)
+                sys.stdout.flush()
             else:
                 print_logging_info("A converged solution is not found!", level=1)
+                sys.stdout.flush()
 
         print_logging_info("Direct contribution = {:.12f}".format(
             np.real(e_dir_ccd)), level=1)
@@ -170,6 +181,9 @@ class CCD:
     def get_residual(self, eri, t_T_abij):
 
         algo_name = "ccd.get_residual"
+
+        print_logging_info(algo_name + ": Calculating the R_abij Residual ...", level=2)
+
         no = self.no
 
         t_fock_pq = eri.fock 
@@ -204,14 +218,24 @@ class CCD:
         total_elements_dimension = nv           # Total elements along the first axis.
         block_size = tensors.calculate_block_size(total_elements_dimension, element_size,
                                                   is_shared_memory=True)
+        
+        print_logging_info("Using block size of {} for 'vvvv'-contribution.".format(block_size), level=3)
+        print_logging_info("Memory per block: {:.2f} MB".format(
+            block_size * nv * nv * nv * element_size / (1024 ** 2)), level=3)
 
         # Process tensor 'vvvv'-contribution in blocks.
         for block_start in range(0, nv, block_size):
+            start_block_time = time.time()
             block_end = min(block_start + block_size, nv)
+            print_logging_info(" Calculating block: {} to {}.".format(block_start, block_end), level=3)
             indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
             t_V_xbcd = eri.get_vvvv(indx)
             t_R_xbij = einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
             t_R_abij[block_start:block_end, :, :, :] += t_R_xbij
+            end_block_time = time.time()
+            print_logging_info(" Elapsed block time: {:.3f} seconds.".format(
+                end_block_time - start_block_time), level=3)
+            sys.stdout.flush()
 
         if not self.is_dcd:
             t_X_alcj = einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
