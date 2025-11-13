@@ -2,6 +2,7 @@
 
 import time
 import sys
+import os
 import numpy as np
 import psutil
 
@@ -13,6 +14,7 @@ from pymes.integral import eri
 from pymes.util.tensors import write_one_index_tensor, \
                                 write_two_index_tensor, \
                                 write_four_index_tensor
+from pymes.util.parallel_tasks import print_threading_info
 from pymes.log import print_title, print_logging_info
 
 try:
@@ -54,13 +56,9 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     sys.stdout.flush()
     
     # Print the number of cores and memory available.
-    print_title("Computing CPU Information Summary",'=')
-    num_cores = psutil.cpu_count(logical=False)
-    num_threads = get_num_threads() if NUMBA_AVAILABLE else 'N/A'
-    mem = psutil.virtual_memory().available / (1024**3)
-    print_logging_info("Number of cores available: {}".format(num_cores))
-    print_logging_info("Number of NUMBA threads: {}".format(num_threads))
-    print_logging_info("Memory available: {:.2f} GB".format(mem))
+
+    print_title("System Resources Information",'=')
+    print_threading_info()
     sys.stdout.flush()
 
     # Initializing the basis set.
@@ -211,7 +209,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
 
 
 if __name__ == '__main__':
-  eri_incore = True
+  eri_incore = False
   write_tensors = False
   gamma = None
   amps  = None

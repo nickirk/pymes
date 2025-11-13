@@ -78,9 +78,9 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
         loc_p_idx = p - idx[0]
         for r in range(idx[4], idx[5]):
     #for pr in prange(p_range * r_range):
-            #p = idx[0] + pr // r_range
-            #r = idx[4] + pr % r_range
-            #loc_p_idx = p - idx[0]
+    #        p = idx[0] + pr // r_range
+    #        r = idx[4] + pr % r_range
+    #        loc_p_idx = p - idx[0]
             loc_r_idx = r - idx[4]
             d_int_k = basis_Kvec[r] - basis_Kvec[p]
             d_k_vec = basis_Kp[r] - basis_Kp[p]

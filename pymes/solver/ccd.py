@@ -1,5 +1,6 @@
 import time
 import sys
+import gc
 import numpy as np
 from functools import partial
 
@@ -182,7 +183,7 @@ class CCD:
 
         algo_name = "ccd.get_residual"
 
-        print_logging_info(algo_name + ": Calculating the R_abij Residual ...", level=2)
+        print_logging_info(algo_name + ": Calculating the R_abij ...", level=2)
 
         no = self.no
 
@@ -217,11 +218,12 @@ class CCD:
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
         total_elements_dimension = nv           # Total elements along the first axis.
         block_size = tensors.calculate_block_size(total_elements_dimension, element_size,
+                                                  memory_fraction=0.5,
                                                   is_shared_memory=True)
         
         print_logging_info("Using block size of {} for 'vvvv'-contribution.".format(block_size), level=3)
-        print_logging_info("Memory per block: {:.2f} MB".format(
-            block_size * nv * nv * nv * element_size / (1024 ** 2)), level=3)
+        print_logging_info("Memory per block: {:.2f} GB".format(
+            block_size * nv * nv * nv * element_size / (1024 ** 3)), level=3)
 
         # Process tensor 'vvvv'-contribution in blocks.
         for block_start in range(0, nv, block_size):
@@ -235,6 +237,8 @@ class CCD:
             end_block_time = time.time()
             print_logging_info(" Elapsed block time: {:.3f} seconds.".format(
                 end_block_time - start_block_time), level=3)
+            del t_V_xbcd, t_R_xbij
+            gc.collect()
             sys.stdout.flush()
 
         if not self.is_dcd:

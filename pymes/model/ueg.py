@@ -9,7 +9,7 @@ from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.model.ueg_helper import _get_2b_int
 from pymes.util.tensors import get_block_index
-from pymes.util.parallel_tasks import get_process_index_block, get_obj_tot_size, process_info
+from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
 from functools import partial
 
@@ -413,6 +413,8 @@ class UEG:
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Prepare for parallel execution.
+        #p_idx_range = idx[1] - idx[0]
+        #det_num_threads(p_idx_range)
         # 3. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
                                 kPrime, self.basis_indices_map,
