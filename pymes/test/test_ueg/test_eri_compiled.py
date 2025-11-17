@@ -6,6 +6,9 @@ produce identical results to the original UEG class methods.
 
 Tests:
     - _trunc_correlator vs UEG.trunc
+    - _coulomb_correlator vs UEG.coulomb
+    - _yukawa_correlator vs UEG.yukawa
+    - _yukawa_coulomb_correlator vs UEG.yukawa_coulomb
     - _sumNablaUSquare vs UEG.sumNablaUSquare
     - _contract_exchange_3_body vs UEG.contract_exchange_3_body
     - _contractP_KWithQ vs UEG.contractP_KWithQ
@@ -15,7 +18,10 @@ import sys
 import time
 import numpy as np
 from pymes.model import ueg
-from pymes.model.ueg_helper import (_trunc_correlator, 
+from pymes.model.ueg_helper import (_trunc_correlator,
+                                     _coulomb_correlator,
+                                     _yukawa_correlator,
+                                     _yukawa_coulomb_correlator,
                                      _sumNablaUSquare,
                                      _contract_exchange_3_body,
                                      _contractP_KWithQ)
@@ -64,7 +70,7 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
         result_original = ueg_model.trunc(kSquare)
         
         # Numba-compiled function
-        result_compiled = _trunc_correlator(kSquare, k_cutoffSquare, gamma, L)
+        result_compiled = _trunc_correlator(kSquare, k_cutoffSquare, gamma)
         
         # Compare
         diff = np.abs(result_original - result_compiled)
@@ -85,7 +91,7 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
     kSquare_array = np.array(test_k_values)
     result_original_array = ueg_model.trunc(kSquare_array)
     
-    result_compiled_array = np.array([_trunc_correlator(k, k_cutoffSquare, gamma, L) 
+    result_compiled_array = np.array([_trunc_correlator(k, k_cutoffSquare, gamma) 
                                       for k in kSquare_array])
     
     diff_array = np.abs(result_original_array - result_compiled_array)
@@ -97,6 +103,206 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
         all_pass = False
     else:
         print_logging_info(f"  Array test PASSED: max_diff={max_diff_array:.12e}", level=2)
+    
+    print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    
+    return all_pass
+
+
+def test_coulomb_correlator(ueg_model, tolerance=1e-12):
+    """
+    Test that _coulomb_correlator gives the same results as UEG.coulomb.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _coulomb_correlator", "=")
+    
+    # Prepare test data
+    L = ueg_model.L
+    gamma = ueg_model.gamma
+    
+    # Test with various k-vectors
+    test_k_values = [
+        0.0,                                           # Zero (should return 0)
+        1e-15,                                         # Very small (should return 0)
+        (2 * np.pi / L) ** 2,                         # Typical value
+        (5 * np.pi / L) ** 2,                         # Larger value
+        (10 * np.pi / L) ** 2,                        # Even larger
+    ]
+    
+    all_pass = True
+    max_diff = 0.0
+    
+    print_logging_info(f"Testing with {len(test_k_values)} k^2 values", level=1)
+    
+    for i, kSquare in enumerate(test_k_values):
+        # Original function
+        result_original = ueg_model.coulomb(kSquare)
+        
+        # Numba-compiled function
+        result_compiled = _coulomb_correlator(kSquare, gamma)
+        
+        # Compare
+        diff = np.abs(result_original - result_compiled)
+        max_diff = max(max_diff, diff)
+        
+        if diff > tolerance:
+            print_logging_info(f"  Test {i+1} FAILED: k^2={kSquare:.6e}, "
+                             f"original={result_original:.12e}, "
+                             f"compiled={result_compiled:.12e}, "
+                             f"diff={diff:.12e}", level=2)
+            all_pass = False
+        else:
+            print_logging_info(f"  Test {i+1} PASSED: k^2={kSquare:.6e}, "
+                             f"diff={diff:.12e}", level=2)
+    
+    print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    
+    return all_pass
+
+
+def test_yukawa_correlator(ueg_model, tolerance=1e-12):
+    """
+    Test that _yukawa_correlator gives the same results as UEG.yukawa.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _yukawa_correlator", "=")
+    
+    # Prepare test data
+    L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
+    gamma = ueg_model.gamma
+    rho = ueg_model.n_ele / ueg_model.Omega
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    
+    # Test with various k-vectors
+    test_k_values = [
+        0.0,                                           # Zero
+        k_cutoffSquare * 0.5,                         # Below cutoff
+        k_cutoffSquare * 1.0001,                      # Just above cutoff
+        k_cutoffSquare * 2.0,                         # Well above cutoff
+        (2 * np.pi / L) ** 2,                         # Typical value
+    ]
+    
+    all_pass = True
+    max_diff = 0.0
+    
+    print_logging_info(f"Testing with {len(test_k_values)} k^2 values", level=1)
+    
+    for multiply_flag in [False, True]:
+        print_logging_info(f"Testing with multiply_by_k_square={multiply_flag}", level=1)
+        
+        for i, kSquare in enumerate(test_k_values):
+            # Original function
+            result_original = ueg_model.yukawa(kSquare, multiply_by_k_square=multiply_flag)
+            
+            # Numba-compiled function
+            result_compiled = _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, 
+                                                multiply_by_k_square=multiply_flag)
+            
+            # Compare
+            diff = np.abs(result_original - result_compiled)
+            max_diff = max(max_diff, diff)
+            
+            if diff > tolerance:
+                print_logging_info(f"  Test {i+1} FAILED: k^2={kSquare:.6e}, "
+                                 f"original={result_original:.12e}, "
+                                 f"compiled={result_compiled:.12e}, "
+                                 f"diff={diff:.12e}", level=2)
+                all_pass = False
+            else:
+                print_logging_info(f"  Test {i+1} PASSED: k^2={kSquare:.6e}, "
+                                 f"diff={diff:.12e}", level=2)
+    
+    print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    
+    return all_pass
+
+
+def test_yukawa_coulomb_correlator(ueg_model, tolerance=1e-12):
+    """
+    Test that _yukawa_coulomb_correlator gives the same results as UEG.yukawa_coulomb.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _yukawa_coulomb_correlator", "=")
+    
+    # Prepare test data
+    L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
+    gamma = ueg_model.gamma
+    rho = ueg_model.n_ele / ueg_model.Omega
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    
+    # Test with various k-vectors
+    test_k_values = [
+        0.0,                                           # Zero
+        k_cutoffSquare * 0.5,                         # Below cutoff
+        k_cutoffSquare * 1.0001,                      # Just above cutoff
+        k_cutoffSquare * 2.0,                         # Well above cutoff
+        (2 * np.pi / L) ** 2,                         # Typical value
+    ]
+    
+    all_pass = True
+    max_diff = 0.0
+    
+    print_logging_info(f"Testing with {len(test_k_values)} k^2 values", level=1)
+    
+    for multiply_flag in [False, True]:
+        print_logging_info(f"Testing with multiply_by_k_square={multiply_flag}", level=1)
+        
+        for i, kSquare in enumerate(test_k_values):
+            # Original function
+            result_original = ueg_model.yukawa_coulomb(kSquare, multiply_by_k_square=multiply_flag)
+            
+            # Numba-compiled function
+            result_compiled = _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma,
+                                                        multiply_by_k_square=multiply_flag)
+            
+            # Compare
+            diff = np.abs(result_original - result_compiled)
+            max_diff = max(max_diff, diff)
+            
+            if diff > tolerance:
+                print_logging_info(f"  Test {i+1} FAILED: k^2={kSquare:.6e}, "
+                                 f"original={result_original:.12e}, "
+                                 f"compiled={result_compiled:.12e}, "
+                                 f"diff={diff:.12e}", level=2)
+                all_pass = False
+            else:
+                print_logging_info(f"  Test {i+1} PASSED: k^2={kSquare:.6e}, "
+                                 f"diff={diff:.12e}", level=2)
     
     print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
     print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
@@ -122,12 +328,14 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     print_title("Testing _sumNablaUSquare", "=")
     
     # Prepare test data
+    rho = ueg_model.n_ele / ueg_model.Omega
     Omega = ueg_model.Omega
     L = ueg_model.L
     kPrime = ueg_model.kPrime.astype(np.float64)
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    correlator_idx = ueg_model.get_correlator_idx()
     
     # Test with various k-vectors
     nP = len(ueg_model.basis_fns) // 2
@@ -137,6 +345,7 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     max_diff = 0.0
     
     print_logging_info(f"Testing with {len(test_indices)} different k-vectors", level=1)
+    print_logging_info(f"Using correlator index: {correlator_idx}", level=1)
     
     for i, idx in enumerate(test_indices):
         kVec = ueg_model.basis_fns[idx * 2].kp
@@ -148,7 +357,7 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
         
         # Numba-compiled function
         start = time.time()
-        result_compiled = _sumNablaUSquare(kVec, Omega, L, kPrime, k_cutoffSquare, gamma)
+        result_compiled = _sumNablaUSquare(kVec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -162,9 +371,10 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
                              f"diff={diff:.12e}", level=2)
             all_pass = False
         else:
+            speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
             print_logging_info(f"  Test {i+1} PASSED: idx={idx}, "
                              f"diff={diff:.12e}, "
-                             f"speedup={time_original/time_compiled:.2f}x", level=2)
+                             f"speedup={speedup:.2f}x", level=2)
     
     print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
     print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
@@ -191,11 +401,13 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
     print_title("Testing _contract_exchange_3_body", "=")
     
     # Prepare test data
+    rho = ueg_model.n_ele / ueg_model.Omega
     Omega = ueg_model.Omega
     L = ueg_model.L
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    correlator_idx = ueg_model.get_correlator_idx()
     
     no = ueg_model.n_ele // 2
     basis_occ_Kp = np.array([ueg_model.basis_fns[i * 2].kp for i in range(no)], 
@@ -215,6 +427,7 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
     max_diff = 0.0
     
     print_logging_info(f"Testing with {len(test_cases)} different (p, q) pairs", level=1)
+    print_logging_info(f"Using correlator index: {correlator_idx}", level=1)
     
     for i, (p_idx, q_idx) in enumerate(test_cases):
         p_vec = ueg_model.basis_fns[p_idx * 2].kp
@@ -229,7 +442,7 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
         # Numba-compiled function
         start = time.time()
         result_compiled = _contract_exchange_3_body(p_vec, kVec, basis_occ_Kp, 
-                                                   Omega, L, k_cutoffSquare, gamma)
+                                                   rho, Omega, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -243,9 +456,10 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
                              f"diff={diff:.12e}", level=2)
             all_pass = False
         else:
+            speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
             print_logging_info(f"  Test {i+1} PASSED: (p,q)=({p_idx},{q_idx}), "
                              f"diff={diff:.12e}, "
-                             f"speedup={time_original/time_compiled:.2f}x", level=2)
+                             f"speedup={speedup:.2f}x", level=2)
     
     print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
     print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
@@ -271,11 +485,13 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
     print_title("Testing _contractP_KWithQ", "=")
     
     # Prepare test data
+    rho = ueg_model.n_ele / ueg_model.Omega
     Omega = ueg_model.Omega
     L = ueg_model.L
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    correlator_idx = ueg_model.get_correlator_idx()
     
     no = ueg_model.n_ele // 2
     basis_occ_Kp = np.array([ueg_model.basis_fns[i * 2].kp for i in range(no)], 
@@ -295,6 +511,7 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
     max_diff = 0.0
     
     print_logging_info(f"Testing with {len(test_cases)} different (p, q) pairs", level=1)
+    print_logging_info(f"Using correlator index: {correlator_idx}", level=1)
     
     for i, (p_idx, q_idx) in enumerate(test_cases):
         p_vec = ueg_model.basis_fns[p_idx * 2].kp
@@ -309,7 +526,7 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
         # Numba-compiled function
         start = time.time()
         result_compiled = _contractP_KWithQ(p_vec, kVec, basis_occ_Kp, 
-                                           Omega, L, k_cutoffSquare, gamma)
+                                           rho, Omega, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -323,9 +540,10 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
                              f"diff={diff:.12e}", level=2)
             all_pass = False
         else:
+            speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
             print_logging_info(f"  Test {i+1} PASSED: (p,q)=({p_idx},{q_idx}), "
                              f"diff={diff:.12e}, "
-                             f"speedup={time_original/time_compiled:.2f}x", level=2)
+                             f"speedup={speedup:.2f}x", level=2)
     
     print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
     print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
@@ -377,6 +595,7 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     ueg_model.gamma = gamma if gamma is not None else 1.0
     ueg_model.init_kPrime(cutoff=15)  # Use smaller cutoff for faster testing
     
+    print_logging_info(f"Correlator: {ueg_model.correlator.__name__}", level=1)
     print_logging_info(f"k_cutoff: {ueg_model.k_cutoff}", level=1)
     print_logging_info(f"gamma: {ueg_model.gamma}", level=1)
     print_logging_info(f"kPrime shape: {ueg_model.kPrime.shape}", level=1)
@@ -386,9 +605,20 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     # Run tests
     test_results = {}
     
+    # Test correlators
     test_results['trunc'] = test_trunc_correlator(ueg_model)
     sys.stdout.flush()
     
+    test_results['coulomb'] = test_coulomb_correlator(ueg_model)
+    sys.stdout.flush()
+    
+    test_results['yukawa'] = test_yukawa_correlator(ueg_model)
+    sys.stdout.flush()
+    
+    test_results['yukawa_coulomb'] = test_yukawa_coulomb_correlator(ueg_model)
+    sys.stdout.flush()
+    
+    # Test helper functions
     test_results['sumNablaUSquare'] = test_sumNablaUSquare(ueg_model)
     sys.stdout.flush()
     

@@ -99,6 +99,17 @@ class UEG:
 
         self.is_tc = is_tc
 
+        #: Correlator types and index mapping.
+        self.CORRELATOR_NONE = 0
+        self.CORRELATOR_TRUNC = 1
+        self.CORRELATOR_COULOMB = 2
+        self.CORRELATOR_YUKAWA = 3
+        self.CORRELATOR_YUKAWA_COULOMB = 4
+        self.CORRELATOR_GASKELL = 5
+        self.CORRELATOR_GASKELL_MODIFIED = 6
+        self.CORRELATOR_SMOOTH = 7
+        self.CORRELATOR_PERTURB = 8
+
     def is_k_in_basis(self, ke):
         """
         Checks if the input k-vector is inside of the basis set
@@ -399,9 +410,10 @@ class UEG:
         # Using Numba JIT-compiled version for better performance.
         #print_logging_info(algo_name + ": Using Numba JIT-compiled version for better performance.", level=2)
         # 1. Unpack data into Numba-compatible structures (NumPy arrays).
-        if self.correlator is None or self.correlator.__name__ != 'trunc':
-            raise ValueError(algo_name, "Currently only the correlator 'trunc' is supported!")
-            sys.exit(1)
+        if self.is_tc:
+            correlator_idx = self.get_correlator_idx()
+        else:
+            correlator_idx = 0  # None
         n_ele = self.n_ele
         Omega = self.Omega
         L     = self.L
@@ -420,6 +432,7 @@ class UEG:
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
+                                correlator_idx, multiply_by_k_square=False,
                                 dtype=dtype)
         return V_pqrs
     
@@ -1019,6 +1032,49 @@ class UEG:
     # the system and they are specific to UEG, so they should be part of
     # the UEG class.
 
+    def get_correlator_idx(self):
+        """ Member function of class UEG.
+        Returns an integer index for the correlator function being used.
+
+        Returns
+        -------
+        idx: int
+            index of the correlator function
+            0: None,
+            1: trunc,
+            2: coulomb,
+            3: yukawa,
+            4: yukawa-coulomb,
+            5: gaskell,
+            6: gaskell-modified,
+            7: smooth.
+        """
+        if self.correlator is None:
+            raise ValueError("Correlator function not initialized!")
+        elif self.correlator == self.trunc:
+            idx = self.CORRELATOR_TRUNC
+        elif self.correlator == self.coulomb:
+            idx = self.CORRELATOR_COULOMB
+        elif self.correlator == self.yukawa:
+            idx = self.CORRELATOR_YUKAWA
+        elif self.correlator == self.yukawa_coulomb:
+            idx = self.CORRELATOR_YUKAWA_COULOMB
+        elif self.correlator == self.gaskell:
+            idx = self.CORRELATOR_GASKELL
+            raise NotImplementedError("Gaskell correlator not implemented yet!")
+        elif self.correlator == self.gaskell_modified:
+            idx = self.CORRELATOR_GASKELL_MODIFIED
+            raise NotImplementedError("Modified Gaskell correlator not implemented yet!")
+        elif self.correlator == self.smooth:
+            idx = self.CORRELATOR_SMOOTH
+            raise NotImplementedError("Smooth correlator not implemented yet!")
+        elif self.correlator == self.perturb:
+            idx = self.CORRELATOR_PERTURB
+            raise NotImplementedError("Perturbative correlator not implemented yet!")
+        else:
+            raise ValueError("Correlator function not recognized!")
+        return idx
+
     def yukawa(self, kSquare, multiply_by_k_square=False):
         '''
         The G=0 terms need more consideration
@@ -1248,6 +1304,12 @@ class UEG:
                 result = 0.
 
         return result
+    
+    def perturb(self, kSquare, multiply_by_k_square=False):
+        '''
+        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+        '''
+        return 0.0
 
     def calcGamma(self, overlap_basis, nP):
         """

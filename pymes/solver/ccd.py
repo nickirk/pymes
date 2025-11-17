@@ -218,8 +218,8 @@ class CCD:
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
         total_elements_dimension = nv           # Total elements along the first axis.
         block_size = tensors.calculate_block_size(total_elements_dimension, element_size,
-                                                  memory_fraction=0.5,
-                                                  is_shared_memory=True)
+                                                  memory_fraction=0.55,
+                                                  is_shared_memory=False)
         
         print_logging_info("Using block size of {} for 'vvvv'-contribution.".format(block_size), level=3)
         print_logging_info("Memory per block: {:.2f} GB".format(
