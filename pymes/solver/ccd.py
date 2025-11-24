@@ -107,12 +107,16 @@ class CCD:
             if iteration <= max_iter:
                 print_logging_info("Iteration = ", iteration, level=1)
 
+            start_residual_time = time.time()
             if self.is_dr_ccd:
                 t_R_abij = drccd.get_residual(t_epsilon_i, t_epsilon_a, t_T_abij,
                                               t_V_abij, t_V_aijb, t_V_iabj,
                                               t_V_ijab)
             else:
                 t_R_abij = 1.0 * self.get_residual(eri, t_T_abij)
+            end_residual_time = time.time()
+            print_logging_info("Residual calculation time: {:.3f} seconds.".format(
+                end_residual_time - start_residual_time), level=3)
 
             if self.is_bruekner:
                 # construct amp dependent quasi-particle energies
@@ -136,16 +140,24 @@ class CCD:
             t_delta_T_abij = einsum('abij,abij->abij', t_R_abij, t_D_abij)
             t_T_abij += delta * t_delta_T_abij
 
+            start_diis_time = time.time()
             if self.is_diis:
                 t_T_abij = self.mixer.mix([t_delta_T_abij], [t_T_abij])[0]
+            end_diis_time = time.time()
+            print_logging_info("DIIS time: {:.3f} seconds.".format(
+                end_diis_time - start_diis_time), level=3)
             # update energy and norm of amplitudes
             # if self.is_dr_ccd:
             #    e_dir_ccd, e_ex_ccd = drccd.get_energy(t_T_abij, t_V_ijab)
             # else:
+            start_energy_time = time.time()
             e_dir_ccd, e_ex_ccd = self.get_energy(t_T_abij, t_V_ijab)
             e_ccd = np.real(e_dir_ccd + e_ex_ccd)
             dE = e_ccd - e_last_iter_ccd
             e_last_iter_ccd = e_ccd
+            end_energy_time = time.time()
+            print_logging_info("Energy calculation time: {:.3f} seconds.".format(
+                end_energy_time - start_energy_time), level=3)
 
             t2_l1_norm = np.linalg.norm(t_T_abij)
             residual_norm = np.linalg.norm(t_delta_T_abij)
@@ -183,7 +195,7 @@ class CCD:
 
         algo_name = "ccd.get_residual"
 
-        print_logging_info(algo_name + ": Calculating the R_abij ...", level=2)
+        print_logging_info(algo_name + ": Calculating R_abij residual ...", level=2)
 
         no = self.no
 
@@ -227,15 +239,19 @@ class CCD:
 
         # Process tensor 'vvvv'-contribution in blocks.
         for block_start in range(0, nv, block_size):
-            start_block_time = time.time()
+            start_vvvv_time = time.time()
             block_end = min(block_start + block_size, nv)
             print_logging_info(" Calculating block: {} to {}.".format(block_start, block_end), level=3)
             indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
             t_V_xbcd = eri.get_vvvv(indx)
+            end_vvvv_time = time.time()
+            print_logging_info(" Elapsed vvvv integral time: {:.3f} seconds.".format(
+                end_vvvv_time - start_vvvv_time), level=3)
+            start_block_time = time.time()
             t_R_xbij = einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
             t_R_abij[block_start:block_end, :, :, :] += t_R_xbij
             end_block_time = time.time()
-            print_logging_info(" Elapsed block time: {:.3f} seconds.".format(
+            print_logging_info(" Elapsed block contr. time: {:.3f} seconds.".format(
                 end_block_time - start_block_time), level=3)
             del t_V_xbcd, t_R_xbij
             gc.collect()

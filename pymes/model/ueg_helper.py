@@ -81,14 +81,18 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     #p_range = idx[1] - idx[0]
     #r_range = idx[5] - idx[4]
 
-    for p in prange(idx[0], idx[1]):
-        loc_p_idx = p - idx[0]
-        for r in range(idx[4], idx[5]):
+    for r in prange(idx[4], idx[5]):
+        loc_r_idx = r - idx[4]
+    #for p in prange(idx[0], idx[1]):
+    #    loc_p_idx = p - idx[0]
+    #    for r in range(idx[4], idx[5]):
+        for p in range(idx[0], idx[1]):
+            loc_p_idx = p - idx[0]
     #for pr in prange(p_range * r_range):
     #        p = idx[0] + pr // r_range
     #        r = idx[4] + pr % r_range
     #        loc_p_idx = p - idx[0]
-            loc_r_idx = r - idx[4]
+            #loc_r_idx = r - idx[4]
             d_int_k = basis_Kvec[r] - basis_Kvec[p]
             d_k_vec = basis_Kp[r] - basis_Kp[p]
             u_mat = 0.
@@ -359,7 +363,7 @@ def _calc_correlator(correlator_idx, kSquare, k_cutoffSquare, rho, gamma, multip
     elif correlator_idx == 7:  # smooth
         return _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma)
     elif correlator_idx == 8:  # perturbed
-        return _pertub_correlator(kSquare, k_cutoffSquare, rho, gamma)
+        return _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma)
     else:
         return 0.0
 
@@ -531,7 +535,7 @@ def _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma):
     return 0.0
 
 @jit(nopython=True)
-def _pertub_correlator(kSquare, k_cutoffSquare, rho, gamma):
+def _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma):
     """
     Placeholder for perturbed correlator function.
     Currently returns 0.0 for all inputs.

@@ -108,7 +108,7 @@ class UEG:
         self.CORRELATOR_GASKELL = 5
         self.CORRELATOR_GASKELL_MODIFIED = 6
         self.CORRELATOR_SMOOTH = 7
-        self.CORRELATOR_PERTURB = 8
+        self.CORRELATOR_RPA = 8
 
     def is_k_in_basis(self, ke):
         """
@@ -1068,9 +1068,9 @@ class UEG:
         elif self.correlator == self.smooth:
             idx = self.CORRELATOR_SMOOTH
             raise NotImplementedError("Smooth correlator not implemented yet!")
-        elif self.correlator == self.perturb:
-            idx = self.CORRELATOR_PERTURB
-            raise NotImplementedError("Perturbative correlator not implemented yet!")
+        elif self.correlator == self.RPA:
+            idx = self.CORRELATOR_RPA
+            raise NotImplementedError("RPA correlator not implemented yet!")
         else:
             raise ValueError("Correlator function not recognized!")
         return idx
@@ -1305,7 +1305,7 @@ class UEG:
 
         return result
     
-    def perturb(self, kSquare, multiply_by_k_square=False):
+    def RPA(self, kSquare, multiply_by_k_square=False):
         '''
         J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
         '''
