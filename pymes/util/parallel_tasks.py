@@ -104,11 +104,6 @@ def process_info():
 
     sys.stdout.flush()
 
-def get_memory_usage():
-    """Get current memory usage in GB"""
-    process = psutil.Process()
-    return process.memory_info().rss / (1024 ** 3)
-
 def det_num_threads(ntasks):
     """
     Function to determine the number of threads used by Numba based on the workload.

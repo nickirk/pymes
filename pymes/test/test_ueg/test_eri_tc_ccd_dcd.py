@@ -122,7 +122,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     ls = -0.2
     myCCD = ccd.CCD(no)
     ccd_results = myCCD.solve(myERI, level_shift=ls, \
-                              sp=0, max_iter=100, is_diis=True, amps=amps, delta_e=1e-8)
+                              sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
     
     print_logging_info("Unpacking CCD results", level=0)
     ccd_e = ccd_results["ccd e"]
@@ -153,7 +153,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     dcd_e = 0.
     myDCD = dcd.DCD(no)
     dcd_results = myDCD.solve(myERI, level_shift=ls, \
-                              sp=0, max_iter=100, is_diis=True, amps=ccd_amp, delta_e=1e-8)
+                              sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
     
     print_logging_info("Unpacking DCD results", level=0)
     dcd_e = dcd_results["ccd e"]
