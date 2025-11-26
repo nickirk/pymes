@@ -5,6 +5,7 @@ import numpy as np
 from functools import partial
 
 from pymes.util import tensors
+from pymes.util.parallel_tasks import get_memory_usage 
 from pymes.solver import mp2
 from pymes.mixer import diis
 from pymes.log import print_logging_info
@@ -49,18 +50,14 @@ class CCD:
         t_V_aijb  = eri.voov
         t_V_ijab  = eri.oovv
         t_V_abij  = eri.vvoo
-        #t_V_iajb  = eri.ovov
-        #t_V_aibj  = eri.vovo
-        #t_V_abcd  = eri.vvvv
 
         nv = t_fock_pq.shape[0] - no
 
-        # if use Bruekner method, backup the hole and particle energies
-        t_epsilon_i = t_fock_pq.diagonal()[:no]
-        t_epsilon_a = t_fock_pq.diagonal()[no:]
+        # If use Bruekner method, backup the hole and particle energies.
+        t_epsilon_i = t_fock_pq.diagonal()[:no].copy()
+        t_epsilon_a = t_fock_pq.diagonal()[no:].copy()
 
-        # parameters
-        # level_shift = self.level_shift
+        # Parameters.
         if "max_iter" in kwargs:
             max_iter = kwargs['max_iter']
         else:
@@ -71,7 +68,6 @@ class CCD:
             delta_e = self.delta_e
 
         delta = 1.0
-        # construct the needed integrals here on spot.
 
         print_logging_info(algo_name)
         print_logging_info("Using DCD: ", self.is_dcd, level=1)
@@ -81,6 +77,8 @@ class CCD:
         print_logging_info("Using DIIS mixer: ", self.is_diis, level=1)
         print_logging_info("Using Bruekner quasi-particle energy: ", self.is_bruekner,
                            level=1)
+        print_logging_info("Using tolerance for energy convergence: {:.3e}".format(delta_e), level=1)
+        print_logging_info("Initial memory usage: {:.2f} GB".format(get_memory_usage()), level=1)
         print_logging_info("Iteration = 0", level=1)
         e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift)
         print("MP2 energy = ", e_mp2)
@@ -90,8 +88,7 @@ class CCD:
         t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
 
         t_D_abij = 1. / (t_D_abij + level_shift)
-        # why the np contraction is not used here?
-        # let's see if the np contraction does the same job
+
         dE = np.abs(np.real(e_mp2))
         iteration = 0
         e_last_iter_ccd = np.real(e_mp2)
@@ -99,13 +96,13 @@ class CCD:
         e_dir_ccd = 0.
         e_ex_ccd = 0.
 
-
         while np.abs(dE) > delta_e and iteration <= max_iter:
             iteration += 1
 
             start_time_ccd_iter = time.time()
             if iteration <= max_iter:
                 print_logging_info("Iteration = ", iteration, level=1)
+                print_logging_info("Memory usage at iteration start: {:.2f} GB".format(get_memory_usage()), level=2)
 
             start_residual_time = time.time()
             if self.is_dr_ccd:
@@ -113,31 +110,30 @@ class CCD:
                                               t_V_abij, t_V_aijb, t_V_iabj,
                                               t_V_ijab)
             else:
-                t_R_abij = 1.0 * self.get_residual(eri, t_T_abij)
+                t_R_abij = self.get_residual(eri, t_T_abij)
             end_residual_time = time.time()
             print_logging_info("Residual calculation time: {:.3f} seconds.".format(
                 end_residual_time - start_residual_time), level=3)
+            print_logging_info("Memory after residual: {:.2f} GB".format(get_memory_usage()), level=3)
 
             if self.is_bruekner:
-                # construct amp dependent quasi-particle energies
-                t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
-                #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") \
-                #- t_T_abij.i("baij")
-                t_tilde_T_abij += 2.0 * t_T_abij - einsum("baij -> abij", t_T_abij)
-                t_epsilon_i = t_epsilon_i \
-                              + 1. / 2 * einsum("ilcd,cdil->i", t_V_ijab,
-                                                    t_tilde_T_abij)
-                t_epsilon_a = t_epsilon_a \
-                              - 1. / 2 * einsum("klad,adkl->a", t_V_ijab,
-                                                    t_tilde_T_abij)
-
-                # update the denominator accordingly
-                #t_D_abij.i("abij") << t_epsilon_i.i("i") + t_epsilon_i.i("j") \
-                #- t_epsilon_a.i("a") - t_epsilon_a.i("b")
-                t_D_abij = einsum('i, j, a, b -> abij', t_epsilon_i, t_epsilon_i, -t_epsilon_a, -t_epsilon_a)
+                # Construct amplitude-dependent quasi-particle energies.
+                t_tilde_T_abij = 2.0 * t_T_abij - einsum("baij -> abij", t_T_abij)
+                # Corrections to hole and particle energies.
+                t_eps_i_corr =  0.5 * einsum("ilcd,cdil->i", t_V_ijab, t_tilde_T_abij)
+                t_eps_a_corr = -0.5 * einsum("klad,adkl->a", t_V_ijab, t_tilde_T_abij)
+                # Update quasi-particle energies.
+                t_epsilon_i = t_epsilon_i + t_eps_i_corr
+                t_epsilon_a = t_epsilon_a + t_eps_a_corr
+                # Recompute energy denominators.
+                t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] \
+                                - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
+                #t_D_abij = einsum('i, j, a, b -> abij', t_epsilon_i, t_epsilon_i, -t_epsilon_a, -t_epsilon_a)
                 t_D_abij = 1. / (t_D_abij + level_shift)
+                #  Delete and free memory.
+                del t_tilde_T_abij, t_eps_i_corr, t_eps_a_corr
 
-            t_delta_T_abij = einsum('abij,abij->abij', t_R_abij, t_D_abij)
+            t_delta_T_abij = t_R_abij * t_D_abij # ~ t_delta_T_abij = einsum('abij,abij->abij', t_R_abij, t_D_abij)
             t_T_abij += delta * t_delta_T_abij
 
             start_diis_time = time.time()
@@ -146,10 +142,12 @@ class CCD:
             end_diis_time = time.time()
             print_logging_info("DIIS time: {:.3f} seconds.".format(
                 end_diis_time - start_diis_time), level=3)
-            # update energy and norm of amplitudes
+            
+            # Update energy and norm of amplitudes.
             # if self.is_dr_ccd:
             #    e_dir_ccd, e_ex_ccd = drccd.get_energy(t_T_abij, t_V_ijab)
             # else:
+
             start_energy_time = time.time()
             e_dir_ccd, e_ex_ccd = self.get_energy(t_T_abij, t_V_ijab)
             e_ccd = np.real(e_dir_ccd + e_ex_ccd)
@@ -162,9 +160,12 @@ class CCD:
             t2_l1_norm = np.linalg.norm(t_T_abij)
             residual_norm = np.linalg.norm(t_delta_T_abij)
 
+            del t_delta_T_abij, t_R_abij
+
             end_time_ccd_iter = time.time()
             print_logging_info("Iteration time = {:.3f} seconds.".format(
                 end_time_ccd_iter - start_time_ccd_iter), level=2)
+            print_logging_info("Memory at iteration end: {:.2f} GB".format(get_memory_usage()), level=2)
 
             if iteration <= max_iter:
                 print_logging_info("Correlation Energy = {:.12f}".format(e_ccd),
@@ -185,6 +186,7 @@ class CCD:
             np.real(e_ex_ccd)), level=1)
         print_logging_info("CCD correlation energy = {:.12f}".format(
             e_ccd), level=1)
+        print_logging_info("Final memory usage: {:.2f} GB".format(get_memory_usage()), level=1) 
         print_logging_info("{:.3f} seconds spent on CCD".format(
             (time.time() - time_ccd)), level=1)
 
@@ -207,24 +209,19 @@ class CCD:
         t_V_abij  = eri.vvoo
 
         nv = t_fock_pq.shape[0] - no
-        t_R_abij = np.zeros([nv, nv, no, no], dtype=t_V_klij.dtype)
 
-        # t_V_ijkl and t_V_klij are not the same in transcorrelated Hamiltonian!
-        t_I_klij = np.zeros([no, no, no, no], dtype=t_V_klij.dtype)
-
-        # = operatore pass the reference instead of making a copy.
-        # if we want a copy, we need to specify that.
-        # t_I_klij = np.zeros([nv,nv,no,no], dtype=t_V_klij.dtype,sp=t_V_klij.sp)
-        t_I_klij += t_V_klij
+        # NOTE: t_V_ijkl and t_V_klij are not the same in transcorrelated Hamiltonian!
+        # t_I_klij = np.zeros([no, no, no, no], dtype=t_V_klij.dtype)
+        # t_I_klij += t_V_klij
+        t_I_klij = t_V_klij.copy()
         if not self.is_dcd:
             t_I_klij += einsum("klcd, cdij -> klij", t_V_ijab, t_T_abij)
 
-        #t_R_abij.i("abij") << t_V_abij.i("abij") \
-        #                      + t_I_klij.i("klij") * t_T_abij.i("abkl")\
-        #                      + t_V_abcd.i("abcd") * t_T_abij.i("cdij")\
-        t_R_abij += t_V_abij 
+        # Residual tensor R_abij.
+        #t_R_abij = np.zeros([nv, nv, no, no], dtype=t_V_klij.dtype)
+        #t_R_abij += t_V_abij 
+        t_R_abij = t_V_abij.copy()
         t_R_abij += einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
-        #t_R_abij += einsum("abcd, cdij -> abij", t_V_abcd, t_T_abij)
 
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
@@ -247,33 +244,32 @@ class CCD:
             end_vvvv_time = time.time()
             print_logging_info(" Elapsed vvvv integral time: {:.3f} seconds.".format(
                 end_vvvv_time - start_vvvv_time), level=3)
+            print_logging_info(" Memory after loading vvvv block: {:.2f} GB".format(get_memory_usage()), level=3)
             start_block_time = time.time()
-            t_R_xbij = einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij)
-            t_R_abij[block_start:block_end, :, :, :] += t_R_xbij
+            t_R_abij[block_start:block_end, :, :, :] += einsum("xbcd, cdij -> xbij", t_V_xbcd, t_T_abij) # += t_R_xbij
             end_block_time = time.time()
             print_logging_info(" Elapsed block contr. time: {:.3f} seconds.".format(
                 end_block_time - start_block_time), level=3)
-            del t_V_xbcd, t_R_xbij
-            gc.collect()
+            del t_V_xbcd
+            #gc.collect()
+            print_logging_info(" Memory after block cleanup: {:.2f} GB".format(get_memory_usage()), level=3)
             sys.stdout.flush()
 
         if not self.is_dcd:
             t_X_alcj = einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
             t_R_abij += einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
+            del t_X_alcj
 
-        # intermediates
-        # t_tilde_T_abij
-        # tested using MP2 energy, the below tensor op is correct
-        t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
-                                    
-        #t_tilde_T_abij.i("abij") << 2.0 * t_T_abij.i("abij") - t_T_abij.i("baij")
+        # Intermediates for CCD residual.
+        # t_tilde_T_abij ...
+        # t_tilde_T_abij = np.zeros([nv, nv, no, no], dtype=t_T_abij.dtype)
         t_tilde_T_abij = 2.0 * t_T_abij - einsum("baij -> abij", t_T_abij)
-
-        # Xai_kbcj for the quadratic terms
+        # Xai_kbcj for the quadratic terms ...
         t_Xai_cbkj = einsum("klcd, dblj -> cbkj", t_V_ijab, t_tilde_T_abij)
 
         t_R_abij += einsum("acik, cbkj -> abij", t_tilde_T_abij, t_Xai_cbkj)
 
+        # Fock matrix contributions ...
         t_fock_ab = t_fock_pq[no:, no:]
         t_fock_ij = t_fock_pq[:no, :no]
 
@@ -291,15 +287,10 @@ class CCD:
             t_X_ki += 1. / 2. * einsum("cdil, lkdc -> ki",
                                            t_tilde_T_abij, t_V_ijab)
 
-        t_Ex_abij = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype)
-        #t_Ex_baji = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype, sp=t_R_abij.sp)
-
-        #t_Ex_abij.i("abij") << t_X_ac.i("ac") * t_T_abij.i("cbij") \
-        #    - t_X_ki.i("ki") * t_T_abij.i("abkj") \
-        #    - t_V_iajb.i("kaic") * t_T_abij.i("cbkj") \
-        #    - t_V_iajb.i("kbic") * t_T_abij.i("ackj") \
-        #    + t_tilde_T_abij.i("acik") * t_V_iabj.i("kbcj")
-        t_Ex_abij += einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
+        # Exchange part of the residual ...
+        # t_Ex_abij  = np.zeros([nv, nv, no, no], dtype=t_R_abij.dtype)
+        # t_Ex_abij += einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
+        t_Ex_abij  = einsum("ac, cbij -> abij", t_X_ac, t_T_abij)
         t_Ex_abij -= einsum("ki, abkj -> abij", t_X_ki, t_T_abij)
         t_Ex_abij -= einsum("kaic, cbkj -> abij", t_V_iajb, t_T_abij)
         t_Ex_abij -= einsum("kbic, ackj -> abij", t_V_iajb, t_T_abij)
@@ -310,17 +301,10 @@ class CCD:
             t_Ex_abij -= einsum("alci, cblj -> abij", t_Xai_aibj, t_T_abij)
             t_Ex_abij += einsum("alci, bclj -> abij", t_Xai_aibj, t_T_abij)
 
-        #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
-
-
-        ## !!!!!!! In TC method the following is not necessarily the same!!!!!!!!!!
-        #t_Ex_baji.i("baji") << t_Ex_abij.i("abij")
-
-        #t_Ex_abij.i("abij") << t_Ex_abij.i("baji")
         t_Ex_abij += t_Ex_abij.transpose(1, 0, 3, 2)
-        # print_logging_info(test_Ex_abij - t_Ex_abij)
-        #t_R_abij += t_Ex_abij + t_Ex_baji
         t_R_abij += t_Ex_abij
+
+        del t_I_klij, t_tilde_T_abij, t_Xai_cbkj, t_X_ac, t_X_ki, t_Ex_abij
 
         return t_R_abij
 

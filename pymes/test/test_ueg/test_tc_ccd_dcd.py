@@ -169,7 +169,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     fock_pq = hf.construct_hf_matrix(no, np.diag(kinetic_G), t_V_pqrs)
     myccd = ccd.CCD(no)
     ccd_results = myccd.solve(fock_pq, t_V_pqrs, level_shift=ls, \
-                            sp=0, max_iter=100, is_diis=True, amps=amps, epsilon_e=1e-7)
+                            sp=0, max_iter=100, is_diis=True, amps=amps, delta_e=1e-7)
     # unpacking
     ccd_e = ccd_results["ccd e"]
     ccd_amp = ccd_results["t2 amp"]
@@ -180,7 +180,7 @@ def main(nel, cutoff,rs, gamma, kc, amps):
     print_logging_info("Starting DCD with level shift = ", ls)
     mydcd = dcd.DCD(no)
     dcd_results = mydcd.solve(fock_pq, t_V_pqrs, level_shift=ls,\
-                            sp=0, max_iter=100, is_diis=True, amps=ccd_amp, epsilon_e=1e-7)
+                            sp=0, max_iter=100, is_diis=True, amps=ccd_amp, delta_e=1e-7)
     dcd_e = dcd_results["ccd e"]
     dcd_amp = dcd_results["t2 amp"]
     dcd_dE = dcd_results["dE"]
