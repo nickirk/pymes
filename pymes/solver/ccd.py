@@ -54,6 +54,8 @@ class CCD:
         nv = t_fock_pq.shape[0] - no
 
         # If use Bruekner method, backup the hole and particle energies.
+        # NOTE: t_epsilon_i and t_epsilon_a will be updated in each iteration, 
+        #       if t_fock_pq.diag() is used directly, the updates will be lost <--- CHECK!
         t_epsilon_i = t_fock_pq.diagonal()[:no].copy()
         t_epsilon_a = t_fock_pq.diagonal()[no:].copy()
 
@@ -198,6 +200,7 @@ class CCD:
         algo_name = "ccd.get_residual"
 
         print_logging_info(algo_name + ": Calculating R_abij residual ...", level=2)
+        start_initial_residual_time = time.time()
 
         no = self.no
 
@@ -222,6 +225,11 @@ class CCD:
         #t_R_abij += t_V_abij 
         t_R_abij = t_V_abij.copy()
         t_R_abij += einsum("klij, abkl -> abij", t_I_klij, t_T_abij)
+
+        end_initial_residual_time = time.time()
+        print_logging_info(" Elapsed initial part of residual time: {:.3f} seconds.".format(
+            end_initial_residual_time - start_initial_residual_time), level=3)
+        start_vvvv_residual_time = time.time()
 
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
@@ -251,10 +259,14 @@ class CCD:
             print_logging_info(" Elapsed block contr. time: {:.3f} seconds.".format(
                 end_block_time - start_block_time), level=3)
             del t_V_xbcd
-            #gc.collect()
+            gc.collect()
             print_logging_info(" Memory after block cleanup: {:.2f} GB".format(get_memory_usage()), level=3)
             sys.stdout.flush()
 
+        end_vvvv_residual_time = time.time()
+        print_logging_info(" Elapsed vvvv part of residual time: {:.3f} seconds.".format(
+            end_vvvv_residual_time - start_vvvv_residual_time), level=3)
+        start_final_residual_time = time.time()
         if not self.is_dcd:
             t_X_alcj = einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
             t_R_abij += einsum("alcj, cbil -> abij", t_X_alcj, t_T_abij)
@@ -305,6 +317,11 @@ class CCD:
         t_R_abij += t_Ex_abij
 
         del t_I_klij, t_tilde_T_abij, t_Xai_cbkj, t_X_ac, t_X_ki, t_Ex_abij
+        #gc.collect()
+
+        end_final_residual_time = time.time()
+        print_logging_info(" Elapsed final part of residual time: {:.3f} seconds.".format(
+            end_final_residual_time - start_final_residual_time), level=3)
 
         return t_R_abij
 
