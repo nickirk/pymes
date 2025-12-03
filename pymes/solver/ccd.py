@@ -2,6 +2,7 @@ import time
 import sys
 import gc
 import numpy as np
+import pytblis as pytblis
 from functools import partial
 
 from pymes.util import tensors
@@ -12,7 +13,7 @@ from pymes.log import print_logging_info
 from pymes.solver import drccd
 from pymes.integral import eri
 
-einsum = partial(np.einsum, optimize=True)
+einsum = partial(pytblis.einsum, optimize='greedy')
 
 class CCD:
 
@@ -228,7 +229,7 @@ class CCD:
 
         end_initial_residual_time = time.time()
         print_logging_info(" Elapsed initial part of residual time: {:.3f} seconds.".format(
-            end_initial_residual_time - start_initial_residual_time), level=3)
+            end_initial_residual_time - start_initial_residual_time), level=2)
         start_vvvv_residual_time = time.time()
 
         # Calculate block size dynamically to optimize memory usage.
@@ -265,7 +266,7 @@ class CCD:
 
         end_vvvv_residual_time = time.time()
         print_logging_info(" Elapsed vvvv part of residual time: {:.3f} seconds.".format(
-            end_vvvv_residual_time - start_vvvv_residual_time), level=3)
+            end_vvvv_residual_time - start_vvvv_residual_time), level=2)
         start_final_residual_time = time.time()
         if not self.is_dcd:
             t_X_alcj = einsum("klcd, adkj -> alcj", t_V_ijab, t_T_abij)
@@ -321,7 +322,7 @@ class CCD:
 
         end_final_residual_time = time.time()
         print_logging_info(" Elapsed final part of residual time: {:.3f} seconds.".format(
-            end_final_residual_time - start_final_residual_time), level=3)
+            end_final_residual_time - start_final_residual_time), level=2)
 
         return t_R_abij
 

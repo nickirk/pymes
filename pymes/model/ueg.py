@@ -3,6 +3,7 @@ import warnings
 import sys
 
 import numpy as np
+import pytblis as pytblis
 
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
@@ -13,7 +14,7 @@ from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
 from functools import partial
 
-einsum = partial(np.einsum, optimize=True)
+einsum = partial(pytblis.einsum, optimize='greedy')
 
 class UEG:
     """ This class defines a model system of 3d uniform electron gas
