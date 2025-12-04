@@ -1,8 +1,11 @@
 import os
 import sys
 import psutil
+
 import multiprocessing as mp
-from numba import config, get_num_threads, set_num_threads
+
+import numba as numba
+import pytblis as pytblis
 
 from math import ceil
 from pymes.log import print_logging_info
@@ -128,46 +131,54 @@ def det_num_threads(ntasks):
     else:
         cpu_threads = int(cpu_threads)
     # Get DEFAULT_NUM_THREADS from Numba config.
-    default_threads = config.NUMBA_DEFAULT_NUM_THREADS
+    default_threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
     # Get NUMBA THREADS from Numba environment variable.
-    numba_threads = get_num_threads()
+    numba_threads = numba.get_num_threads()
     # Define MINIMYM THREADS.
     min_threads = min(default_threads, cpu_threads, numba_threads)
     # Set Numba threads based on workload.
     if ntasks < min_threads:
-        set_num_threads(ntasks)
+        numba.set_num_threads(ntasks)
         #print_logging_info(f"Set Numba threads to {ntasks} based on workload.", level=3)
     else:
-        set_num_threads(min_threads)
+        numba.set_num_threads(min_threads)
         #print_logging_info(f"Set Numba threads to {min_threads} based on available resources.", level=2)
 
 def print_threading_info():
     """Print comprehensive threading information."""
     
-    # CPU cores
+    # CPU cores.
     physical_cores = psutil.cpu_count(logical=False)
     logical_cores = psutil.cpu_count(logical=True)
-    print_logging_info(f"Physical CPU cores: {physical_cores}", level=0)
-    print_logging_info(f"Logical CPU cores: {logical_cores}", level=0)
+    print_logging_info("CPU information:", level=0)
+    print_logging_info(f"Physical CPU cores: {physical_cores}", level=1)
+    print_logging_info(f"Logical CPU cores: {logical_cores}", level=1)
     
-    # Numba threads
-    numba_threads = get_num_threads()
-    default_threads = config.NUMBA_DEFAULT_NUM_THREADS
-    threading_layer = config.THREADING_LAYER
-    print_logging_info(f"Numba active threads: {numba_threads}", level=0)
-    print_logging_info(f"Numba default threads: {default_threads}", level=0)
-    print_logging_info(f"Numba threading layer: {threading_layer}", level=0)
-    
-    # Environment variables
+    # Environment variables.
     print_logging_info("Environment variables:", level=0)
     for var in ['OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMBA_NUM_THREADS', 
                 'OPENBLAS_NUM_THREADS']:
         value = os.environ.get(var, 'N/A.')
-        print_logging_info(f"  {var}: {value}", level=1)
+        print_logging_info(f"{var}: {value}", level=1)
     
-    # Memory
+    # Numba.
+    numba_threads = numba.get_num_threads()
+    default_threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
+    threading_layer = numba.config.THREADING_LAYER
+    print_logging_info("NUMBA variables:", level=0)
+    print_logging_info(f"Numba default threads: {default_threads}", level=1)
+    print_logging_info(f"Numba active threads: {numba_threads}", level=1)
+    print_logging_info(f"Numba threading layer: {threading_layer}", level=1)
+
+    # PyTBLIS.
+    tblis_threads = pytblis.get_num_threads()
+    print_logging_info("PyTBLIS variables:", level=0)
+    print_logging_info(f"PyTBLIS active threads: {tblis_threads}", level=1)
+    
+    # Memory.
     mem = psutil.virtual_memory()
-    print_logging_info(f"Total memory: {mem.total / (1024**3):.2f} GB", level=0)
-    print_logging_info(f"Available memory: {mem.available / (1024**3):.2f} GB", level=0)
+    print_logging_info("Memory information:", level=0)
+    print_logging_info(f"Total memory: {mem.total / (1024**3):.2f} GB", level=1)
+    print_logging_info(f"Available memory: {mem.available / (1024**3):.2f} GB", level=1)
     
     sys.stdout.flush()

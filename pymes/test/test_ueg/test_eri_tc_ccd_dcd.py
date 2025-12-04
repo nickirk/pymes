@@ -18,11 +18,19 @@ from pymes.util.parallel_tasks import print_threading_info
 from pymes.log import print_title, print_logging_info
 
 try:
-    from numba import config, get_num_threads
+    import numba
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
     print_logging_info("ERROR: NUMBA is not available.", level=0)
+    sys.exit(1)
+
+try:
+    import pytblis
+    TBLIS_AVAILABLE = True
+except ImportError:
+    TBLIS_AVAILABLE = False
+    print_logging_info("WARNING: PyTBLIS is not available.", level=0)
     sys.exit(1)
 
 sys.stdout.flush()
