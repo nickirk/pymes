@@ -331,7 +331,7 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     rho = ueg_model.n_ele / ueg_model.Omega
     Omega = ueg_model.Omega
     L = ueg_model.L
-    kPrime = ueg_model.kPrime.astype(np.float64)
+    kPrime = ueg_model.kPrime.astype(np.float64) * ( 2 * np.pi / L)
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
@@ -357,7 +357,7 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
         
         # Numba-compiled function
         start = time.time()
-        result_compiled = _sumNablaUSquare(kVec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correlator_idx)
+        result_compiled = _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -593,7 +593,7 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     ueg_model.correlator = ueg_model.trunc
     ueg_model.k_cutoff = kc
     ueg_model.gamma = gamma if gamma is not None else 1.0
-    ueg_model.init_kPrime(cutoff=15)  # Use smaller cutoff for faster testing
+    ueg_model.init_kPrime()
     
     print_logging_info(f"Correlator: {ueg_model.correlator.__name__}", level=1)
     print_logging_info(f"k_cutoff: {ueg_model.k_cutoff}", level=1)

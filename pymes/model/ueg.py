@@ -52,7 +52,7 @@ class UEG:
 
         cutoff: float
             plane wave vector cutoff for determining the plane wave basis
-            functions.
+            functions in units of `1/2*(2pi/L)^2`.
 
         k_cutoff: float
             plane wave vector cutoff inside the correlaor function trunc.
@@ -92,10 +92,11 @@ class UEG:
 
         #: k-mesh (k-prime) for the discrete 
         #: Convolution Theorem (2-body TC integrals).
-
         self.kmesh_fac = None
 
         self.kmesh_cutoff = None
+
+        self.kmesh_imax = None
 
         self.kPrime = None
 
@@ -259,11 +260,15 @@ class UEG:
             if self.k_cutoff is None:
                 raise ValueError("K-cutoff for the transcorrelated framework not initialized!")
             else:
-                print_logging_info("K-Cutoff in correlator: {:.8f}".format(self.k_cutoff), level=1)
+                print_logging_info("K-Cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
             if self.kmesh_fac is None:
-                print_logging_info("K'-mesh scaling factor: 1.0 (default)", level=1)
+                print_logging_info("K'-mesh scaling factor: 1.0 [L'/L] (default)", level=1)
             else:
-                print_logging_info("K'-mesh scaling factor: {:.8f}".format(self.kmesh_fac), level=1)
+                print_logging_info("K'-mesh scaling factor: {:.8f} [L'/L]".format(self.kmesh_fac), level=1)
+            if self.kmesh_cutoff is None:
+                print_logging_info("K'-mesh cutoff: consistent with energy cutoff of the simulation box.", level=1)
+            else:
+                print_logging_info("K'-mesh cutoff: {:.8f} ½[2π/L']^2".format(self.kmesh_cutoff), level=1)
             #if self.gamma is None:
             #    raise ValueError("Gamma not initialized!")
         else:
@@ -428,10 +433,6 @@ class UEG:
             correlator_idx = 0  # None
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else  int(np.ceil(np.sqrt(self.cutoff)))
         gamma  = self.gamma if self.gamma is not None else 1.0
-        if self.kmesh_fac is None:
-            self.kmesh_fac = 1.
-        elif self.kmesh_fac < 1:
-            raise ValueError("kmesh_fac should be >= 1!")
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         else:
@@ -881,28 +882,40 @@ class UEG:
 
         return result
     
-    def init_kPrime(self, cutoff=30):
+    def init_kPrime(self):
         """
         Member function of class UEG
         This function generates the k' vectors for the transcorrelated
-        integrals. The k' vectors are generated in the range of -cutoff to 
-        cutoff in each direction. The k' vectors are stored in the class
+        integrals. The k' vectors are generated in the range of -ipmax to 
+        ipmax (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
+        in each direction. The k' vectors are stored in the class
         variable kPrime.
 
-        Note: need to test convergence of this cutoff
+        Note: need to test convergence of this k'-mesh cutoff.
 
-        Parameters
-        ----------
-        cutoff: int
-            The cutoff value.
-        
         Returns
         -------
-        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
+        kPrime: nparray of int dtype, size (3*ipmax+1, 3)
         """
-        kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
-                           for j in range(-cutoff, cutoff + 1) for k in \
-                            range(-cutoff, cutoff + 1)])
+
+        if self.kmesh_fac is None:
+            self.kmesh_fac = 1.
+        elif self.kmesh_fac < 1:
+            raise ValueError("kmesh_fac should be >= 1!")
+        
+        if self.kmesh_cutoff is None:
+            self.kmesh_cutoff = self.cutoff * (self.kmesh_fac**2)
+        elif self.kmesh_cutoff < self.cutoff:
+            raise ValueError("kmesh_cutoff should be >= cutoff!")
+
+        ipmax = int(np.ceil(np.sqrt(self.kmesh_cutoff))) + 1
+
+        kPrime = np.array([[i, j, k] for i in range(-ipmax, ipmax + 1) \
+                           for j in range(-ipmax, ipmax + 1) for k in \
+                            range(-ipmax, ipmax + 1)])
+
+        print('****** ipmax = ', ipmax)
+        self.kmesh_imax = ipmax
         self.kPrime = kPrime
 
     def triple_contractions_in_3_body(self):

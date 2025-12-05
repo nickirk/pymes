@@ -35,17 +35,17 @@ except ImportError:
 
 sys.stdout.flush()
 
-def main(nel, cutoff, rs, gamma, kc, amps, \
-          eri_incore=True, \
-          write_tensors=False):
+def main(nel, rs, \
+        basis_cutoff, k_cutoff, \
+        kmesh_fac, kmesh_cutoff, \
+        gamma, amps, \
+        eri_incore=True, \
+        write_tensors=False):
     
     no     = int(nel/2)
     nalpha = int(nel/2)
     nbeta  = int(nel/2)
     rs     = rs
-
-    # Cutoff for the single-particle basis set.
-    cutoff = cutoff
 
     # Symmetry of the many-particle wavefunction: consider gamma-point only.
     time_set_sys = time.time()
@@ -55,6 +55,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     print_logging_info("rs = {}".format(rs))
     print_logging_info("Volume of the box = {}".format(ueg_model.Omega))
     print_logging_info("Length of the box = {}".format(ueg_model.L))
+    print_logging_info("Madelung constant = {}".format(ueg_model.madelung(rs,nel)))
     if ueg_model.is_tc:
         print_logging_info("Using the TC-Method.")
     else:
@@ -71,7 +72,7 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
 
     # Initializing the basis set.
     time_init_basis = time.time()
-    ueg_model.init_single_basis(cutoff)
+    ueg_model.init_single_basis(basis_cutoff)
 
     num_spatial_orb = int(len(ueg_model.basis_fns)/2)
     nP = num_spatial_orb
@@ -98,7 +99,9 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
     if ueg_model.is_tc:
        print_logging_info("Using the TC method to calculate ERI.")
        ueg_model.correlator = ueg_model.trunc
-       ueg_model.k_cutoff = kc
+       ueg_model.k_cutoff = k_cutoff
+       ueg_model.kmesh_fac = kmesh_fac
+       ueg_model.kmesh_cutoff = kmesh_cutoff
        ueg_model.gamma = gamma
        ueg_model.init_kPrime()
     
@@ -217,14 +220,25 @@ def main(nel, cutoff, rs, gamma, kc, amps, \
 
 
 if __name__ == '__main__':
-  eri_incore = False
-  write_tensors = False
+  
+  nel   = 14
+  k_cutoff = 1
+  kmesh_frac = 1
+  # cutoff=841 gives ipmax=30 to compare with legacy implementation.
+  kmesh_cutoff = 841 
+
   gamma = None
   amps  = None
-  nel   = 14
+
+  eri_incore = False
+  write_tensors = False
+
+
   for rs in [0.5]:
-    for cutoff in [2]:
-      kCutoffFraction = 1
-      main(nel, cutoff, rs, gamma, kCutoffFraction, amps, \
-           eri_incore=eri_incore, \
-           write_tensors=write_tensors)
+    for basis_cutoff in [2]:
+      main(nel, rs, \
+            basis_cutoff, k_cutoff, \
+            kmesh_frac, kmesh_cutoff,
+            gamma, amps, \
+            eri_incore=eri_incore, \
+            write_tensors=write_tensors)
