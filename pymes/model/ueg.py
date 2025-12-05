@@ -914,7 +914,6 @@ class UEG:
                            for j in range(-ipmax, ipmax + 1) for k in \
                             range(-ipmax, ipmax + 1)])
 
-        print('****** ipmax = ', ipmax)
         self.kmesh_imax = ipmax
         self.kPrime = kPrime
 
