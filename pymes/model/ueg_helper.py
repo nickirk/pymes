@@ -41,17 +41,17 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     gamma: float
         parameter in the correlator function
     kPrime: nparray of float dtype
-        an array to store shifted k-vectors for later lookup.
+        an array to store a denser k'-point grid for integration.
     basis_indices_map: nparray of int dtype
         an array to store indices of basis functions (plane waves) for
         later lookup. Size Nx*Ny*Nz, Nx, Ny, Nz are the k-vector points
         in x, y, z directions.
     basis_occ_Kp: nparray of float dtype
-        an array to store shifted k-vectors of occupied orbitals.
+        an array to store (shifted) k-vectors of occupied orbitals.
     basis_Kvec: nparray of int dtype
-        an array to store k-vectors of all basis functions.
+        an array to store k-vector indices (quantum numbers) of all basis functions.
     basis_Kp: nparray of float dtype
-        an array to store shifted k-vectors of all basis functions.
+        an array to store (shifted) k-vectors of all basis functions.
     is_only_2b: bool
         parameter which determines to include only the additional
         pure 2-body tc integrals, besides the Coulomb integrals.
@@ -75,7 +75,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     """
     num_k_in_each_dir = imax * 2 + 1
     V_pqrs = np.zeros((idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]), dtype=dtype)
-    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2 # or k_cutoffSquare = k_cutoff * ((2 * np.pi / L) ** 2) (?)
+    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
     rho = n_ele / Omega
 
     #p_range = idx[1] - idx[0]
@@ -97,7 +97,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
             d_k_vec = basis_Kp[r] - basis_Kp[p]
             u_mat = 0.
             if is_tc:
-                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correlator_idx)
+                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
             for q in range(idx[2], idx[3]):
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
@@ -273,7 +273,7 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
     
 
 @jit(nopython=True)
-def _sumNablaUSquare(kVec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correlator_idx):
+def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx):
     """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
     Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
     Parameters
@@ -284,10 +284,8 @@ def _sumNablaUSquare(kVec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correla
         electron density.
     Omega: float
         volume of the cubic simulation cell.
-    L: float
-        length of the cubic simulation cell.
     kPrime: nparray of float dtype
-        an array to store shifted k-vectors for later lookup.
+        an array to store a denser k'-point grid for integration.
     k_cutoffSquare: float
         plane wave vector cutoff inside the correlaor function trunc.
     gamma: float
@@ -300,7 +298,9 @@ def _sumNablaUSquare(kVec, rho, Omega, L, kPrime, k_cutoffSquare, gamma, correla
         value of the sum of the squared gradients of the correlator function
         in k-space.
     """
-    k1 = 2 * np.pi * kPrime / L
+    # kPrime is already scaled by 2π/L'.
+    #k1 = 2 * np.pi * kPrime / L
+    k1 = kPrime
     k2 = kVec - k1
     umat = 0.0
     for i in range(k1.shape[0]):
@@ -444,7 +444,6 @@ def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square
     a = -4. * np.pi
     gamma_yukawa = gamma * gamma_0
     k_cutoffDenom = k_cutoffSquare + gamma_yukawa
-    # k_cutoffDenom is different in case self.k_cutoff is None.
     if np.abs(k_cutoffDenom) < 1e-12:
         k_cutoffDenom = 1e-12
     if not multiply_by_k_square:
@@ -494,7 +493,6 @@ def _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_
     # It has to be - and divided by gamm to satisfy the cusp condition
     a = -4. * np.pi
     k_cutoffDenom = (k_cutoffSquare + A)
-    # k_cutoffDenom is different in case self.k_cutoff is None.
     if np.abs(k_cutoffDenom) < 1e-12:
         k_cutoffDenom = 1e-12
     if not multiply_by_k_square:

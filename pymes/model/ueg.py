@@ -73,13 +73,13 @@ class UEG:
         if ( not planewave.is_closed_shell(self.n_ele) ):
             raise ValueError("The number of electrons is not a closed shell system, currently only\
                           closed shell systems are supported!")
-        #: electronic density
+        #: electronic density.
         self.rs = rs
         #: length of the cubic simulation cell containing n_ele electrons
-        #: at the density of rs
+        #: at the density of rs.
         self.L = self.rs * ((4 * np.pi * self.n_ele) / 3) ** (1.0 / 3.0)
-        #: volume of the cubic simulation cell containing n_ele electrons at the density
-        #: of rs
+        #: volume of the cubic simulation cell containing n_ele electrons at the density.
+        #: of rs.
         self.Omega = self.L ** 3
 
         self.basis_fns = None
@@ -89,6 +89,13 @@ class UEG:
         self.cutoff = 0.
 
         self.basis_indices_map = None
+
+        #: k-mesh (k-prime) for the discrete 
+        #: Convolution Theorem (2-body TC integrals).
+
+        self.kmesh_fac = None
+
+        self.kmesh_cutoff = None
 
         self.kPrime = None
 
@@ -239,7 +246,7 @@ class UEG:
             'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt]
         """
         algo_name = "UEG.get_fock"
-        print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock Energy", level=0)
+        print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock energy", level=0)
         start_time = time.time()
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
@@ -250,9 +257,13 @@ class UEG:
             else:
                 print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
             if self.k_cutoff is None:
-                raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
+                raise ValueError("K-cutoff for the transcorrelated framework not initialized!")
             else:
                 print_logging_info("K-Cutoff in correlator: {:.8f}".format(self.k_cutoff), level=1)
+            if self.kmesh_fac is None:
+                print_logging_info("K'-mesh scaling factor: 1.0 (default)", level=1)
+            else:
+                print_logging_info("K'-mesh scaling factor: {:.8f}".format(self.kmesh_fac), level=1)
             #if self.gamma is None:
             #    raise ValueError("Gamma not initialized!")
         else:
@@ -415,13 +426,16 @@ class UEG:
             correlator_idx = self.get_correlator_idx()
         else:
             correlator_idx = 0  # None
-        n_ele = self.n_ele
-        Omega = self.Omega
-        L     = self.L
-        imax  = self.imax
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else  int(np.ceil(np.sqrt(self.cutoff)))
         gamma  = self.gamma if self.gamma is not None else 1.0
-        kPrime = self.kPrime.astype(np.float64)
+        if self.kmesh_fac is None:
+            self.kmesh_fac = 1.
+        elif self.kmesh_fac < 1:
+            raise ValueError("kmesh_fac should be >= 1!")
+        if self.kPrime is None:
+            raise ValueError("kPrime not initialized!")
+        else:
+            kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / (self.L * self.kmesh_fac))
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
@@ -429,7 +443,8 @@ class UEG:
         #p_idx_range = idx[1] - idx[0]
         #det_num_threads(p_idx_range)
         # 3. Compute the integrals.
-        V_pqrs=  _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
+        V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.imax, 
+                                k_cutoff, gamma, 
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
@@ -855,7 +870,7 @@ class UEG:
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         
-        k1 = 2 * np.pi * self.kPrime / self.L
+        k1 = 2 * np.pi * self.kPrime / ( self.L * self.kmesh_fac )
         k2 = k - k1
 
         k1Square = np.einsum("ni,ni->n", k1, k1, optimize=True)
@@ -1090,7 +1105,7 @@ class UEG:
         # has to be - and divided by gamm to satisfy the cusp condition
         a = -4. * np.pi
         if self.k_cutoff is not None:
-            k_cutoffSquare = self.k_cutoff * ((2 * np.pi / self.L) ** 2)
+            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
             # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
             k_cutoffDenom = (k_cutoffSquare + gamma)
         else:
@@ -1127,7 +1142,7 @@ class UEG:
         if self.gamma is None:
             self.gamma = 1.0
 
-        k_cutoffSquare = (self.k_cutoff * 2 * np.pi / self.L) ** 2
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
 
         if not isinstance(kSquare, np.ndarray):
             if kSquare <= k_cutoffSquare * (1 + 0.00001):
@@ -1231,7 +1246,7 @@ class UEG:
         if self.gamma is None:
             self.gamma = 0.01
 
-        k_cutoffSquare = (self.k_cutoff * 2 * np.pi / self.L) ** 2
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
 
         kc = np.sqrt(k_cutoffSquare)
         k = np.sqrt(kSquare)
@@ -1262,7 +1277,7 @@ class UEG:
             gamma = self.gamma
         a = -4. * np.pi / gamma
         if self.k_cutoff is not None:
-            k_cutoffSquare = self.k_cutoff * ((2 * np.pi / self.L) ** 2)
+            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
             k_cutoffDenom = (k_cutoffSquare + gamma ** 2) ** 2
         else:
             k_cutoffDenom = 1e-12
@@ -1289,7 +1304,7 @@ class UEG:
         # has to be - and divided by gamm to satisfy the cusp condition
         a = -4. * np.pi
         if self.k_cutoff is not None:
-            k_cutoffSquare = self.k_cutoff * ((2 * np.pi / self.L) ** 2)
+            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
             # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
             k_cutoffDenom = (k_cutoffSquare + A)
         else:
