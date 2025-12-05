@@ -88,6 +88,8 @@ def main(nel, rs, \
                         .format(no))
     print_logging_info('Number of virtual orbitals = {}'\
                         .format(nv))
+    print_logging_info("Max. kinetic energy (ecut) = {:.6f} [a.u.]"
+                       .format(ueg_model.cutoff * (2 * np.pi / ueg_model.L) ** 2 / 2.))
     print_logging_info("{:.3f} seconds spent on generating basis."\
                        .format((time.time()-time_init_basis)))
     sys.stdout.flush()
@@ -103,8 +105,14 @@ def main(nel, rs, \
        ueg_model.kmesh_fac = kmesh_fac
        ueg_model.kmesh_cutoff = kmesh_cutoff
        ueg_model.gamma = gamma
+       print_logging_info("Generating k'-points integration mesh.", level=0)
        ueg_model.init_kPrime()
-    
+       print_logging_info("Number of plane waves in k'-point mesh = {}"\
+                            .format(ueg_model.kPrime.shape[0]), level=1)
+       print_logging_info("Max. kinetic energy in mesh = {:.6f} [a.u.]"
+                       .format(ueg_model.kmesh_cutoff * (2 * np.pi / (ueg_model.L * ueg_model.kmesh_fac)) ** 2 / 2.),
+                       level=1)
+
     myERI = eri.ERI(ueg_model)
     myERI.calc_eri(incore=eri_incore)
 

@@ -260,7 +260,7 @@ class UEG:
             if self.k_cutoff is None:
                 raise ValueError("K-cutoff for the transcorrelated framework not initialized!")
             else:
-                print_logging_info("K-Cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+                print_logging_info("K-cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
             if self.kmesh_fac is None:
                 print_logging_info("K'-mesh scaling factor: 1.0 [L'/L] (default)", level=1)
             else:
