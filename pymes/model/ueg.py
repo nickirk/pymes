@@ -799,15 +799,15 @@ class UEG:
         p_prim = np.array([self.basis_fns[i * 2].kp for i in \
                           range(int(self.n_ele / 2))])
         p_vec = p_vec - p_prim
-        kVecSquare  = einsum("i,i->", kVec, kVec)
-        pVecSquare  = einsum("ni,ni->n", p_vec, p_vec)
-        pVecDotKVec = einsum("ni,i->n", p_vec, kVec)
+        kVecSquare  = np.einsum("i,i->", kVec, kVec,      optimize=True)
+        pVecSquare  = np.einsum("ni,ni->n", p_vec, p_vec, optimize=True)
+        pVecDotKVec = np.einsum("ni,i->n", p_vec, kVec,   optimize=True)
         #kVecSquare  = np.sum( (kVec * kVec), axis=-1)
         #pVecSquare  = np.sum( (p_vec * p_vec), axis=-1)
         #pVecDotKVec = np.sum( (p_vec * kVec), axis=-1) 
         result = pVecDotKVec * self.correlator(kVecSquare) \
                  * self.correlator(pVecSquare)
-        result = einsum("n->", result) / self.Omega
+        result = np.einsum("n->", result, optimize=True) / self.Omega
 
         return result
 
@@ -831,16 +831,16 @@ class UEG:
         vec1 = pVec - kVec - pPrim
         vec2 = pVec - pPrim
 
-        dotProduct = einsum("ni,ni->n", vec1, vec2)
-        vec1Square = einsum("ni,ni->n", vec1, vec1)
-        vec2Square = einsum("ni,ni->n", vec2, vec2)
+        dotProduct = np.einsum("ni,ni->n", vec1, vec2, optimize=True)
+        vec1Square = np.einsum("ni,ni->n", vec1, vec1, optimize=True)
+        vec2Square = np.einsum("ni,ni->n", vec2, vec2, optimize=True)
         #dotProduct = np.sum((vec1 * vec2), axis=-1)
         #vec1Square = np.sum((vec1 * vec1), axis=-1)
         #vec2Square = np.sum((vec2 * vec2), axis=-1)
         result = dotProduct * self.correlator(vec1Square) \
                  * self.correlator(vec2Square)
 
-        result = einsum("n->", result) / self.Omega
+        result = np.einsum("n->", result, optimize=True) / self.Omega
 
         return result
 
@@ -858,11 +858,11 @@ class UEG:
         k1 = 2 * np.pi * self.kPrime / self.L
         k2 = k - k1
 
-        k1Square = einsum("ni,ni->n", k1, k1)
-        k2Square = einsum("ni,ni->n", k2, k2)
-        k1DotK2 = einsum("ni,ni->n", k1, k2)
+        k1Square = np.einsum("ni,ni->n", k1, k1, optimize=True)
+        k2Square = np.einsum("ni,ni->n", k2, k2, optimize=True)
+        k1DotK2  = np.einsum("ni,ni->n", k1, k2, optimize=True)
         result = k1DotK2 * self.correlator(k1Square) * self.correlator(k2Square)
-        result = einsum("n->", result) / self.Omega
+        result = np.einsum("n->", result, optimize=True) / self.Omega
 
         return result
     
