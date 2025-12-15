@@ -437,6 +437,7 @@ class UEG:
             raise ValueError("kPrime not initialized!")
         else:
             kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / (self.L * self.kmesh_fac))
+        OmegaPrime = (self.L * self.kmesh_fac) ** 3
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
@@ -445,7 +446,7 @@ class UEG:
         #det_num_threads(p_idx_range)
         # 3. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.imax, 
-                                k_cutoff, gamma, 
+                                k_cutoff, gamma, OmegaPrime,
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
@@ -1333,11 +1334,58 @@ class UEG:
 
         return result
     
-    def RPA(self, kSquare, multiply_by_k_square=False):
+    def RPA(self, kSquare):
         '''
         J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
         '''
-        return 0.0
+        rho = self.n_ele / self.Omega
+
+        if self.k_cutoff is not None:
+            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+        else:
+            k_cutoffSquare = 1e-12
+
+        if self.gamma is None:
+            self.gamma = 1.
+
+        if not isinstance(kSquare, np.ndarray):
+            kVec = np.sqrt(kSquare)
+            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+            if kVec > (2*kFermi):
+                T2 = 1.0
+            elif kVec <= (2*kFermi):
+                T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
+            a = 2. * rho * T2
+            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            k_cutoffDenom = k_cutoffSquare * a
+            if np.abs(a) >= k_cutoffSquare:
+                A = 1.0 / a
+            else:
+                A = 0.0
+            if np.abs(a * kSquare) >= k_cutoffDenom:
+                B = b / (kSquare * a)
+            else:
+                B = 0.0
+
+            result = A - B
+        else:
+            kVec = np.sqrt(kSquare)
+            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+            T2 = np.where(kVec > (2*kFermi), 
+                          1.0,
+                          (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3)
+            a = 2. * rho * T2
+            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            k_cutoffDenom = k_cutoffSquare * a
+            A = np.where(np.abs(a) >= k_cutoffSquare, 
+                         1.0 / a, 
+                         0.0)
+            B = np.where(np.abs(a * kSquare) >= k_cutoffDenom,
+                         b / (kSquare * a),
+                         0.0)
+            result = A - B
+    
+        return result * self.gamma
 
     def calcGamma(self, overlap_basis, nP):
         """

@@ -17,7 +17,7 @@ Correlators:
 
 
 @jit(nopython=True, parallel=True)
-def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
+def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, OmegaPrime, 
                     kPrime, basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
@@ -97,7 +97,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
             d_k_vec = basis_Kp[r] - basis_Kp[p]
             u_mat = 0.
             if is_tc:
-                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
+                u_mat = _sumNablaUSquare(d_k_vec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, correlator_idx)
             for q in range(idx[2], idx[3]):
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
@@ -273,7 +273,7 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
     
 
 @jit(nopython=True)
-def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx):
+def _sumNablaUSquare(kVec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, correlator_idx):
     """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
     Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
     Parameters
@@ -311,8 +311,7 @@ def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator
         corr_k1 = _calc_correlator(correlator_idx, k1Square, k_cutoffSquare, rho, gamma)
         corr_k2 = _calc_correlator(correlator_idx, k2Square, k_cutoffSquare, rho, gamma)
         umat += k1Dotk2 * corr_k1 * corr_k2
-
-    return umat / Omega
+    return umat / OmegaPrime
 
 # CORRELATORS -----------------------------------------------------
 
@@ -535,8 +534,40 @@ def _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma):
 @jit(nopython=True)
 def _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma):
     """
-    Placeholder for perturbed correlator function.
-    Currently returns 0.0 for all inputs.
+    RPA-based correlator function as described in:
     J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+    Computes the RPA-based correlator function u(k), where k is SCALAR.
+    Parameters
+    ----------
+    kSquare: float
+        square of the plane wave vector k.
+    k_cutoffSquare: float
+        plane wave vector cutoff.
+    rho: float
+        electron density.
+    gamma: float
+        parameter in the correlator function.
+    Returns
+    -------
+    corr: float
+        value of the RPA-based correlator function u(k).
     """
-    return 0.0
+    kVec = np.sqrt(kSquare)
+    kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+    if kVec > (2*kFermi):
+        T2 = 1.0
+    elif kVec <= (2*kFermi):
+        T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
+    a = 2. * rho * T2
+    b = np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
+    k_cutoffDenom = k_cutoffSquare * a
+    if abs(a) >= k_cutoffSquare:
+        A = 1 / a
+    else:
+        A = 0.0
+    if abs(a * kSquare) >= k_cutoffDenom:
+        B = b / (kSquare * a)
+    else:
+        B = 0.0
+    corr = (A - B) * gamma
+    return corr
