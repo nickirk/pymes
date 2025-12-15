@@ -90,14 +90,6 @@ class UEG:
 
         self.basis_indices_map = None
 
-        #: k-mesh (k-prime) for the discrete 
-        #: Convolution Theorem (2-body TC integrals).
-        self.kmesh_fac = None
-
-        self.kmesh_cutoff = None
-
-        self.kmesh_imax = None
-
         self.kPrime = None
 
         self.correlator = None
@@ -261,14 +253,6 @@ class UEG:
                 raise ValueError("K-cutoff for the transcorrelated framework not initialized!")
             else:
                 print_logging_info("K-cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
-            if self.kmesh_fac is None:
-                print_logging_info("K'-mesh scaling factor: 1.0 [L'/L] (default)", level=1)
-            else:
-                print_logging_info("K'-mesh scaling factor: {:.8f} [L'/L]".format(self.kmesh_fac), level=1)
-            if self.kmesh_cutoff is None:
-                print_logging_info("K'-mesh cutoff: consistent with energy cutoff of the simulation box.", level=1)
-            else:
-                print_logging_info("K'-mesh cutoff: {:.8f} ½[2π/L']^2".format(self.kmesh_cutoff), level=1)
             #if self.gamma is None:
             #    raise ValueError("Gamma not initialized!")
         else:
@@ -436,17 +420,13 @@ class UEG:
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         else:
-            kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / (self.L * self.kmesh_fac))
-        OmegaPrime = (self.L * self.kmesh_fac) ** 3
+            kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
-        # 2. Prepare for parallel execution.
-        #p_idx_range = idx[1] - idx[0]
-        #det_num_threads(p_idx_range)
-        # 3. Compute the integrals.
+        # 2. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.imax, 
-                                k_cutoff, gamma, OmegaPrime,
+                                k_cutoff, gamma,
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
@@ -872,7 +852,7 @@ class UEG:
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         
-        k1 = 2 * np.pi * self.kPrime / ( self.L * self.kmesh_fac )
+        k1 = 2 * np.pi * self.kPrime / self.L
         k2 = k - k1
 
         k1Square = np.einsum("ni,ni->n", k1, k1, optimize=True)
@@ -883,12 +863,12 @@ class UEG:
 
         return result
     
-    def init_kPrime(self):
+    def init_kPrime(self, cutoff=30):
         """
         Member function of class UEG
         This function generates the k' vectors for the transcorrelated
-        integrals. The k' vectors are generated in the range of -ipmax to 
-        ipmax (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
+        integrals. The k' vectors are generated in the range of -cutoff to 
+        cutoff (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
         in each direction. The k' vectors are stored in the class
         variable kPrime.
 
@@ -896,27 +876,34 @@ class UEG:
 
         Returns
         -------
-        kPrime: nparray of int dtype, size (3*ipmax+1, 3)
+        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
         """
 
-        if self.kmesh_fac is None:
-            self.kmesh_fac = 1.
-        elif self.kmesh_fac < 1:
-            raise ValueError("kmesh_fac should be >= 1!")
-        
-        if self.kmesh_cutoff is None:
-            self.kmesh_cutoff = self.cutoff * (self.kmesh_fac**2)
-        elif self.kmesh_cutoff < self.cutoff:
-            raise ValueError("kmesh_cutoff should be >= cutoff!")
+        kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
+                           for j in range(-cutoff, cutoff + 1) for k in \
+                            range(-cutoff, cutoff + 1)])
 
-        ipmax = int(np.ceil(np.sqrt(self.kmesh_cutoff))) + 1
-
-        kPrime = np.array([[i, j, k] for i in range(-ipmax, ipmax + 1) \
-                           for j in range(-ipmax, ipmax + 1) for k in \
-                            range(-ipmax, ipmax + 1)])
-
-        self.kmesh_imax = ipmax
         self.kPrime = kPrime
+
+    
+    def intNablaUSquare(self, k):
+        """ 
+        Member function of class UEG. 
+        This function computes the convolution integral of the squared 
+        gradient of the correlator function in k-space, in the TDL: 
+        F{(\Nabla u)^2}(k) = \int d^3k' (k · k')·k  u(k') u(|k - k'|).
+
+        Parameters
+        ---------- 
+        k: nparray of float dtype, size 3
+            momentum transfer vector
+        Returns
+        -------
+        result: float
+        """
+
+        result = 0.0
+        return result
 
     def triple_contractions_in_3_body(self):
         """

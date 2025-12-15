@@ -17,7 +17,7 @@ Correlators:
 
 
 @jit(nopython=True, parallel=True)
-def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, OmegaPrime, 
+def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
                     kPrime, basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
@@ -97,7 +97,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, OmegaPrime,
             d_k_vec = basis_Kp[r] - basis_Kp[p]
             u_mat = 0.
             if is_tc:
-                u_mat = _sumNablaUSquare(d_k_vec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, correlator_idx)
+                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
             for q in range(idx[2], idx[3]):
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
@@ -273,7 +273,7 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
     
 
 @jit(nopython=True)
-def _sumNablaUSquare(kVec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, correlator_idx):
+def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx):
     """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
     Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
     Parameters
@@ -298,7 +298,7 @@ def _sumNablaUSquare(kVec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, corre
         value of the sum of the squared gradients of the correlator function
         in k-space.
     """
-    # kPrime is already scaled by 2π/L'.
+    # kPrime is already scaled by 2π/L.
     #k1 = 2 * np.pi * kPrime / L
     k1 = kPrime
     k2 = kVec - k1
@@ -311,7 +311,33 @@ def _sumNablaUSquare(kVec, rho, OmegaPrime, kPrime, k_cutoffSquare, gamma, corre
         corr_k1 = _calc_correlator(correlator_idx, k1Square, k_cutoffSquare, rho, gamma)
         corr_k2 = _calc_correlator(correlator_idx, k2Square, k_cutoffSquare, rho, gamma)
         umat += k1Dotk2 * corr_k1 * corr_k2
-    return umat / OmegaPrime
+    return umat / Omega
+
+@jit(nopython=True)
+def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
+    """
+    Numba JIT-compiled version of the intNablaUSquare function for better performance.
+    Computes the convolution integral of the squared gradient of the correlator function in k-space,
+    in the TDL: F{(\Nabla u)^2}(k) = \int d^3k' (k · k')·k  u(k') u(|k - k'|).
+    Parameters
+    ----------
+    kVec: nparray of float dtype
+        difference of two k-vectors (k_p - k_q).
+    rho: float
+        electron density.
+    k_cutoffSquare: float
+        plane wave vector cutoff inside the correlaor function trunc.
+    gamma: float
+        parameter in the correlator function.
+    correlator_idx: int
+        identifier for the correlator type.
+    Returns
+    -------
+    u_mat: float
+        value of the convolution integral of the squared gradient of the correlator function in k-space.
+    """
+    umat = 0.0
+    return umat
 
 # CORRELATORS -----------------------------------------------------
 

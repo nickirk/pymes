@@ -37,7 +37,6 @@ sys.stdout.flush()
 
 def main(nel, rs, \
         basis_cutoff, k_cutoff, \
-        kmesh_fac, kmesh_cutoff, \
         gamma, amps, \
         eri_incore=True, \
         write_tensors=False):
@@ -102,16 +101,11 @@ def main(nel, rs, \
        print_logging_info("Using the TC method to calculate ERI.")
        ueg_model.correlator = ueg_model.trunc
        ueg_model.k_cutoff = k_cutoff
-       ueg_model.kmesh_fac = kmesh_fac
-       ueg_model.kmesh_cutoff = kmesh_cutoff
        ueg_model.gamma = gamma
        print_logging_info("Generating k'-points integration mesh.", level=0)
        ueg_model.init_kPrime()
        print_logging_info("Number of plane waves in k'-point mesh = {}"\
                             .format(ueg_model.kPrime.shape[0]), level=1)
-       print_logging_info("Max. kinetic energy in mesh = {:.6f} [a.u.]"
-                       .format(ueg_model.kmesh_cutoff * (2 * np.pi / (ueg_model.L * ueg_model.kmesh_fac)) ** 2 / 2.),
-                       level=1)
 
     myERI = eri.ERI(ueg_model)
     myERI.calc_eri(incore=eri_incore)
@@ -231,9 +225,6 @@ if __name__ == '__main__':
   
   nel   = 14
   k_cutoff = 1
-  kmesh_frac = 1
-  # cutoff=841 gives ipmax=30 to compare with legacy implementation.
-  kmesh_cutoff = 841 
 
   gamma = None
   amps  = None
@@ -241,12 +232,10 @@ if __name__ == '__main__':
   eri_incore = False
   write_tensors = False
 
-
   for rs in [0.5]:
     for basis_cutoff in [2]:
       main(nel, rs, \
             basis_cutoff, k_cutoff, \
-            kmesh_frac, kmesh_cutoff,
             gamma, amps, \
             eri_incore=eri_incore, \
             write_tensors=write_tensors)
