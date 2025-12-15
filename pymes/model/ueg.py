@@ -885,13 +885,12 @@ class UEG:
 
         self.kPrime = kPrime
 
-    
     def intNablaUSquare(self, k):
         """ 
         Member function of class UEG. 
         This function computes the convolution integral of the squared 
         gradient of the correlator function in k-space, in the TDL: 
-        F{(\Nabla u)^2}(k) = \int d^3k' (k · k')·k  u(k') u(|k - k'|).
+        F{(Nabla u)^2}(k) = int d^3k' (k · k')·k  u(k') u(|k - k'|).
 
         Parameters
         ---------- 
@@ -1106,6 +1105,7 @@ class UEG:
         a = -4. * np.pi
         if self.k_cutoff is not None:
             k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
             # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
             k_cutoffDenom = (k_cutoffSquare + gamma)
         else:
@@ -1278,6 +1278,7 @@ class UEG:
         a = -4. * np.pi / gamma
         if self.k_cutoff is not None:
             k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
             k_cutoffDenom = (k_cutoffSquare + gamma ** 2) ** 2
         else:
             k_cutoffDenom = 1e-12
@@ -1305,6 +1306,7 @@ class UEG:
         a = -4. * np.pi
         if self.k_cutoff is not None:
             k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
             # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
             k_cutoffDenom = (k_cutoffSquare + A)
         else:
@@ -1329,6 +1331,7 @@ class UEG:
 
         if self.k_cutoff is not None:
             k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
         else:
             k_cutoffSquare = 1e-12
 

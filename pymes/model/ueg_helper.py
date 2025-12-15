@@ -318,7 +318,7 @@ def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
     """
     Numba JIT-compiled version of the intNablaUSquare function for better performance.
     Computes the convolution integral of the squared gradient of the correlator function in k-space,
-    in the TDL: F{(\Nabla u)^2}(k) = \int d^3k' (k · k')·k  u(k') u(|k - k'|).
+    in the TDL: F{(Nabla u)^2}(k) = int d^3k' (k · k')·k  u(k') u(|k - k'|).
     Parameters
     ----------
     kVec: nparray of float dtype
@@ -468,6 +468,7 @@ def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square
     gamma_0 = np.sqrt(rho / 4. * np.pi)
     a = -4. * np.pi
     gamma_yukawa = gamma * gamma_0
+    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
     k_cutoffDenom = k_cutoffSquare + gamma_yukawa
     if np.abs(k_cutoffDenom) < 1e-12:
         k_cutoffDenom = 1e-12
@@ -517,6 +518,7 @@ def _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_
     A = 1. / A * gamma_yukawa
     # It has to be - and divided by gamm to satisfy the cusp condition
     a = -4. * np.pi
+    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
     k_cutoffDenom = (k_cutoffSquare + A)
     if np.abs(k_cutoffDenom) < 1e-12:
         k_cutoffDenom = 1e-12
@@ -586,6 +588,7 @@ def _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma):
         T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
     a = 2. * rho * T2
     b = np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
+    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
     k_cutoffDenom = k_cutoffSquare * a
     if abs(a) >= k_cutoffSquare:
         A = 1 / a
