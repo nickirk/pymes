@@ -1225,7 +1225,7 @@ class UEG:
                 B = 1.0 / b
             else:
                 B = 0.0
-            result = A - B
+            result = - 4. * np.pi * (A - B)
         else:
             a = kSquare * wp
             b = (kSquare + wp) * wp
@@ -1235,9 +1235,7 @@ class UEG:
             B = np.where(np.abs(b) > self.denom_thrs,
                          1.0 / b,
                          0.0)
-            result = A - B
-
-        result *= - 4. * np.pi
+            result = - 4. * np.pi * ( A - B )
         return result * gamma
    
     def RPA(self, kSquare):
