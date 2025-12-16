@@ -21,7 +21,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
                     kPrime, basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
-                    multiply_by_k_square=False,
+                    denom_thrs,
                     dtype=np.float64):
     """ Numba JIT-compiled version of the get_2b_int function for better performance.
     Parameters
@@ -39,7 +39,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     k_cutoff: float
         plane wave vector cutoff inside the correlaor function trunc.
     gamma: float
-        parameter in the correlator function
+        parameter in the correlator function.
     kPrime: nparray of float dtype
         an array to store a denser k'-point grid for integration.
     basis_indices_map: nparray of int dtype
@@ -65,8 +65,8 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
         active or not for the calculation of the integrals.
     correlator_idx: int
         identifier for the correlator type.
-    multiply_by_k_square: bool
-        whether to multiply the correlator by k^2 or not.
+    denom_thrs: float
+        threshold to avoid division by zero in correlator functions.
 
     Returns
     -------
@@ -75,7 +75,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     """
     num_k_in_each_dir = imax * 2 + 1
     V_pqrs = np.zeros((idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]), dtype=dtype)
-    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
+    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2 #:  only for TRUNC.
     rho = n_ele / Omega
 
     #p_range = idx[1] - idx[0]
@@ -97,7 +97,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
             d_k_vec = basis_Kp[r] - basis_Kp[p]
             u_mat = 0.
             if is_tc:
-                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
+                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
             for q in range(idx[2], idx[3]):
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
@@ -123,7 +123,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
                         if np.abs(dk_square) > 0.:
                             rs_dk = basis_Kp[r] - basis_Kp[s]
                             rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma, denom_thrs)
                             w = 4. * np.pi / dk_square \
                                 + u_mat \
                                 + (dk_square - rs_dk_dot_d_k_vec) \
@@ -134,28 +134,28 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
                     elif is_effect_2b:
                         # Effective 2-body integrals from single contractions of 3-body TC integrals.
                         if np.abs(dk_square) > 0.:
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma, denom_thrs)
                             w_pqrs = -(n_ele) * dk_square \
                                     * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w_qpsr = -(n_ele) * dk_square \
                                     * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w = 0.5 * (w_pqrs + w_qpsr)
                         else:
                             w = u_mat
-                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
+                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w = 0.5 * (w_pqrs + w_qpsr)
                         w = w / Omega
                     else:
                         # Full 2-body integrals including both Coulomb and TC contributions.
                         if np.abs(dk_square) > 0.:
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma, denom_thrs)
                             rs_dk = basis_Kp[r] - basis_Kp[s]
                             rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
                             w = 4. * np.pi / dk_square
@@ -164,19 +164,19 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
                                 * corr_dk_square
                             w_pqrs = -(n_ele) * dk_square \
                                     * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w_qpsr = -(n_ele) * dk_square \
                                     * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs) \
+                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w += 0.5 * (w_pqrs + w_qpsr)
                         else:
                             w = u_mat
-                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
+                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
                             w += 0.5 * (w_pqrs + w_qpsr)
                         w = w / Omega
                 else:
@@ -190,7 +190,7 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     return V_pqrs   
 
 @jit(nopython=True)
-def _contract_exchange_3_body(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx):
+def _contract_exchange_3_body(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs):
     """ Numba JIT-compiled version of the contract_exchange_3_body function for better performance.
     Computes the single contraction of the exchange type from the 3-body integrals.
     Parameters
@@ -211,27 +211,29 @@ def _contract_exchange_3_body(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, ga
         parameter in the correlator function.
     correlator_idx: int
         identifier for the correlator type.
+    denom_thrs: float
+        threshold to avoid division by zero in correlator functions.
     Returns
     -------
     w: float
         value of the single contraction of the exchange type from the 3-body integrals.
     """
     kVecSquare = kVec[0]**2 + kVec[1]**2 + kVec[2]**2
-    corr_kVec = _calc_correlator(correlator_idx, kVecSquare, k_cutoffSquare, rho, gamma)
+    corr_kVec = _calc_correlator(correlator_idx, kVecSquare, k_cutoffSquare, rho, gamma, denom_thrs)
     w = 0.0
     for i in range(occ_Kp.shape[0]):
         pDiff = pVec - occ_Kp[i]
         pDiffSquare = pDiff[0]**2 + pDiff[1]**2 + pDiff[2]**2
         pDiffDotkVec = pDiff[0]*kVec[0] + pDiff[1]*kVec[1] + pDiff[2]*kVec[2]
 
-        corr_pDiff = _calc_correlator(correlator_idx, pDiffSquare, k_cutoffSquare, rho, gamma)
+        corr_pDiff = _calc_correlator(correlator_idx, pDiffSquare, k_cutoffSquare, rho, gamma, denom_thrs)
 
         w += pDiffDotkVec * corr_pDiff * corr_kVec
     
     return w / Omega
 
 @jit(nopython=True)
-def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx):
+def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs):
     """ Numba JIT-compiled version of the contractP_KWithQ function for better performance.
     Parameters
     ----------
@@ -251,6 +253,8 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
         parameter in the correlator function.
     correlator_idx: int
         identifier for the correlator type.
+    denom_thrs: float
+        threshold to avoid division by zero in correlator functions.
     Returns
     -------
     w: float
@@ -264,8 +268,8 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
         vec2Square = vec2[0]**2 + vec2[1]**2 + vec2[2]**2
         vec1Dotvec2 = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2]
 
-        corr_vec1 = _calc_correlator(correlator_idx, vec1Square, k_cutoffSquare, rho, gamma)
-        corr_vec2 = _calc_correlator(correlator_idx, vec2Square, k_cutoffSquare, rho, gamma)
+        corr_vec1 = _calc_correlator(correlator_idx, vec1Square, k_cutoffSquare, rho, gamma, denom_thrs)
+        corr_vec2 = _calc_correlator(correlator_idx, vec2Square, k_cutoffSquare, rho, gamma, denom_thrs)
 
         w += vec1Dotvec2 * corr_vec1 * corr_vec2
 
@@ -273,7 +277,7 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
     
 
 @jit(nopython=True)
-def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx):
+def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx, denom_thrs):
     """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
     Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
     Parameters
@@ -292,6 +296,8 @@ def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator
         parameter in the correlator function.
     correlator_idx: int
         identifier for the correlator type.
+    denom_thrs: float
+        threshold to avoid division by zero in correlator functions.
     Returns
     -------
     u_mat: float
@@ -308,13 +314,13 @@ def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator
         k1Square = k1[i,0]**2 + k1[i,1]**2 + k1[i,2]**2
         k2Square = k2[0]**2 + k2[1]**2 + k2[2]**2
         k1Dotk2 = k1[i,0]*k2[0] + k1[i,1]*k2[1] + k1[i,2]*k2[2]
-        corr_k1 = _calc_correlator(correlator_idx, k1Square, k_cutoffSquare, rho, gamma)
-        corr_k2 = _calc_correlator(correlator_idx, k2Square, k_cutoffSquare, rho, gamma)
+        corr_k1 = _calc_correlator(correlator_idx, k1Square, k_cutoffSquare, rho, gamma, denom_thrs)
+        corr_k2 = _calc_correlator(correlator_idx, k2Square, k_cutoffSquare, rho, gamma, denom_thrs)
         umat += k1Dotk2 * corr_k1 * corr_k2
     return umat / Omega
 
 @jit(nopython=True)
-def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
+def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx, denom_thrs):
     """
     Numba JIT-compiled version of the intNablaUSquare function for better performance.
     Computes the convolution integral of the squared gradient of the correlator function in k-space,
@@ -331,6 +337,8 @@ def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
         parameter in the correlator function.
     correlator_idx: int
         identifier for the correlator type.
+    denom_thrs: float
+        threshold to avoid division by zero in correlator functions.
     Returns
     -------
     u_mat: float
@@ -342,7 +350,7 @@ def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
 # CORRELATORS -----------------------------------------------------
 
 @jit(nopython=True)
-def _calc_correlator(correlator_idx, kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
+def _calc_correlator(correlator_idx, kSquare, k_cutoffSquare, rho, gamma, denom_thrs):
     """
     Wrapper function to select and apply the appropriate correlator.
 
@@ -358,6 +366,8 @@ def _calc_correlator(correlator_idx, kSquare, k_cutoffSquare, rho, gamma, multip
         Electron density.
     gamma: float
         Parameter in the correlator function.
+    denom_thrs: float
+        Threshold to avoid division by zero in correlator functions.
     
     Parameters:
     -----------
@@ -365,220 +375,73 @@ def _calc_correlator(correlator_idx, kSquare, k_cutoffSquare, rho, gamma, multip
         0: None,
         1: trunc,
         2: coulomb,
-        3: yukawa,
-        4: yukawa-coulomb,
-        5: gaskell,
-        6: gaskell-modified,
-        7: smooth.
+        3: coulomb-yukawa,
+        4: RPA.
     """
     if correlator_idx == 0:  # None
         return 0.0
     elif correlator_idx == 1:  # trunc
-        return _trunc_correlator(kSquare, k_cutoffSquare, gamma)
+        return _trunc_correlator(kSquare, k_cutoffSquare, gamma, denom_thrs)
     elif correlator_idx == 2:  # coulomb
-        return _coulomb_correlator(kSquare, gamma)
-    elif correlator_idx == 3:  # yukawa
-        return _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=multiply_by_k_square)
-    elif correlator_idx == 4:  # yukawa-coulomb
-        return _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=multiply_by_k_square)
-    elif correlator_idx == 5:  # gaskell
-        return _gaskell_correlator(kSquare, k_cutoffSquare, rho, gamma)
-    elif correlator_idx == 6:  # gaskell-modified
-        return _gaskell_modified_correlator(kSquare, k_cutoffSquare, rho, gamma)
-    elif correlator_idx == 7:  # smooth
-        return _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma)
-    elif correlator_idx == 8:  # perturbed
-        return _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma)
+        return _coulomb_correlator(kSquare, gamma, denom_thrs)
+    elif correlator_idx == 3:  # coulomb-yukawa
+        return _coulomb_yukawa_correlator(kSquare, rho, gamma, denom_thrs)
+    elif correlator_idx == 4:  # RPA
+        return _RPA_correlator(kSquare, rho, gamma, denom_thrs)
     else:
         return 0.0
 
 @jit(nopython=True)
-def _trunc_correlator(kSquare, k_cutoffSquare, gamma):
-    """ Numba JIT-compiled version of the trunc_correlator function for better performance.
-    Computes the truncated correlator function u(k^2), where k is SCALAR.
-    Parameters
-    ----------
-    kSquare: float
-        square of the plane wave vector k.
-    k_cutoff: float
-        plane wave vector cutoff inside the correlator function trunc.
-    gamma: float
-        parameter in the correlator function.
-    Returns
-    -------
-    corr: float
-        value of the truncated correlator function u(k^2).
+def _trunc_correlator(kSquare, k_cutoffSquare, gamma, denom_thrs):
+    """ Numba JIT-compiled version of the trunc() function for better performance.
+    Computes the truncated correlator function u(k), where k is SCALAR.
+    See trunc() in ueg.py for more details.
     """
     if kSquare <= k_cutoffSquare * (1 + 0.00001):
         corr = 0.0
-    elif kSquare > 1e-12:
+    elif kSquare > denom_thrs:
         corr = -4. * np.pi / (kSquare ** 2)
     else:
         corr = 0.0
     return corr * gamma
 
 @jit(nopython=True)
-def _coulomb_correlator(kSquare, gamma):
-    """ Numba JIT-compiled version of the coulomb_correlator function for better performance.
-    Computes the coulomb correlator function u(k^2), where k is SCALAR.
-
-    The G=0 terms need more consideration due to 1 / (G=0)^2 divergence.
-
-    Parameters
-    ----------
-    kSquare: float
-        square of the plane wave vector k.
-    gamma: float
-        parameter in the correlator function.
-    Returns
-    -------
-    corr: float
-        value of the coulomb correlator function u(k^2).
+def _coulomb_correlator(kSquare, gamma, denom_thrs):
+    """ Numba JIT-compiled version of the coulomb() function for better performance.
+    Computes the coulomb correlator function u(k), where k is SCALAR.
+    See coulomb() in ueg.py for more details.
     """
-    if kSquare > 1e-12:
+    if kSquare > denom_thrs:
         corr = -4. * np.pi / kSquare
     else:
         corr = 0.0
     return corr * gamma
 
 @jit(nopython=True)
-def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
-    """ Numba JIT-compiled version of the yukawa_correlator function for better performance.
-    Computes the yukawa correlator function u(k^2), where k is SCALAR.
-
-    The G=0 terms need more consideration due to 1 / (G=0)^2 divergence.
-
-    Parameters
-    ----------
-    kSquare: float
-        square of the plane wave vector k.
-    k_cutoffSquare: float
-        plane wave vector cutoff.
-    rho: float
-        electron density.
-    gamma: float
-        parameter in the correlator function.
-    rho: float
-        electron density.
-    Returns
-    -------
-    corr: float
-        value of the yukawa correlator function u(k^2).
+def _coulomb_yukawa_correlator(kSquare, rho, gamma, denom_thrs):
+    """ Numba JIT-compiled version of the coulomb_yukawa() function for better performance.
+    Computes the coulomb-yukawa correlator function u(k), where k is SCALAR.
+    See coulomb_yukawa() in ueg.py for more details.
     """
-    gamma_0 = np.sqrt(rho / 4. * np.pi)
-    a = -4. * np.pi
-    gamma_yukawa = gamma * gamma_0
-    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-    k_cutoffDenom = k_cutoffSquare + gamma_yukawa
-    if np.abs(k_cutoffDenom) < 1e-12:
-        k_cutoffDenom = 1e-12
-    if not multiply_by_k_square:
-        b = (kSquare + gamma_yukawa)
-        if (np.abs(b) > k_cutoffDenom):
-            corr = a / b
-        else:
-            corr = 0.0
+    wp = np.sqrt(4. * np.pi * rho)
+    a = kSquare * wp
+    b = (kSquare + wp) * wp
+    if np.abs(a) > denom_thrs:
+        A = 1.0 / a
     else:
-        if kSquare > k_cutoffSquare * (1 + 0.00001):
-            corr = a / (kSquare + gamma_yukawa) * kSquare
-        else:
-            corr = 0.0
+        A = 0.0
+    if np.abs(b) > denom_thrs:
+        B = 1.0 / b
+    else:
+        B = 0.0
+    corr = (- 4. * np.pi) * (A - B) * gamma
     return corr
 
 @jit(nopython=True)
-def _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
-    """ Numba JIT-compiled version of the yukawa_coulomb_correlator function for better performance.
-    Computes the yukawa-coulomb correlator function u(k^2), where k is SCALAR.
-
-    The G=0 terms need more consideration due to 1 / (G=0)^2 divergence.
-
-    Parameters
-    ----------
-    kSquare: float
-        square of the plane wave vector k.
-    k_cutoffSquare: float
-        plane wave vector cutoff.
-    rho: float
-        electron density.
-    gamma: float
-        parameter in the correlator function.
-    Returns
-    -------
-    corr: float
-        value of the yukawa-coulomb correlator function u(k^2).
-    """
-    # gamma is different due to gamma_0 = 1.5 in case self.gamma is None.
-    #if gamma == 1.0:
-    #    gamma_yukawa = 1.5
-    #else:
-    #    gamma_yukawa = gamma
-    gamma_yukawa = gamma
-    # A corresponds to 1/gamma**2 in Gruneis paper
-    A = np.sqrt(1.0 / (4.0 * np.pi * rho))
-    A = 1. / A * gamma_yukawa
-    # It has to be - and divided by gamm to satisfy the cusp condition
-    a = -4. * np.pi
-    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-    k_cutoffDenom = (k_cutoffSquare + A)
-    if np.abs(k_cutoffDenom) < 1e-12:
-        k_cutoffDenom = 1e-12
-    if not multiply_by_k_square:
-        b = (kSquare + A) * kSquare
-        if (np.abs(b) > k_cutoffDenom):
-            corr = a / b
-        else:
-            corr = 0.0
-    else:
-        if kSquare > k_cutoffSquare * (1 + 0.00001):
-            corr = a / (kSquare + A)
-        else:
-            corr = 0.0
-    return corr
-
-@jit(nopython=True)
-def _gaskell_correlator(kSquare, k_cutoffSquare, rho, gamma):
-    """ 
-    Placeholder for Gaskell correlator function.
-    Currently returns 0.0 for all inputs.
-    """
-    return 0.0
-
-@jit(nopython=True)
-def _gaskell_modified_correlator(kSquare, k_cutoffSquare, rho, gamma):
-    """
-    Placeholder for modified Gaskell correlator function.
-    Currently returns 0.0 for all inputs.
-    """
-    return 0.0  
-
-@jit(nopython=True)
-def _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma):
-    """
-    Placeholder for smooth correlator function.
-    Currently returns 0.0 for all inputs.
-    """
-    return 0.0
-
-@jit(nopython=True)
-def _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma):
-    """
-    RPA-based correlator function as described in:
-    J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
-    Computes the RPA-based correlator function u(k), where k is SCALAR.
-    Parameters
-    ----------
-    kSquare: float
-        square of the plane wave vector k.
-    k_cutoffSquare: float
-        plane wave vector cutoff.
-    rho: float
-        electron density.
-    gamma: float
-        parameter in the correlator function.
-    Returns
-    -------
-    corr: float
-        value of the RPA-based correlator function u(k).
+def _RPA_correlator(kSquare, rho, gamma, denom_thrs):
+    """ Numba JIT-compiled version of the RPA() function for better performance.
+    Computes the RPA correlator function u(k), where k is SCALAR.
+    See RPA() in ueg.py for more details.
     """
     kVec = np.sqrt(kSquare)
     kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
@@ -588,15 +451,131 @@ def _RPA_correlator(kSquare, k_cutoffSquare, rho, gamma):
         T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
     a = 2. * rho * T2
     b = np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
-    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-    k_cutoffDenom = k_cutoffSquare * a
-    if abs(a) >= k_cutoffSquare:
-        A = 1 / a
+    if np.abs(a) > denom_thrs:
+        A = 1.0 / a
     else:
         A = 0.0
-    if abs(a * kSquare) >= k_cutoffDenom:
-        B = b / (kSquare * a)
+    if np.abs(a * kSquare) > denom_thrs:
+        B = b / (a * kSquare)
     else:
         B = 0.0
     corr = (A - B) * gamma
     return corr
+
+#@jit(nopython=True)
+#def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
+#    """ Numba JIT-compiled version of the yukawa_correlator function for better performance.
+#    Computes the yukawa correlator function u(k^2), where k is SCALAR.
+#
+#    The G=0 terms need more consideration due to 1 / (G=0)^2 divergence.
+#
+#    Parameters
+#    ----------
+#    kSquare: float
+#        square of the plane wave vector k.
+#    k_cutoffSquare: float
+#        plane wave vector cutoff.
+#    rho: float
+#        electron density.
+#    gamma: float
+#        parameter in the correlator function.
+#    rho: float
+#        electron density.
+#    Returns
+#    -------
+#    corr: float
+#        value of the yukawa correlator function u(k^2).
+#    """
+#    gamma_0 = np.sqrt(rho / 4. * np.pi)
+#    a = -4. * np.pi
+#    gamma_yukawa = gamma * gamma_0
+#    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
+#    k_cutoffDenom = k_cutoffSquare + gamma_yukawa
+#    if np.abs(k_cutoffDenom) < 1e-12:
+#        k_cutoffDenom = 1e-12
+#    if not multiply_by_k_square:
+#        b = (kSquare + gamma_yukawa)
+#        if (np.abs(b) > k_cutoffDenom):
+#            corr = a / b
+#        else:
+#            corr = 0.0
+#    else:
+#        if kSquare > k_cutoffSquare * (1 + 0.00001):
+#            corr = a / (kSquare + gamma_yukawa) * kSquare
+#        else:
+#            corr = 0.0
+#    return corr
+#
+#@jit(nopython=True)
+#def _yukawa_coulomb_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
+#    """ Numba JIT-compiled version of the yukawa_coulomb_correlator function for better performance.
+#    Computes the yukawa-coulomb correlator function u(k^2), where k is SCALAR.
+#
+#    The G=0 terms need more consideration due to 1 / (G=0)^2 divergence.
+#
+#    Parameters
+#    ----------
+#    kSquare: float
+#        square of the plane wave vector k.
+#    k_cutoffSquare: float
+#        plane wave vector cutoff.
+#    rho: float
+#        electron density.
+#    gamma: float
+#        parameter in the correlator function.
+#    Returns
+#    -------
+#    corr: float
+#        value of the yukawa-coulomb correlator function u(k^2).
+#    """
+#    # gamma is different due to gamma_0 = 1.5 in case self.gamma is None.
+#    #if gamma == 1.0:
+#    #    gamma_yukawa = 1.5
+#    #else:
+#    #    gamma_yukawa = gamma
+#    gamma_yukawa = gamma
+#    # A corresponds to 1/gamma**2 in Gruneis paper
+#    A = np.sqrt(1.0 / (4.0 * np.pi * rho))
+#    A = 1. / A * gamma_yukawa
+#    # It has to be - and divided by gamm to satisfy the cusp condition
+#    a = -4. * np.pi
+#    k_cutoffSquare = max(k_cutoffSquare, 1e-12)
+#    k_cutoffDenom = (k_cutoffSquare + A)
+#    if np.abs(k_cutoffDenom) < 1e-12:
+#        k_cutoffDenom = 1e-12
+#    if not multiply_by_k_square:
+#        b = (kSquare + A) * kSquare
+#        if (np.abs(b) > k_cutoffDenom):
+#            corr = a / b
+#        else:
+#            corr = 0.0
+#    else:
+#        if kSquare > k_cutoffSquare * (1 + 0.00001):
+#            corr = a / (kSquare + A)
+#        else:
+#            corr = 0.0
+#    return corr
+#
+#@jit(nopython=True)
+#def _gaskell_correlator(kSquare, k_cutoffSquare, rho, gamma):
+#    """ 
+#    Placeholder for Gaskell correlator function.
+#    Currently returns 0.0 for all inputs.
+#    """
+#    return 0.0
+#
+#@jit(nopython=True)
+#def _gaskell_modified_correlator(kSquare, k_cutoffSquare, rho, gamma):
+#    """
+#    Placeholder for modified Gaskell correlator function.
+#    Currently returns 0.0 for all inputs.
+#    """
+#    return 0.0  
+#
+#@jit(nopython=True)
+#def _smooth_correlator(kSquare, k_cutoffSquare, rho, gamma):
+#    """
+#    Placeholder for smooth correlator function.
+#    Currently returns 0.0 for all inputs.
+#    """
+#    return 0.0

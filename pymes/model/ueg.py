@@ -20,7 +20,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, denom_thrs=1e-12):
         """
         Parameters
         ----------
@@ -35,6 +35,8 @@ class UEG:
         is_tc: bool
             parameter which determines whether transcorrelated framework is
             active or not for the calculation of the integrals.
+        denom_thrs: float
+            denominator regularization threshold.
 
         Attributes
         ----------
@@ -104,12 +106,11 @@ class UEG:
         self.CORRELATOR_NONE = 0
         self.CORRELATOR_TRUNC = 1
         self.CORRELATOR_COULOMB = 2
-        self.CORRELATOR_YUKAWA = 3
-        self.CORRELATOR_YUKAWA_COULOMB = 4
-        self.CORRELATOR_GASKELL = 5
-        self.CORRELATOR_GASKELL_MODIFIED = 6
-        self.CORRELATOR_SMOOTH = 7
-        self.CORRELATOR_RPA = 8
+        self.CORRELATOR_COULOMB_YUKAWA = 3
+        self.CORRELATOR_RPA = 4
+
+        #: Denominator regularization threshlod.
+        self.denom_thrs = denom_thrs
 
     def is_k_in_basis(self, ke):
         """
@@ -249,12 +250,11 @@ class UEG:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
             else:
                 print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
-            if self.k_cutoff is None:
-                raise ValueError("K-cutoff for the transcorrelated framework not initialized!")
-            else:
-                print_logging_info("K-cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
-            #if self.gamma is None:
-            #    raise ValueError("Gamma not initialized!")
+            if self.correlator == self.trunc:
+                if self.k_cutoff is None:
+                    raise ValueError("K-cutoff for the transcorrelated trunc. correlator not initialized!")
+                else:
+                    print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
         else:
             print_logging_info("Using non-TC method", level=1)
         
@@ -397,10 +397,9 @@ class UEG:
         if self.is_tc:
             if self.correlator is None:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
-            if self.k_cutoff is None:
-                raise ValueError("K-Cutoff for the transcorrelated framework not initialized!")
-            #if self.gamma is None:
-            #    raise ValueError("Gamma not initialized!")
+            if self.correlator is self.trunc:
+                if self.k_cutoff is None:
+                    raise ValueError("K-Cutoff for the transcorrelated trunc. correlator not initialized!")
 
         nP = int(len(self.basis_fns) / 2)
         no = int(self.n_ele / 2)
@@ -430,7 +429,7 @@ class UEG:
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
-                                correlator_idx, multiply_by_k_square=False,
+                                correlator_idx, self.denom_thrs,
                                 dtype=dtype)
         return V_pqrs
     
@@ -1041,342 +1040,6 @@ class UEG:
 
         return one_particle_energies
 
-    # CORRELATORS -----------------------------------------------------
-    # Collection of correlators, should them be collected into a class?
-    # Each correlator has some default parameters that are dependent on
-    # the system and they are specific to UEG, so they should be part of
-    # the UEG class.
-
-    def get_correlator_idx(self):
-        """ Member function of class UEG.
-        Returns an integer index for the correlator function being used.
-
-        Returns
-        -------
-        idx: int
-            index of the correlator function
-            0: None,
-            1: trunc,
-            2: coulomb,
-            3: yukawa,
-            4: yukawa-coulomb,
-            5: gaskell,
-            6: gaskell-modified,
-            7: smooth.
-        """
-        if self.correlator is None:
-            raise ValueError("Correlator function not initialized!")
-        elif self.correlator == self.trunc:
-            idx = self.CORRELATOR_TRUNC
-        elif self.correlator == self.coulomb:
-            idx = self.CORRELATOR_COULOMB
-        elif self.correlator == self.yukawa:
-            idx = self.CORRELATOR_YUKAWA
-        elif self.correlator == self.yukawa_coulomb:
-            idx = self.CORRELATOR_YUKAWA_COULOMB
-        elif self.correlator == self.gaskell:
-            idx = self.CORRELATOR_GASKELL
-            raise NotImplementedError("Gaskell correlator not implemented yet!")
-        elif self.correlator == self.gaskell_modified:
-            idx = self.CORRELATOR_GASKELL_MODIFIED
-            raise NotImplementedError("Modified Gaskell correlator not implemented yet!")
-        elif self.correlator == self.smooth:
-            idx = self.CORRELATOR_SMOOTH
-            raise NotImplementedError("Smooth correlator not implemented yet!")
-        elif self.correlator == self.RPA:
-            idx = self.CORRELATOR_RPA
-            raise NotImplementedError("RPA correlator not implemented yet!")
-        else:
-            raise ValueError("Correlator function not recognized!")
-        return idx
-
-    def yukawa(self, kSquare, multiply_by_k_square=False):
-        '''
-        The G=0 terms need more consideration
-        '''
-        rho = self.n_ele / self.Omega
-        gamma_0 = np.sqrt(rho / 4. * np.pi)
-        if self.gamma is None:
-            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
-            gamma = gamma_0
-        else:
-            gamma = self.gamma * gamma_0
-        # has to be - and divided by gamm to satisfy the cusp condition
-        a = -4. * np.pi
-        if self.k_cutoff is not None:
-            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-            # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
-            k_cutoffDenom = (k_cutoffSquare + gamma)
-        else:
-            k_cutoffDenom = 1e-12
-        if not multiply_by_k_square:
-            # b = kSquare*(kSquare+gamma**2)
-            b = (kSquare + gamma)
-            result = np.divide(a, b, out=np.zeros_like(b), \
-                               where=np.abs(b) > k_cutoffDenom)
-        else:
-            if kSquare > k_cutoffSquare:
-                result = a / (kSquare + gamma) * kSquare
-            else:
-                result = 0.
-
-        return result
-
-    def trunc(self, kSquare):
-        """ Member function of class UEG. A correlator function. Defined as
-        -4pi/k^4 (k>kc), 0 (k<=kc).
-
-        Parameters
-        ----------
-        kSquare: float or nparray of float
-            the k-vector squared ($k^2$).
-
-        Returns
-        -------
-        result: float or nparray of float
-        """
-        if self.k_cutoff is None:
-            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
-
-        if self.gamma is None:
-            self.gamma = 1.0
-
-        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-
-        if not isinstance(kSquare, np.ndarray):
-            if kSquare <= k_cutoffSquare * (1 + 0.00001):
-                kSquare = 0.
-        else:
-            kSquare[kSquare <= k_cutoffSquare * (1 + 0.00001)] = 0.
-        result = np.divide(-4. * np.pi, kSquare ** 2, out=np.zeros_like(kSquare), \
-                           where=(kSquare > 1e-12))
-        return result * self.gamma
-
-    def gaskell_modified(self, kSquare, multiply_by_k_square=False):
-        '''
-        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
-        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
-        '''
-        # define the parameter mu in gaskell correlator
-        # this calculation will be done multipule times, it is not optimal to
-        # recalculate it everytime. After refactoring all the correlators into
-        # classes, this problem can be solved by using it as parameter of the
-        # gaskall correlator class and only initialize it once. For now I will
-        # keep it here.
-        if self.k_cutoff is not None:
-            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-        else:
-            k_cutoffSquare = 2
-        mu = np.pi
-        # k_fermi.dot(k_fermi)
-
-        if not isinstance(kSquare, np.ndarray):
-            result = 0.
-            if kSquare < k_cutoffSquare and kSquare > 1e-12:
-                # result = 4*mu/kSquare
-                result = 0.
-            else:
-                result = 4 * mu / kSquare ** 2
-        else:
-            result = np.divide(0. * mu, kSquare, out=np.zeros_like(kSquare), \
-                               where=(kSquare > 1e-12))
-            result[kSquare >= k_cutoffSquare] = 0.
-            result += np.divide(4 * mu, kSquare ** 2, out=np.zeros_like(kSquare), \
-                                where=(kSquare >= k_cutoffSquare))
-        # there should be an overall - sign
-        return -result
-
-    def gaskell(self, kSquare, multiply_by_k_square=False):
-        '''
-        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
-        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
-        '''
-        # define the parameter mu in gaskell correlator
-        # this calculation will be done multipule times, it is not optimal to
-        # recalculate it everytime. After refactoring all the correlators into
-        # classes, this problem can be solved by using it as parameter of the
-        # gaskall correlator class and only initialize it once. For now I will
-        # keep it here.
-        rho = self.n_ele / self.Omega
-        mu = np.sqrt(4. * np.pi / rho)
-        k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].kp
-        k_fermi_square = k_fermi.dot(k_fermi)
-        # delta_k_square = (2.*np.pi/self.L)**2
-        delta_k_square = k_fermi_square
-        # int_k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].k
-        # beta_square = kSquare / (k_fermi.dot(k_fermi))
-
-        if self.gamma is not None:
-            gamma = self.gamma
-        else:
-            gamma = 1.
-
-        mu *= gamma
-
-        if self.k_cutoff is not None:
-            k_cutoffSquare = self.k_cutoff ** 2 * delta_k_square
-        else:
-            k_cutoffSquare = 4. * delta_k_square
-
-        if not isinstance(kSquare, np.ndarray):
-            result = 0.
-            if kSquare < k_cutoffSquare and kSquare > 1e-12:
-                result = mu / kSquare
-            else:
-                # result = 4 * mu / kSquare ** 2
-                result = 0.
-        else:
-            result = np.divide(mu, kSquare, out=np.zeros_like(kSquare),
-                               where=(kSquare > 1e-12))
-            result[kSquare > k_cutoffSquare] = 0.
-            # result += np.divide(4 * mu, kSquare ** 2,
-            #                    out=np.zeros_like(kSquare),
-            #                    where=(kSquare >= k_cutoffSquare))
-        # there should be an overall - sign
-        return -result
-
-    def smooth(self, kSquare, multiply_by_k_square=False):
-        '''
-        The G=0 terms need more consideration
-        '''
-        if self.k_cutoff is None:
-            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
-
-        if self.gamma is None:
-            self.gamma = 0.01
-
-        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-
-        kc = np.sqrt(k_cutoffSquare)
-        k = np.sqrt(kSquare)
-        result = np.divide(-4. * np.pi * (1. + special.erf((k - kc) \
-                                                           / (kc * self.gamma))) / 2., kSquare ** 2, \
-                           out=np.zeros_like(kSquare), \
-                           where=kSquare > (kc * self.gamma) ** 2)
-        return result
-
-    def coulomb(self, kSquare, multiply_by_k_square=False):
-        '''
-        The G=0 terms need more consideration
-        '''
-        if self.gamma is None:
-            gamma = 1.
-        else:
-            gamma = self.gamma
-        result = np.divide(-4. * np.pi * gamma, kSquare, \
-                           out=np.zeros_like(kSquare), where=kSquare > 1e-12)
-        return result
-
-    def stg(self, kSquare, multiply_by_k_square=False):
-        if self.gamma is None:
-            rho = self.n_ele / self.Omega
-            gamma = np.sqrt(4. * np.pi * rho)
-            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
-        else:
-            gamma = self.gamma
-        a = -4. * np.pi / gamma
-        if self.k_cutoff is not None:
-            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-            k_cutoffDenom = (k_cutoffSquare + gamma ** 2) ** 2
-        else:
-            k_cutoffDenom = 1e-12
-        if not multiply_by_k_square:
-            b = (kSquare + gamma ** 2) ** 2
-            result = np.divide(a, b, out=np.zeros_like(b), \
-                               where=np.abs(b) > k_cutoffDenom)
-
-        return result
-
-    def yukawa_coulomb(self, kSquare, multiply_by_k_square=False):
-        '''
-        The G=0 terms need more consideration
-        '''
-        gamma_0 = 1.5
-        if self.gamma is None:
-            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
-            gamma = gamma_0
-        else:
-            gamma = self.gamma
-        # A corresponds to 1/gamma**2 in Gruneis paper
-        A = np.sqrt(self.Omega / (4.0 * np.pi * self.n_ele))
-        A = 1. / A * gamma
-        # has to be - and divided by gamm to satisfy the cusp condition
-        a = -4. * np.pi
-        if self.k_cutoff is not None:
-            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-            # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
-            k_cutoffDenom = (k_cutoffSquare + A)
-        else:
-            k_cutoffDenom = 1e-12
-        if not multiply_by_k_square:
-            # b = kSquare*(kSquare+gamma**2)
-            b = (kSquare + A) * kSquare
-            result = np.divide(a, b, out=np.zeros_like(b), where=np.abs(b) > k_cutoffDenom)
-        else:
-            if kSquare > k_cutoffSquare:
-                result = a / (kSquare + A)
-            else:
-                result = 0.
-
-        return result
-    
-    def RPA(self, kSquare):
-        '''
-        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
-        '''
-        rho = self.n_ele / self.Omega
-
-        if self.k_cutoff is not None:
-            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
-        else:
-            k_cutoffSquare = 1e-12
-
-        if self.gamma is None:
-            self.gamma = 1.
-
-        if not isinstance(kSquare, np.ndarray):
-            kVec = np.sqrt(kSquare)
-            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
-            if kVec > (2*kFermi):
-                T2 = 1.0
-            elif kVec <= (2*kFermi):
-                T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
-            a = 2. * rho * T2
-            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            k_cutoffDenom = k_cutoffSquare * a
-            if np.abs(a) >= k_cutoffSquare:
-                A = 1.0 / a
-            else:
-                A = 0.0
-            if np.abs(a * kSquare) >= k_cutoffDenom:
-                B = b / (kSquare * a)
-            else:
-                B = 0.0
-
-            result = A - B
-        else:
-            kVec = np.sqrt(kSquare)
-            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
-            T2 = np.where(kVec > (2*kFermi), 
-                          1.0,
-                          (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3)
-            a = 2. * rho * T2
-            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            k_cutoffDenom = k_cutoffSquare * a
-            A = np.where(np.abs(a) >= k_cutoffSquare, 
-                         1.0 / a, 
-                         0.0)
-            B = np.where(np.abs(a * kSquare) >= k_cutoffDenom,
-                         b / (kSquare * a),
-                         0.0)
-            result = A - B
-    
-        return result * self.gamma
-
     def calcGamma(self, overlap_basis, nP):
         """
         Interface to CC4S, for test purpose only, not essential
@@ -1429,3 +1092,415 @@ class UEG:
             float
         """
         return -1.760118928190842*rs**(-1)*nel**(-1./3)/2
+
+    # CORRELATORS -----------------------------------------------------
+    # Collection of correlators, should them be collected into a class?
+    # Each correlator has some default parameters that are dependent on
+    # the system and they are specific to UEG, so they should be part of
+    # the UEG class.
+
+    def get_correlator_idx(self):
+        """ Member function of class UEG.
+        Returns an integer index for the correlator function being used.
+
+        Returns
+        -------
+        idx: int
+            index of the correlator function
+            0: None,
+            1: trunc,
+            2: coulomb,
+            3: coulomb-yukawa,
+            4: RPA.
+        """
+        if self.correlator is None:
+            raise ValueError("Correlator function not initialized!")
+        elif self.correlator == self.trunc:
+            idx = self.CORRELATOR_TRUNC
+        elif self.correlator == self.coulomb:
+            idx = self.CORRELATOR_COULOMB
+        elif self.correlator == self.coulomb_yukawa:
+            idx = self.CORRELATOR_COULOMB_YUKAWA
+        elif self.correlator == self.RPA:
+            idx = self.CORRELATOR_RPA
+        else:
+            raise ValueError("Correlator function not recognized!")
+        return idx
+
+    def trunc(self, kSquare):
+        """ Member function of class UEG. 
+        A correlator function, defined as
+        -4pi/k^4 (k>kc), 0 (k<=kc).
+        i.e. u(k) = -γ · 4π / k⁴, for k > k_c; 0, for k ≤ k_c
+
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+
+        Returns
+        -------
+        result: float or nparray of float
+        """
+
+        if self.gamma is None:
+            gamma = 1.0
+        else:
+            gamma = self.gamma
+
+        if self.k_cutoff is None:
+            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
+
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+
+        if not isinstance(kSquare, np.ndarray):
+            if kSquare <= k_cutoffSquare * (1 + 0.00001):
+                kSquare = 0.
+        else:
+            kSquare[kSquare <= k_cutoffSquare * (1 + 0.00001)] = 0.
+        result = np.divide(-4. * np.pi, kSquare ** 2, out=np.zeros_like(kSquare), \
+                           where=(kSquare > self.denom_thrs))
+        return result * gamma
+
+    def coulomb(self, kSquare):
+        ''' Member function of class UEG.
+        A  correlator function, defined as
+        -4pi/k^2.   
+        i.e. u(k) = -γ · 4π / k²
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Note:
+        ---------
+        The G=0 terms need more consideration
+        '''
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+        result = np.divide(-4. * np.pi, kSquare, \
+                           out=np.zeros_like(kSquare), where=kSquare > self.denom_thrs)
+        return result * gamma
+    
+    def coulomb_yukawa(self, kSquare):
+        ''' Member function of class UEG.
+        A correlator function, defined as
+        -4pi/(k^2*(k^2+wp)) ; wp = sqrt(4*pi*rho) [plasma frequency].
+        i.e. u(k) = -γ · 4π / (k² · (k² + ωₚ))
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Reference:
+        ---------
+        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+        Note:
+        ---------
+        The G=0 terms need more consideration.
+        '''
+
+        rho = self.n_ele / self.Omega
+
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+
+        wp = np.sqrt(4. * np.pi * rho)
+        if not isinstance(kSquare, np.ndarray):
+            a = kSquare * wp
+            b = (kSquare + wp) * wp
+            if np.abs(a) > self.denom_thrs:
+                A = 1.0 / a
+            else:
+                A = 0.0
+            if np.abs(b) > self.denom_thrs:
+                B = 1.0 / b
+            else:
+                B = 0.0
+            result = A - B
+        else:
+            a = kSquare * wp
+            b = (kSquare + wp) * wp
+            A = np.where(np.abs(a) > self.denom_thrs, 
+                         1.0 / a, 
+                         0.0)
+            B = np.where(np.abs(b) > self.denom_thrs,
+                         1.0 / b,
+                         0.0)
+            result = A - B
+
+        result *= - 4. * np.pi
+        return result * gamma
+   
+    def RPA(self, kSquare):
+        ''' Member function of class UEG.
+        A correlator function based on the RPA theory, defined as:
+        u(k) = γ · [A(k) - B(k)]
+        with,
+        A(k) = 1 / (2ρ · T₂(k))
+        B(k) = √(k⁴ + 16π·ρ·T₂(k)²) / (2ρ · T₂(k) · k²)
+        where,
+            T₂(k) = 1,                                   if k > 2k_F
+            T₂(k) = (3/4)·(k/k_F) - (1/16)·(k/k_F)³,     if k ≤ 2k_F
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Reference:
+        ---------
+        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+        '''
+
+        rho = self.n_ele / self.Omega
+
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+
+        if not isinstance(kSquare, np.ndarray):
+            kVec = np.sqrt(kSquare)
+            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+            if kVec > (2*kFermi):
+                T2 = 1.0
+            elif kVec <= (2*kFermi):
+                T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
+            a = 2. * rho * T2
+            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            if np.abs(a) > self.denom_thrs:
+                A = 1.0 / a
+            else:
+                A = 0.0
+            if np.abs(a * kSquare) > self.denom_thrs:
+                B = b / (a * kSquare)
+            else:
+                B = 0.0
+            result = A - B
+        else:
+            kVec = np.sqrt(kSquare)
+            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+            T2 = np.where(kVec > (2*kFermi), 
+                          1.0,
+                          (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3)
+            a = 2. * rho * T2
+            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            A = np.where(np.abs(a) > self.denom_thrs, 
+                         1.0 / a, 
+                         0.0)
+            B = np.where(np.abs(a * kSquare) > self.denom_thrs,
+                         b / (a * kSquare),
+                         0.0)
+            result = A - B
+    
+        return result * gamma
+   
+    # NOT-MAINTAINED CORRELATORS ----------------------------------------------
+    # List of non-maintained correlators, kept here for future reference.
+    # 1. Yukawa correlator,
+    # 2. Mod. Gaskell correlator,
+    # 3. Gaskell correlator.
+    # 4. Smooth correlator,
+    # 5. STG correlator,
+    # 6. Yukawa-Coulomb correlator.
+
+#    def yukawa(self, kSquare, multiply_by_k_square=False):
+#        '''
+#        The G=0 terms need more consideration
+#        '''
+#        rho = self.n_ele / self.Omega
+#        gamma_0 = np.sqrt(rho / 4. * np.pi)
+#        if self.gamma is None:
+#            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+#            gamma = gamma_0
+#        else:
+#            gamma = self.gamma * gamma_0
+#        # has to be - and divided by gamm to satisfy the cusp condition
+#        a = -4. * np.pi
+#        if self.k_cutoff is not None:
+#            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+#            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
+#            # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
+#            k_cutoffDenom = (k_cutoffSquare + gamma)
+#        else:
+#            k_cutoffDenom = 1e-12
+#        if not multiply_by_k_square:
+#            # b = kSquare*(kSquare+gamma**2)
+#            b = (kSquare + gamma)
+#            result = np.divide(a, b, out=np.zeros_like(b), \
+#                               where=np.abs(b) > k_cutoffDenom)
+#        else:
+#            if kSquare > k_cutoffSquare:
+#                result = a / (kSquare + gamma) * kSquare
+#            else:
+#                result = 0.
+#
+#        return result
+#
+#    def gaskell_modified(self, kSquare, multiply_by_k_square=False):
+#        '''
+#        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
+#        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
+#        '''
+#        # define the parameter mu in gaskell correlator
+#        # this calculation will be done multipule times, it is not optimal to
+#        # recalculate it everytime. After refactoring all the correlators into
+#        # classes, this problem can be solved by using it as parameter of the
+#        # gaskall correlator class and only initialize it once. For now I will
+#        # keep it here.
+#        if self.k_cutoff is not None:
+#            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+#        else:
+#            k_cutoffSquare = 2
+#        mu = np.pi
+#        # k_fermi.dot(k_fermi)
+#
+#        if not isinstance(kSquare, np.ndarray):
+#            result = 0.
+#            if kSquare < k_cutoffSquare and kSquare > 1e-12:
+#                # result = 4*mu/kSquare
+#                result = 0.
+#            else:
+#                result = 4 * mu / kSquare ** 2
+#        else:
+#            result = np.divide(0. * mu, kSquare, out=np.zeros_like(kSquare), \
+#                               where=(kSquare > 1e-12))
+#            result[kSquare >= k_cutoffSquare] = 0.
+#            result += np.divide(4 * mu, kSquare ** 2, out=np.zeros_like(kSquare), \
+#                                where=(kSquare >= k_cutoffSquare))
+#        # there should be an overall - sign
+#        return -result
+#
+#    def gaskell(self, kSquare, multiply_by_k_square=False):
+#        '''
+#        input: G^2, will be scaled by k_fermi as beta^2=G^2/k_f^2
+#        output: \mu/beta^2, beta<2; 4\mu/beta^4, beta>2
+#        '''
+#        # define the parameter mu in gaskell correlator
+#        # this calculation will be done multipule times, it is not optimal to
+#        # recalculate it everytime. After refactoring all the correlators into
+#        # classes, this problem can be solved by using it as parameter of the
+#        # gaskall correlator class and only initialize it once. For now I will
+#        # keep it here.
+#        rho = self.n_ele / self.Omega
+#        mu = np.sqrt(4. * np.pi / rho)
+#        k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].kp
+#        k_fermi_square = k_fermi.dot(k_fermi)
+#        # delta_k_square = (2.*np.pi/self.L)**2
+#        delta_k_square = k_fermi_square
+#        # int_k_fermi = self.basis_fns[int(self.n_ele / 2) * 2].k
+#        # beta_square = kSquare / (k_fermi.dot(k_fermi))
+#
+#        if self.gamma is not None:
+#            gamma = self.gamma
+#        else:
+#            gamma = 1.
+#
+#        mu *= gamma
+#
+#        if self.k_cutoff is not None:
+#            k_cutoffSquare = self.k_cutoff ** 2 * delta_k_square
+#        else:
+#            k_cutoffSquare = 4. * delta_k_square
+#
+#        if not isinstance(kSquare, np.ndarray):
+#            result = 0.
+#            if kSquare < k_cutoffSquare and kSquare > 1e-12:
+#                result = mu / kSquare
+#            else:
+#                # result = 4 * mu / kSquare ** 2
+#                result = 0.
+#        else:
+#            result = np.divide(mu, kSquare, out=np.zeros_like(kSquare),
+#                               where=(kSquare > 1e-12))
+#            result[kSquare > k_cutoffSquare] = 0.
+#            # result += np.divide(4 * mu, kSquare ** 2,
+#            #                    out=np.zeros_like(kSquare),
+#            #                    where=(kSquare >= k_cutoffSquare))
+#        # there should be an overall - sign
+#        return -result
+#
+#    def smooth(self, kSquare, multiply_by_k_square=False):
+#        '''
+#        The G=0 terms need more consideration
+#        '''
+#        if self.k_cutoff is None:
+#            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
+#
+#        if self.gamma is None:
+#            self.gamma = 0.01
+#
+#        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+#
+#        kc = np.sqrt(k_cutoffSquare)
+#        k = np.sqrt(kSquare)
+#        result = np.divide(-4. * np.pi * (1. + special.erf((k - kc) \
+#                                                           / (kc * self.gamma))) / 2., kSquare ** 2, \
+#                           out=np.zeros_like(kSquare), \
+#                           where=kSquare > (kc * self.gamma) ** 2)
+#        return result
+#
+#    def stg(self, kSquare, multiply_by_k_square=False):
+#        if self.gamma is None:
+#            rho = self.n_ele / self.Omega
+#            gamma = np.sqrt(4. * np.pi * rho)
+#            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+#        else:
+#            gamma = self.gamma
+#        a = -4. * np.pi / gamma
+#        if self.k_cutoff is not None:
+#            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+#            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
+#            k_cutoffDenom = (k_cutoffSquare + gamma ** 2) ** 2
+#        else:
+#            k_cutoffDenom = 1e-12
+#        if not multiply_by_k_square:
+#            b = (kSquare + gamma ** 2) ** 2
+#            result = np.divide(a, b, out=np.zeros_like(b), \
+#                               where=np.abs(b) > k_cutoffDenom)
+#
+#        return result
+#
+#    def yukawa_coulomb(self, kSquare, multiply_by_k_square=False):
+#        '''
+#        The G=0 terms need more consideration
+#        '''
+#        gamma_0 = 1.5
+#        if self.gamma is None:
+#            # gamma = np.sqrt(4.*(3.*rho/np.pi)**(1/3.))
+#            gamma = gamma_0
+#        else:
+#            gamma = self.gamma
+#        # A corresponds to 1/gamma**2 in Gruneis paper
+#        A = np.sqrt(self.Omega / (4.0 * np.pi * self.n_ele))
+#        A = 1. / A * gamma
+#        # has to be - and divided by gamm to satisfy the cusp condition
+#        a = -4. * np.pi
+#        if self.k_cutoff is not None:
+#            k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+#            k_cutoffSquare = max(k_cutoffSquare, 1e-12)
+#            # k_cutoffDenom = k_cutoffSquare*(k_cutoffSquare + gamma**2)
+#            k_cutoffDenom = (k_cutoffSquare + A)
+#        else:
+#            k_cutoffDenom = 1e-12
+#        if not multiply_by_k_square:
+#            # b = kSquare*(kSquare+gamma**2)
+#            b = (kSquare + A) * kSquare
+#            result = np.divide(a, b, out=np.zeros_like(b), where=np.abs(b) > k_cutoffDenom)
+#        else:
+#            if kSquare > k_cutoffSquare:
+#                result = a / (kSquare + A)
+#            else:
+#                result = 0.
+#
+#        return result
