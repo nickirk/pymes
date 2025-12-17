@@ -1155,11 +1155,16 @@ class UEG:
 
         if not isinstance(kSquare, np.ndarray):
             if kSquare <= k_cutoffSquare * (1 + 0.00001):
-                kSquare = 0.
+                result = 0.0
+            elif kSquare > self.denom_thrs:
+                result = -4. * np.pi / (kSquare ** 2)
+            else:
+                result = 0.0
         else:
-            kSquare[kSquare <= k_cutoffSquare * (1 + 0.00001)] = 0.
-        result = np.divide(-4. * np.pi, kSquare ** 2, out=np.zeros_like(kSquare), \
-                           where=(kSquare > self.denom_thrs))
+            cond = (kSquare > k_cutoffSquare * (1 + 0.00001)) & (kSquare > self.denom_thrs)
+            result = np.divide(-4. * np.pi, kSquare ** 2, 
+                        out=np.zeros_like(kSquare), 
+                        where=cond)
         return result * gamma
 
     def coulomb(self, kSquare):
