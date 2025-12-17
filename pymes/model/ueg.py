@@ -1219,28 +1219,18 @@ class UEG:
             gamma = self.gamma
 
         wp = np.sqrt(4. * np.pi * rho)
+        a  = - 4. * np.pi
         if not isinstance(kSquare, np.ndarray):
-            a = kSquare * wp
-            b = (kSquare + wp) * wp
-            if np.abs(a) > self.denom_thrs:
-                A = 1.0 / a
-            else:
-                A = 0.0
+            b = kSquare * (kSquare + wp)
             if np.abs(b) > self.denom_thrs:
-                B = 1.0 / b
+                result = a / b
             else:
-                B = 0.0
-            result = - 4. * np.pi * (A - B)
+                result = 0.0
         else:
-            a = kSquare * wp
-            b = (kSquare + wp) * wp
-            A = np.where(np.abs(a) > self.denom_thrs, 
-                         1.0 / a, 
+            b = kSquare * (kSquare + wp)
+            result = np.where(np.abs(b) > self.denom_thrs,
+                         a / b,
                          0.0)
-            B = np.where(np.abs(b) > self.denom_thrs,
-                         1.0 / b,
-                         0.0)
-            result = - 4. * np.pi * ( A - B )
         return result * gamma
    
     def RPA(self, kSquare):
@@ -1279,32 +1269,23 @@ class UEG:
                 T2 = 1.0
             elif kVec <= (2*kFermi):
                 T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
-            a = 2. * rho * T2
-            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            if np.abs(a) > self.denom_thrs:
-                A = 1.0 / a
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            b = 2. * rho * T2 * kSquare
+            if np.abs(b) > self.denom_thrs:
+                result = a / b
             else:
-                A = 0.0
-            if np.abs(a * kSquare) > self.denom_thrs:
-                B = b / (a * kSquare)
-            else:
-                B = 0.0
-            result = A - B
+                result = 0.0
         else:
             kVec = np.sqrt(kSquare)
             kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
             T2 = np.where(kVec > (2*kFermi), 
                           1.0,
                           (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3)
-            a = 2. * rho * T2
-            b = np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            A = np.where(np.abs(a) > self.denom_thrs, 
-                         1.0 / a, 
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
+            b = 2. * rho * T2 * kSquare
+            result = np.where(np.abs(b) > self.denom_thrs,
+                         a/b,
                          0.0)
-            B = np.where(np.abs(a * kSquare) > self.denom_thrs,
-                         b / (a * kSquare),
-                         0.0)
-            result = A - B
     
         return result * gamma
    

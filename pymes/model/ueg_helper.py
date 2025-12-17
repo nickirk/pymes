@@ -424,18 +424,13 @@ def _coulomb_yukawa_correlator(kSquare, rho, gamma, denom_thrs):
     See coulomb_yukawa() in ueg.py for more details.
     """
     wp = np.sqrt(4. * np.pi * rho)
-    a = kSquare * wp
-    b = (kSquare + wp) * wp
-    if np.abs(a) > denom_thrs:
-        A = 1.0 / a
-    else:
-        A = 0.0
+    a = - 4. * np.pi
+    b = kSquare * (kSquare + wp)
     if np.abs(b) > denom_thrs:
-        B = 1.0 / b
+        corr = a / b
     else:
-        B = 0.0
-    corr = (- 4. * np.pi) * (A - B) * gamma
-    return corr
+        corr = 0.0
+    return corr * gamma
 
 @jit(nopython=True)
 def _RPA_correlator(kSquare, rho, gamma, denom_thrs):
@@ -449,18 +444,13 @@ def _RPA_correlator(kSquare, rho, gamma, denom_thrs):
         T2 = 1.0
     elif kVec <= (2*kFermi):
         T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
-    a = 2. * rho * T2
-    b = np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
-    if np.abs(a) > denom_thrs:
-        A = 1.0 / a
+    a = kSquare - np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
+    b = 2. * rho * T2 * kSquare
+    if np.abs(b) > denom_thrs:
+        corr = a / b
     else:
-        A = 0.0
-    if np.abs(a * kSquare) > denom_thrs:
-        B = b / (a * kSquare)
-    else:
-        B = 0.0
-    corr = (A - B) * gamma
-    return corr
+        corr = 0.0
+    return corr * gamma
 
 #@jit(nopython=True)
 #def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
