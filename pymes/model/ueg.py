@@ -83,6 +83,10 @@ class UEG:
         #: volume of the cubic simulation cell containing n_ele electrons at the density.
         #: of rs.
         self.Omega = self.L ** 3
+        #: electron density.
+        self.rho = self.n_ele / self.Omega
+        #: Fermi wave vector.
+        self.kFermi = (3 * np.pi ** 2 * self.rho) ** (1.0 / 3.0)
 
         self.basis_fns = None
 
@@ -93,6 +97,11 @@ class UEG:
         self.basis_indices_map = None
 
         self.kPrime = None
+
+        #self.kPrimeConvInt = None
+
+        #self.xConvInt = None
+
 
         self.correlator = None
 
@@ -424,8 +433,8 @@ class UEG:
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Compute the integrals.
-        V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.imax, 
-                                k_cutoff, gamma,
+        V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.rho,
+                                self.imax, k_cutoff, gamma,
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
@@ -902,6 +911,8 @@ class UEG:
 
         result = 0.0
         return result
+    
+    #def init_ConvGrid( self, dk)
 
     def triple_contractions_in_3_body(self):
         """
@@ -1211,14 +1222,12 @@ class UEG:
         The G=0 terms need more consideration.
         '''
 
-        rho = self.n_ele / self.Omega
-
         if self.gamma is None:
             gamma = 1.
         else:
             gamma = self.gamma
 
-        wp = np.sqrt(4. * np.pi * rho)
+        wp = np.sqrt(4. * np.pi * self.rho)
         a  = - 4. * np.pi
         if not isinstance(kSquare, np.ndarray):
             b = kSquare * (kSquare + wp)
@@ -1255,8 +1264,6 @@ class UEG:
         J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
         '''
 
-        rho = self.n_ele / self.Omega
-
         if self.gamma is None:
             gamma = 1.
         else:
@@ -1264,25 +1271,23 @@ class UEG:
 
         if not isinstance(kSquare, np.ndarray):
             kVec = np.sqrt(kSquare)
-            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
-            if kVec > (2*kFermi):
+            if kVec > (2*self.kFermi):
                 T2 = 1.0
-            elif kVec <= (2*kFermi):
-                T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
-            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            b = 2. * rho * T2 * kSquare
+            elif kVec <= (2*self.kFermi):
+                T2 = (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
+            b = 2. * self.rho * T2 * kSquare
             if np.abs(b) > self.denom_thrs:
                 result = a / b
             else:
                 result = 0.0
         else:
             kVec = np.sqrt(kSquare)
-            kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
-            T2 = np.where(kVec > (2*kFermi), 
+            T2 = np.where(kVec > (2*self.kFermi), 
                           1.0,
-                          (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3)
-            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * rho * (T2**2))
-            b = 2. * rho * T2 * kSquare
+                          (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3)
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
+            b = 2. * self.rho * T2 * kSquare
             result = np.where(np.abs(b) > self.denom_thrs,
                          a/b,
                          0.0)

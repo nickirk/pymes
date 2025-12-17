@@ -17,7 +17,7 @@ Correlators:
 
 
 @jit(nopython=True, parallel=True)
-def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma, 
+def _get_2b_int( idx, n_ele, Omega, L, rho, imax, k_cutoff, gamma, 
                     kPrime, basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
@@ -34,6 +34,8 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
         volume of the cubic simulation cell
     L: float
         length of the cubic simulation cell
+    rho: float
+        electron density
     imax: int
         maximum k-point index in each direction
     k_cutoff: float
@@ -76,7 +78,6 @@ def _get_2b_int( idx, n_ele, Omega, L, imax, k_cutoff, gamma,
     num_k_in_each_dir = imax * 2 + 1
     V_pqrs = np.zeros((idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]), dtype=dtype)
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2 #:  only for TRUNC.
-    rho = n_ele / Omega
 
     #p_range = idx[1] - idx[0]
     #r_range = idx[5] - idx[4]
