@@ -20,7 +20,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, denom_thrs=1e-12):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, denom_thrs=1e-30):
         """
         Parameters
         ----------
@@ -96,11 +96,15 @@ class UEG:
 
         self.basis_indices_map = None
 
+        #: Convolution integral for the simulation cell.
         self.kPrime = None
 
-        #self.kPrimeConvInt = None
-
-        #self.xConvInt = None
+        #: Convolution integral in the TDL.
+        self.kp_grid = None
+        self.x_grid = None
+        self.kp_max = None
+        self.d_kp = None
+        self.d_x = None
 
 
         self.correlator = None
@@ -893,7 +897,7 @@ class UEG:
 
         self.kPrime = kPrime
 
-    def intNablaUSquare(self, k):
+    def intNablaUSquare(self, kVec):
         """ 
         Member function of class UEG. 
         This function computes the convolution integral of the squared 
@@ -902,17 +906,62 @@ class UEG:
 
         Parameters
         ---------- 
-        k: nparray of float dtype, size 3
+        kVec: nparray of float dtype, size 3
             momentum transfer vector
         Returns
         -------
         result: float
         """
-
+        if self.kp_grid is None or self.x_grid is None:
+            raise ValueError("Spherical integration grid not initialized!")
+        # Compute |k| from kVec.
+        kSquare = kVec.dot(kVec)
+        k = np.sqrt(kSquare)
+        # Prefactor.
+        prefactor = (self.d_kp * self.d_x)/((2.0 * np.pi)**2)
+        # Precompute u(k') for all k' in the grid.
+        u_kp_grid = self.correlator(self.kp_grid ** 2)
+        # Now perform the convolution integral using the spherical grid.
         result = 0.0
+        for ikp, kp in enumerate(self.kp_grid):
+            u_kp = u_kp_grid[ikp]
+            inner_int = 0.0
+            for ix, x in enumerate(self.x_grid):
+                kMinusKpSquare = kSquare + kp ** 2 - 2.0 * k * kp * x
+                kMinusKpSquare = 0.0 if kMinusKpSquare < 0.0 else kMinusKpSquare
+                reg = (2.0 * kMinusKpSquare)/(kMinusKpSquare + kSquare)
+                u_kMinusKp = self.correlator(kMinusKpSquare)
+                inner_int += (k*kp*x - kp**2) * u_kMinusKp * reg
+            result += kp**2 * u_kp * inner_int
+        result *= prefactor # 2π from azimuthal integration.
+
         return result
     
-    #def init_ConvGrid( self, dk)
+    def init_ConvGrid( self, dx=0.002, dkfac=40, kmaxfac=20):
+        """
+        Member function of class UEG
+        This function initializes the integration spherical grid for the 
+        convolution integral of the squared gradient of the correlator
+        function in k-space.
+        Parameters
+        ----------
+        dx: float
+            grid spacing dx of x=cosθ∈[-1,1],
+        dkfac: int
+            determines the k'-grid spacing as dk = k_F/kfac,
+        kmaxfac: float
+            maximum k' value in the grid kmax = k_F*kmaxfac,
+        Returns
+        """
+        self.d_x = dx
+        self.d_kp = self.kFermi / dkfac
+        self.kp_max = self.kFermi * kmaxfac
+
+        kgrid = np.arange(0.0, self.kp_max + self.d_kp, self.d_kp)
+        self.kp_grid = kgrid
+
+        xgrid = np.arange(-1.0, 1.0 + dx, dx)
+        self.x_grid = xgrid
 
     def triple_contractions_in_3_body(self):
         """
@@ -1273,7 +1322,7 @@ class UEG:
             kVec = np.sqrt(kSquare)
             if kVec > (2*self.kFermi):
                 T2 = 1.0
-            elif kVec <= (2*self.kFermi):
+            else:
                 T2 = (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3
             a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
             b = 2. * self.rho * T2 * kSquare

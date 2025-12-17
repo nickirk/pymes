@@ -17,7 +17,8 @@ Correlators:
 
 
 @jit(nopython=True, parallel=True)
-def _get_2b_int( idx, n_ele, Omega, L, rho, imax, k_cutoff, gamma, 
+def _get_2b_int( idx, n_ele, Omega, L, rho, 
+                    imax, k_cutoff, gamma, 
                     kPrime, basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
@@ -443,7 +444,7 @@ def _RPA_correlator(kSquare, rho, gamma, denom_thrs):
     kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
     if kVec > (2*kFermi):
         T2 = 1.0
-    elif kVec <= (2*kFermi):
+    else:
         T2 = (3./4.)*(kVec/kFermi) - (1./16.)*(kVec/kFermi)**3
     a = kSquare - np.sqrt( (kSquare** 2) + 16. * np.pi * rho * (T2**2) )
     b = 2. * rho * T2 * kSquare
