@@ -20,7 +20,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, denom_thrs=1e-30):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False):
         """
         Parameters
         ----------
@@ -35,8 +35,6 @@ class UEG:
         is_tc: bool
             parameter which determines whether transcorrelated framework is
             active or not for the calculation of the integrals.
-        denom_thrs: float
-            denominator regularization threshold.
 
         Attributes
         ----------
@@ -121,9 +119,6 @@ class UEG:
         self.CORRELATOR_COULOMB = 2
         self.CORRELATOR_COULOMB_YUKAWA = 3
         self.CORRELATOR_RPA = 4
-
-        #: Denominator regularization threshlod.
-        self.denom_thrs = denom_thrs
 
     def is_k_in_basis(self, ke):
         """
@@ -268,6 +263,11 @@ class UEG:
                     raise ValueError("K-cutoff for the transcorrelated trunc. correlator not initialized!")
                 else:
                     print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+            else:
+                if self.k_cutoff is None:
+                    print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
+                else:
+                    print_logging_info("K-cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
         else:
             print_logging_info("Using non-TC method", level=1)
         
@@ -410,7 +410,7 @@ class UEG:
         if self.is_tc:
             if self.correlator is None:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
-            if self.correlator is self.trunc:
+            if self.correlator == self.trunc:
                 if self.k_cutoff is None:
                     raise ValueError("K-Cutoff for the transcorrelated trunc. correlator not initialized!")
 
@@ -427,7 +427,7 @@ class UEG:
             correlator_idx = self.get_correlator_idx()
         else:
             correlator_idx = 0  # None
-        k_cutoff = self.k_cutoff if self.k_cutoff is not None else  int(np.ceil(np.sqrt(self.cutoff)))
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
@@ -442,7 +442,7 @@ class UEG:
                                 kPrime, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
-                                correlator_idx, self.denom_thrs,
+                                correlator_idx,
                                 dtype=dtype)
         return V_pqrs
     
@@ -923,16 +923,25 @@ class UEG:
         u_kp_grid = self.correlator(self.kp_grid ** 2)
         # Now perform the convolution integral using the spherical grid.
         result = 0.0
-        for ikp, kp in enumerate(self.kp_grid):
-            u_kp = u_kp_grid[ikp]
+        #for ikp, kp in enumerate(self.kp_grid):
+        for ix, x in enumerate(self.x_grid):
+            #u_kp = u_kp_grid[ikp]
             inner_int = 0.0
-            for ix, x in enumerate(self.x_grid):
+            #for ix, x in enumerate(self.x_grid):
+            for ikp, kp in enumerate(self.kp_grid):
+                if kp == 0.0:
+                    continue
+                u_kp = u_kp_grid[ikp]
                 kMinusKpSquare = kSquare + kp ** 2 - 2.0 * k * kp * x
                 kMinusKpSquare = 0.0 if kMinusKpSquare < 0.0 else kMinusKpSquare
-                reg = (2.0 * kMinusKpSquare)/(kMinusKpSquare + kSquare)
+                if kMinusKpSquare == 0.0:
+                    continue
+                reg = (2.0 * kMinusKpSquare**2)/(kMinusKpSquare**2 + kp**4)
+                #reg = 1.0
                 u_kMinusKp = self.correlator(kMinusKpSquare)
-                inner_int += (k*kp*x - kp**2) * u_kMinusKp * reg
-            result += kp**2 * u_kp * inner_int
+                inner_int += (k*kp*x - kp**2) * u_kMinusKp * reg * kp**2 * u_kp
+            result += inner_int
+            print_logging_info("Intermediate result at x = {:.4f}  {:.8f}".format(x, inner_int), level=0)
         result *= prefactor # 2π from azimuthal integration.
 
         return result
@@ -1216,12 +1225,12 @@ class UEG:
         if not isinstance(kSquare, np.ndarray):
             if kSquare <= k_cutoffSquare * (1 + 0.00001):
                 result = 0.0
-            elif kSquare > self.denom_thrs:
+            elif kSquare > 1.e-12:
                 result = -4. * np.pi / (kSquare ** 2)
             else:
                 result = 0.0
         else:
-            cond = (kSquare > k_cutoffSquare * (1 + 0.00001)) & (kSquare > self.denom_thrs)
+            cond = (kSquare > k_cutoffSquare * (1 + 0.00001)) & (kSquare > 1.e-12)
             result = np.divide(-4. * np.pi, kSquare ** 2, 
                         out=np.zeros_like(kSquare), 
                         where=cond)
@@ -1247,8 +1256,11 @@ class UEG:
             gamma = 1.
         else:
             gamma = self.gamma
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
         result = np.divide(-4. * np.pi, kSquare, \
-                           out=np.zeros_like(kSquare), where=kSquare > self.denom_thrs)
+                           out=np.zeros_like(kSquare), where=kSquare > k_cutoffSquare)
         return result * gamma
     
     def coulomb_yukawa(self, kSquare):
@@ -1275,18 +1287,21 @@ class UEG:
             gamma = 1.
         else:
             gamma = self.gamma
-
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
         wp = np.sqrt(4. * np.pi * self.rho)
+        k_cutoffDenom = k_cutoffSquare * (k_cutoffSquare + wp)
         a  = - 4. * np.pi
         if not isinstance(kSquare, np.ndarray):
             b = kSquare * (kSquare + wp)
-            if np.abs(b) > self.denom_thrs:
+            if np.abs(b) > k_cutoffDenom:
                 result = a / b
             else:
                 result = 0.0
         else:
             b = kSquare * (kSquare + wp)
-            result = np.where(np.abs(b) > self.denom_thrs,
+            result = np.where(np.abs(b) > k_cutoffDenom,
                          a / b,
                          0.0)
         return result * gamma
@@ -1317,6 +1332,12 @@ class UEG:
             gamma = 1.
         else:
             gamma = self.gamma
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoff = self.k_cutoff * (2 * np.pi / self.L)
+        k_cutoffDenom = 2. * (k_cutoff**2) * self.rho *   \
+                        ((3./4.)*(k_cutoff/self.kFermi) - \
+                        (1./16.)*(k_cutoff/self.kFermi)**3)
 
         if not isinstance(kSquare, np.ndarray):
             kVec = np.sqrt(kSquare)
@@ -1326,7 +1347,7 @@ class UEG:
                 T2 = (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3
             a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
             b = 2. * self.rho * T2 * kSquare
-            if np.abs(b) > self.denom_thrs:
+            if np.abs(b) > k_cutoffDenom:
                 result = a / b
             else:
                 result = 0.0
@@ -1337,7 +1358,7 @@ class UEG:
                           (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3)
             a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
             b = 2. * self.rho * T2 * kSquare
-            result = np.where(np.abs(b) > self.denom_thrs,
+            result = np.where(np.abs(b) > k_cutoffDenom,
                          a/b,
                          0.0)
     

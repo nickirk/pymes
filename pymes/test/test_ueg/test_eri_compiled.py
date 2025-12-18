@@ -48,7 +48,6 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
     L = ueg_model.L
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     
     # Test with various k-vectors
@@ -71,7 +70,7 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
         result_original = ueg_model.trunc(kSquare)
         
         # Numba-compiled function
-        result_compiled = _trunc_correlator(kSquare, k_cutoffSquare, gamma, denom_thrs)
+        result_compiled = _trunc_correlator(kSquare, k_cutoffSquare, gamma)
         
         # Compare
         diff = np.abs(result_original - result_compiled)
@@ -92,7 +91,7 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
     kSquare_array = np.array(test_k_values)
     result_original_array = ueg_model.trunc(kSquare_array)
     
-    result_compiled_array = np.array([_trunc_correlator(k, k_cutoffSquare, gamma, denom_thrs) 
+    result_compiled_array = np.array([_trunc_correlator(k, k_cutoffSquare, gamma) 
                                       for k in kSquare_array])
     
     diff_array = np.abs(result_original_array - result_compiled_array)
@@ -130,8 +129,9 @@ def test_coulomb_correlator(ueg_model, tolerance=1e-12):
     
     # Prepare test data
     L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     
     # Test with various k-vectors
     test_k_values = [
@@ -152,7 +152,7 @@ def test_coulomb_correlator(ueg_model, tolerance=1e-12):
         result_original = ueg_model.coulomb(kSquare)
         
         # Numba-compiled function
-        result_compiled = _coulomb_correlator(kSquare, gamma, denom_thrs)
+        result_compiled = _coulomb_correlator(kSquare, k_cutoffSquare, gamma)
         
         # Compare
         diff = np.abs(result_original - result_compiled)
@@ -192,9 +192,11 @@ def test_coulomb_yukawa_correlator(ueg_model, tolerance=1e-12):
     print_title("Testing _coulomb_yukawa_correlator", "=")
     
     # Prepare test data
+    L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
     rho = ueg_model.n_ele / ueg_model.Omega
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     
     # Test with various k-vectors
     test_k_values = [
@@ -214,7 +216,7 @@ def test_coulomb_yukawa_correlator(ueg_model, tolerance=1e-12):
         result_original = ueg_model.coulomb_yukawa(kSquare)
         
         # Numba-compiled function
-        result_compiled = _coulomb_yukawa_correlator(kSquare, rho, gamma, denom_thrs)
+        result_compiled = _coulomb_yukawa_correlator(kSquare, rho, k_cutoffSquare, gamma)
         
         # Compare
         diff = np.abs(result_original - result_compiled)
@@ -235,7 +237,7 @@ def test_coulomb_yukawa_correlator(ueg_model, tolerance=1e-12):
     kSquare_array = np.array(test_k_values)
     result_original_array = ueg_model.coulomb_yukawa(kSquare_array)
     
-    result_compiled_array = np.array([_coulomb_yukawa_correlator(k, rho, gamma, denom_thrs) 
+    result_compiled_array = np.array([_coulomb_yukawa_correlator(k, rho, k_cutoffSquare, gamma) 
                                       for k in kSquare_array])
     
     diff_array = np.abs(result_original_array - result_compiled_array)
@@ -272,9 +274,11 @@ def test_RPA_correlator(ueg_model, tolerance=1e-12):
     print_title("Testing _RPA_correlator", "=")
     
     # Prepare test data
+    L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
     rho = ueg_model.n_ele / ueg_model.Omega
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
     
     # Test with various k-vectors (relative to k_Fermi)
@@ -298,7 +302,7 @@ def test_RPA_correlator(ueg_model, tolerance=1e-12):
         result_original = ueg_model.RPA(kSquare)
         
         # Numba-compiled function
-        result_compiled = _RPA_correlator(kSquare, rho, gamma, denom_thrs)
+        result_compiled = _RPA_correlator(kSquare, rho, k_cutoffSquare, gamma)
         
         # Compare
         diff = np.abs(result_original - result_compiled)
@@ -319,7 +323,7 @@ def test_RPA_correlator(ueg_model, tolerance=1e-12):
     kSquare_array = np.array(test_k_values)
     result_original_array = ueg_model.RPA(kSquare_array)
     
-    result_compiled_array = np.array([_RPA_correlator(k, rho, gamma, denom_thrs) 
+    result_compiled_array = np.array([_RPA_correlator(k, rho, k_cutoffSquare, gamma) 
                                       for k in kSquare_array])
     
     diff_array = np.abs(result_original_array - result_compiled_array)
@@ -362,7 +366,6 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     kPrime = ueg_model.kPrime.astype(np.float64) * ( 2 * np.pi / L)
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     correlator_idx = ueg_model.get_correlator_idx()
     
@@ -386,7 +389,7 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
         
         # Numba-compiled function
         start = time.time()
-        result_compiled = _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
+        result_compiled = _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -435,7 +438,6 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
     L = ueg_model.L
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     correlator_idx = ueg_model.get_correlator_idx()
     
@@ -472,7 +474,7 @@ def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
         # Numba-compiled function
         start = time.time()
         result_compiled = _contract_exchange_3_body(p_vec, kVec, basis_occ_Kp, 
-                                                   rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
+                                                   rho, Omega, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
@@ -520,7 +522,6 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
     L = ueg_model.L
     k_cutoff = ueg_model.k_cutoff
     gamma = ueg_model.gamma
-    denom_thrs = ueg_model.denom_thrs
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     correlator_idx = ueg_model.get_correlator_idx()
     
@@ -557,7 +558,7 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
         # Numba-compiled function
         start = time.time()
         result_compiled = _contractP_KWithQ(p_vec, kVec, basis_occ_Kp, 
-                                           rho, Omega, k_cutoffSquare, gamma, correlator_idx, denom_thrs)
+                                           rho, Omega, k_cutoffSquare, gamma, correlator_idx)
         time_compiled = time.time() - start
         
         # Compare
