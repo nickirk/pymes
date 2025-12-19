@@ -937,24 +937,52 @@ class UEG:
             else:
                 return self.Fk0_conv
         else:
-            prefac = (self.dkpts * self.dxtheta)/((2.0 * np.pi)**2)
-            u_kp_in_mesh = self.correlator(self.kpts_mesh ** 2)
-            result = 0.0
-            for ikp, kp in enumerate(self.kpts_mesh):
-                if abs(kp) < 1.e-12:
-                    raise ValueError("k' mesh contains zero value, which causes singularity!")
-                u_kp = u_kp_in_mesh[ikp]
-                kpSquare = kp ** 2
-                inner_int = 0.0
-                for ix, x in enumerate(self.xtheta_mesh):
-                    kMinusKpSquare = kSquare + kpSquare - 2.0 * k * kp * x
-                    if abs(kMinusKpSquare) < 1.e-12:
-                        continue
-                    weight = (2.0 * kMinusKpSquare**(w/2))/(kMinusKpSquare**(w/2) + kp**w)
-                    u_kMinusKp = self.correlator(kMinusKpSquare)
-                    inner_int += (k*kp*x - kpSquare) * u_kMinusKp * weight
-                result += inner_int * u_kp * kpSquare
-            result *= prefac # 2π from azimuthal integration.
+            # Vectorized implementation.
+            # Rename arrays.
+            kp = self.kpts_mesh
+            xtheta = self.xtheta_mesh
+            prefac = (self.dkpts * self.dxtheta) / (2.0 * np.pi) ** 2
+            # Create 2D meshgrid for k' and x = cos(θ).
+            kpGrid, xThetaGrid = np.meshgrid(kp, xtheta, indexing='ij')
+            kpGridSquare = kpGrid ** 2
+            # Compute |k - k'|^2.
+            kMinusKpSquare = kSquare + kpGrid ** 2 - 2.0 * k * kpGrid * xThetaGrid
+            # Avoid singularity at |k - k'| ~ 0.
+            kMinusKpSquare = np.where(np.abs(kMinusKpSquare) < 1.e-12,
+                                        1.e-12, kMinusKpSquare)
+            # Compute weight factor.
+            weight = (2.0 * kMinusKpSquare ** (w / 2)) / \
+                          (kMinusKpSquare ** (w / 2) + kpGrid ** w)
+            # Compute u(k') and u(|k - k'|).
+            u_kp = self.correlator(kpGridSquare)
+            u_kMinusKp = self.correlator(kMinusKpSquare)
+            # Compute integrand.
+            integrand = (k * kpGrid * xThetaGrid - kpGridSquare) * u_kMinusKp * u_kp * kpGridSquare * weight
+            # Inegrate over x = cos(θ).
+            inner_int = np.sum(integrand, axis=1)
+            # Integrate over k'.
+            result = np.sum(inner_int)
+            result *= prefac  # 2π from azimuthal integration.
+            # Legacy non-vectorized implementation.
+            # Perform double integration using the trapezoidal rule.
+            #prefac = (self.dkpts * self.dxtheta)/((2.0 * np.pi)**2)
+            #u_kp_in_mesh = self.correlator(self.kpts_mesh ** 2)
+            #result = 0.0
+            #for ikp, kp in enumerate(self.kpts_mesh):
+            #    if abs(kp) < 1.e-12:
+            #        raise ValueError("k' mesh contains zero value, which causes singularity!")
+            #    u_kp = u_kp_in_mesh[ikp]
+            #    kpSquare = kp ** 2
+            #    inner_int = 0.0
+            #    for ix, x in enumerate(self.xtheta_mesh):
+            #        kMinusKpSquare = kSquare + kpSquare - 2.0 * k * kp * x
+            #        if abs(kMinusKpSquare) < 1.e-12:
+            #            continue
+            #        weight = (2.0 * kMinusKpSquare**(w/2))/(kMinusKpSquare**(w/2) + kp**w)
+            #        u_kMinusKp = self.correlator(kMinusKpSquare)
+            #        inner_int += (k*kp*x - kpSquare) * u_kMinusKp * weight
+            #    result += inner_int * u_kp * kpSquare
+            #result *= prefac # 2π from azimuthal integration.
             return result
     
     def init_ConvMesh( self, nx=200, dkfac=40, kmaxfac=20):
