@@ -981,7 +981,6 @@ class UEG:
         self.kpts_mesh = kPrimeMesh
         #: x = cos(θ) mesh:clear mid-point rule.
         xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
-        print( xThetaMesh)
         self.xtheta_mesh = xThetaMesh
 
     def triple_contractions_in_3_body(self):
