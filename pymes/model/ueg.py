@@ -979,8 +979,9 @@ class UEG:
         #: k'-mesh: uniform for trapezoidal rule.
         kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
         self.kpts_mesh = kPrimeMesh
-        #: x = cos(θ) mesh: mid-point rule.
-        xThetaMesh = np.linspace(-1.0 + 0.5*self.dxtheta, 1.0 - 0.5*self.dxtheta, nx)
+        #: x = cos(θ) mesh:clear mid-point rule.
+        xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
+        print( xThetaMesh)
         self.xtheta_mesh = xThetaMesh
 
     def triple_contractions_in_3_body(self):
