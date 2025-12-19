@@ -539,7 +539,7 @@ def main(nel=14, rs=0.5, basis_cutoff=2, k_cutoff=1, gamma=None,
     
     # Default values (used when parameter is not being swept)
     nx_default = 200
-    dkfac_default = 40
+    dkfac_default = 60
     kmaxfac_default = 20.0
     
     print_logging_info(f"Default values:", level=1)

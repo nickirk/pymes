@@ -733,7 +733,7 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     
     # Initialize convolution mesh for intNablaUSquare test
     print_logging_info("Initializing convolution mesh", level=0)
-    ueg_model.init_ConvMesh(nx=200, dkfac=40, kmaxfac=20)
+    ueg_model.init_ConvMesh(nx=200, dkfac=60, kmaxfac=20)
     print_logging_info(f"kpts_mesh size: {len(ueg_model.kpts_mesh)}", level=1)
     print_logging_info(f"xtheta_mesh size: {len(ueg_model.xtheta_mesh)}", level=1)
     

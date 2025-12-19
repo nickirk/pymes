@@ -937,8 +937,8 @@ class UEG:
         if abs(k) < 1.e-12:
             # F{(∇u)²}(k=0) of finer k'-mesh.
             if self.Fk0_conv is None:
-                dk = self.dkpts/100
-                kmax = self.kptsmax * 10
+                dk = self.dkpts/1000
+                kmax = self.kptsmax * 100
                 kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
                 u_kp = self.correlator(kptsmesh ** 2)
                 F = kptsmesh ** 4 * u_kp ** 2
@@ -997,7 +997,7 @@ class UEG:
             #result *= prefac # 2π from azimuthal integration.
             return result
     
-    def init_ConvMesh( self, nx=200, dkfac=40, kmaxfac=20):
+    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=20):
         """
         Member function of class UEG
         This function initializes the integration spherical mesh/grid for the 
