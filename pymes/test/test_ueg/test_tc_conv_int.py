@@ -8,13 +8,13 @@ This script tests the convolution integral:
 F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)
 
 The integral is computed using spherical coordinates with parameters:
-    - dx: grid spacing for x = cos(θ) ∈ [-1, 1]
+    - nx: number of x = cos(θ) grid points ∈ [-1, 1]
     - dkfac: determines k' grid spacing as dk = k_F/dkfac
     - kmaxfac: maximum k' value as kmax = k_F × kmaxfac
 
 The test systematically varies ONE parameter at a time while keeping others at default values.
 For each k-point, three separate files are generated:
-    - k{value}_dx.dat: varying dx
+    - k{value}_nx.dat: varying nx
     - k{value}_dkfac.dat: varying dkfac
     - k{value}_kmaxfac.dat: varying kmaxfac
 """
@@ -26,9 +26,9 @@ from pymes.model import ueg
 from pymes.log import print_title, print_logging_info
 
 
-def sweep_dx_parameter(ueg_model, k_vec, k_mag, dx_values, dx_default, dkfac_default, kmaxfac_default, output_file):
+def sweep_nx_parameter(ueg_model, k_vec, k_mag, nx_values, nx_default, dkfac_default, kmaxfac_default, output_file):
     """
-    Sweep dx parameter while keeping dkfac and kmaxfac at default values.
+    Sweep nx parameter while keeping dkfac and kmaxfac at default values.
     
     Parameters
     ----------
@@ -38,10 +38,10 @@ def sweep_dx_parameter(ueg_model, k_vec, k_mag, dx_values, dx_default, dkfac_def
         K-vector to test (3D array)
     k_mag : float
         Magnitude of k-vector
-    dx_values : list of float
-        List of dx values to test
-    dx_default : float
-        Default dx value (not used in this sweep)
+    nx_values : list of int
+        List of nx values to test
+    nx_default : int
+        Default nx value (not used in this sweep)
     dkfac_default : int
         Default dkfac value (held constant)
     kmaxfac_default : float
@@ -54,30 +54,32 @@ def sweep_dx_parameter(ueg_model, k_vec, k_mag, dx_values, dx_default, dkfac_def
     results : dict
         Dictionary containing sweep results
     """
-    print_title(f"Sweeping dx parameter for |k| = {k_mag:.6f}", "-")
+    print_title(f"Sweeping nx parameter for |k| = {k_mag:.6f}", "-")
     print_logging_info(f"Fixed parameters: dkfac={dkfac_default}, kmaxfac={kmaxfac_default}", level=1)
     
     results = {
         'k_vector': k_vec.copy(),
         'k_magnitude': k_mag,
-        'parameter': 'dx',
+        'parameter': 'nx',
         'parameter_values': [],
         'integral_values': [],
         'computation_times': [],
         'n_kp_points': [],
         'n_x_points': [],
+        'dx_values': [],
         'fixed_dkfac': dkfac_default,
         'fixed_kmaxfac': kmaxfac_default,
     }
     
-    for dx in dx_values:
-        print_logging_info(f"Testing dx={dx:.4f}", level=2)
+    for nx in nx_values:
+        print_logging_info(f"Testing nx={nx}", level=2)
         
-        # Initialize grid with current dx and default values for other parameters
-        ueg_model.init_ConvGrid(dx=dx, dkfac=dkfac_default, kmaxfac=kmaxfac_default)
+        # Initialize grid with current nx and default values for other parameters
+        ueg_model.init_ConvMesh(nx=nx, dkfac=dkfac_default, kmaxfac=kmaxfac_default)
         
-        n_kp = len(ueg_model.kp_grid)
-        n_x = len(ueg_model.x_grid)
+        n_kp = len(ueg_model.kpts_mesh)
+        n_x = len(ueg_model.xtheta_mesh)
+        dx = ueg_model.dxtheta
         
         # Compute integral
         start_time = time.time()
@@ -85,13 +87,14 @@ def sweep_dx_parameter(ueg_model, k_vec, k_mag, dx_values, dx_default, dkfac_def
         elapsed_time = time.time() - start_time
         
         # Store results
-        results['parameter_values'].append(dx)
+        results['parameter_values'].append(nx)
         results['integral_values'].append(integral_value)
         results['computation_times'].append(elapsed_time)
         results['n_kp_points'].append(n_kp)
         results['n_x_points'].append(n_x)
+        results['dx_values'].append(dx)
         
-        print_logging_info(f"  Integral: {integral_value:.12e}, Time: {elapsed_time:.3f} s", level=3)
+        print_logging_info(f"  nx={nx}, dx={dx:.6f}, Integral: {integral_value:.12e}, Time: {elapsed_time:.3f} s", level=3)
         sys.stdout.flush()
     
     # Write results to file
@@ -100,9 +103,9 @@ def sweep_dx_parameter(ueg_model, k_vec, k_mag, dx_values, dx_default, dkfac_def
     return results
 
 
-def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkfac_default, kmaxfac_default, output_file):
+def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, nx_default, dkfac_default, kmaxfac_default, output_file):
     """
-    Sweep dkfac parameter while keeping dx and kmaxfac at default values.
+    Sweep dkfac parameter while keeping nx and kmaxfac at default values.
     
     Parameters
     ----------
@@ -114,8 +117,8 @@ def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkf
         Magnitude of k-vector
     dkfac_values : list of int
         List of dkfac values to test
-    dx_default : float
-        Default dx value (held constant)
+    nx_default : int
+        Default nx value (held constant)
     dkfac_default : int
         Default dkfac value (not used in this sweep)
     kmaxfac_default : float
@@ -129,7 +132,7 @@ def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkf
         Dictionary containing sweep results
     """
     print_title(f"Sweeping dkfac parameter for |k| = {k_mag:.6f}", "-")
-    print_logging_info(f"Fixed parameters: dx={dx_default:.4f}, kmaxfac={kmaxfac_default}", level=1)
+    print_logging_info(f"Fixed parameters: nx={nx_default}, kmaxfac={kmaxfac_default}", level=1)
     
     results = {
         'k_vector': k_vec.copy(),
@@ -140,7 +143,7 @@ def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkf
         'computation_times': [],
         'n_kp_points': [],
         'n_x_points': [],
-        'fixed_dx': dx_default,
+        'fixed_nx': nx_default,
         'fixed_kmaxfac': kmaxfac_default,
     }
     
@@ -148,10 +151,10 @@ def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkf
         print_logging_info(f"Testing dkfac={dkfac}", level=2)
         
         # Initialize grid with current dkfac and default values for other parameters
-        ueg_model.init_ConvGrid(dx=dx_default, dkfac=dkfac, kmaxfac=kmaxfac_default)
+        ueg_model.init_ConvMesh(nx=nx_default, dkfac=dkfac, kmaxfac=kmaxfac_default)
         
-        n_kp = len(ueg_model.kp_grid)
-        n_x = len(ueg_model.x_grid)
+        n_kp = len(ueg_model.kpts_mesh)
+        n_x = len(ueg_model.xtheta_mesh)
         
         # Compute integral
         start_time = time.time()
@@ -174,9 +177,9 @@ def sweep_dkfac_parameter(ueg_model, k_vec, k_mag, dkfac_values, dx_default, dkf
     return results
 
 
-def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, dx_default, dkfac_default, kmaxfac_default, output_file):
+def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, nx_default, dkfac_default, kmaxfac_default, output_file):
     """
-    Sweep kmaxfac parameter while keeping dx and dkfac at default values.
+    Sweep kmaxfac parameter while keeping nx and dkfac at default values.
     
     Parameters
     ----------
@@ -188,8 +191,8 @@ def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, dx_default,
         Magnitude of k-vector
     kmaxfac_values : list of float
         List of kmaxfac values to test
-    dx_default : float
-        Default dx value (held constant)
+    nx_default : int
+        Default nx value (held constant)
     dkfac_default : int
         Default dkfac value (held constant)
     kmaxfac_default : float
@@ -203,7 +206,7 @@ def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, dx_default,
         Dictionary containing sweep results
     """
     print_title(f"Sweeping kmaxfac parameter for |k| = {k_mag:.6f}", "-")
-    print_logging_info(f"Fixed parameters: dx={dx_default:.4f}, dkfac={dkfac_default}", level=1)
+    print_logging_info(f"Fixed parameters: nx={nx_default}, dkfac={dkfac_default}", level=1)
     
     results = {
         'k_vector': k_vec.copy(),
@@ -214,7 +217,7 @@ def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, dx_default,
         'computation_times': [],
         'n_kp_points': [],
         'n_x_points': [],
-        'fixed_dx': dx_default,
+        'fixed_nx': nx_default,
         'fixed_dkfac': dkfac_default,
     }
     
@@ -222,10 +225,10 @@ def sweep_kmaxfac_parameter(ueg_model, k_vec, k_mag, kmaxfac_values, dx_default,
         print_logging_info(f"Testing kmaxfac={kmaxfac:.1f}", level=2)
         
         # Initialize grid with current kmaxfac and default values for other parameters
-        ueg_model.init_ConvGrid(dx=dx_default, dkfac=dkfac_default, kmaxfac=kmaxfac)
+        ueg_model.init_ConvMesh(nx=nx_default, dkfac=dkfac_default, kmaxfac=kmaxfac)
         
-        n_kp = len(ueg_model.kp_grid)
-        n_x = len(ueg_model.x_grid)
+        n_kp = len(ueg_model.kpts_mesh)
+        n_x = len(ueg_model.xtheta_mesh)
         
         # Compute integral
         start_time = time.time()
@@ -272,42 +275,66 @@ def write_sweep_results_to_file(results, output_file):
         f.write("#\n")
         
         # Write fixed parameters
-        if results['parameter'] == 'dx':
+        if results['parameter'] == 'nx':
             f.write(f"# Fixed parameters: dkfac={results['fixed_dkfac']}, kmaxfac={results['fixed_kmaxfac']}\n")
+            f.write("#\n")
+            f.write("# Columns:\n")
+            f.write(f"#   1: {results['parameter']}\n")
+            f.write("#   2: dx (computed from nx)\n")
+            f.write("#   3: integral_value [a.u.]\n")
+            f.write("#   4: computation_time [s]\n")
+            f.write("#   5: n_kp_points (number of k' grid points)\n")
+            f.write("#   6: n_x_points (number of x grid points)\n")
+            f.write("#\n")
+            f.write(f"{'# nx':>18s} {'dx':>20s} {'integral':>20s} {'time[s]':>12s} {'n_kp':>10s} {'n_x':>10s}\n")
         elif results['parameter'] == 'dkfac':
-            f.write(f"# Fixed parameters: dx={results['fixed_dx']:.4f}, kmaxfac={results['fixed_kmaxfac']}\n")
+            f.write(f"# Fixed parameters: nx={results['fixed_nx']}, kmaxfac={results['fixed_kmaxfac']}\n")
+            f.write("#\n")
+            f.write("# Columns:\n")
+            f.write(f"#   1: {results['parameter']}\n")
+            f.write("#   2: integral_value [a.u.]\n")
+            f.write("#   3: computation_time [s]\n")
+            f.write("#   4: n_kp_points (number of k' grid points)\n")
+            f.write("#   5: n_x_points (number of x grid points)\n")
+            f.write("#\n")
+            f.write(f"{'# dkfac':>18s} {'integral':>20s} {'time[s]':>12s} {'n_kp':>10s} {'n_x':>10s}\n")
         elif results['parameter'] == 'kmaxfac':
-            f.write(f"# Fixed parameters: dx={results['fixed_dx']:.4f}, dkfac={results['fixed_dkfac']}\n")
-        
-        f.write("#\n")
-        f.write("# Columns:\n")
-        f.write(f"#   1: {results['parameter']}\n")
-        f.write("#   2: integral_value [a.u.]\n")
-        f.write("#   3: computation_time [s]\n")
-        f.write("#   4: n_kp_points (number of k' grid points)\n")
-        f.write("#   5: n_x_points (number of x grid points)\n")
-        f.write("#\n")
-        f.write(f"{'# '+results['parameter']:>18s} {'integral':>20s} {'time[s]':>12s} {'n_kp':>10s} {'n_x':>10s}\n")
+            f.write(f"# Fixed parameters: nx={results['fixed_nx']}, dkfac={results['fixed_dkfac']}\n")
+            f.write("#\n")
+            f.write("# Columns:\n")
+            f.write(f"#   1: {results['parameter']}\n")
+            f.write("#   2: integral_value [a.u.]\n")
+            f.write("#   3: computation_time [s]\n")
+            f.write("#   4: n_kp_points (number of k' grid points)\n")
+            f.write("#   5: n_x_points (number of x grid points)\n")
+            f.write("#\n")
+            f.write(f"{'# kmaxfac':>18s} {'integral':>20s} {'time[s]':>12s} {'n_kp':>10s} {'n_x':>10s}\n")
         
         # Write data
         for i in range(len(results['parameter_values'])):
-            if results['parameter'] == 'dx':
-                f.write(f"{results['parameter_values'][i]:20.6f} ")
+            if results['parameter'] == 'nx':
+                f.write(f"{results['parameter_values'][i]:20d} ")
+                f.write(f"{results['dx_values'][i]:20.8f} ")
+                f.write(f"{results['integral_values'][i]:20.12e} "
+                        f"{results['computation_times'][i]:12.3f} "
+                        f"{results['n_kp_points'][i]:10d} {results['n_x_points'][i]:10d}\n")
             elif results['parameter'] == 'dkfac':
                 f.write(f"{results['parameter_values'][i]:20d} ")
+                f.write(f"{results['integral_values'][i]:20.12e} "
+                        f"{results['computation_times'][i]:12.3f} "
+                        f"{results['n_kp_points'][i]:10d} {results['n_x_points'][i]:10d}\n")
             else:  # kmaxfac
                 f.write(f"{results['parameter_values'][i]:20.2f} ")
-            
-            f.write(f"{results['integral_values'][i]:20.12e} "
-                    f"{results['computation_times'][i]:12.3f} "
-                    f"{results['n_kp_points'][i]:10d} {results['n_x_points'][i]:10d}\n")
+                f.write(f"{results['integral_values'][i]:20.12e} "
+                        f"{results['computation_times'][i]:12.3f} "
+                        f"{results['n_kp_points'][i]:10d} {results['n_x_points'][i]:10d}\n")
     
     print_logging_info(f"Results written successfully", level=3)
 
 
 def test_convergence_intNablaUSquare(ueg_model, k_test_values, 
-                                      dx_values, dkfac_values, kmaxfac_values,
-                                      dx_default, dkfac_default, kmaxfac_default,
+                                      nx_values, dkfac_values, kmaxfac_values,
+                                      nx_default, dkfac_default, kmaxfac_default,
                                       output_prefix='k'):
     """
     Test convergence of intNablaUSquare by sweeping one parameter at a time.
@@ -319,14 +346,14 @@ def test_convergence_intNablaUSquare(ueg_model, k_test_values,
         Initialized UEG model with correlator set
     k_test_values : list of arrays
         List of k-vectors to test (each is a 3D numpy array)
-    dx_values : list of float
-        List of dx values to test
+    nx_values : list of int
+        List of nx values to test
     dkfac_values : list of int
         List of dkfac values to test
     kmaxfac_values : list of float
         List of kmaxfac values to test
-    dx_default : float
-        Default dx value
+    nx_default : int
+        Default nx value
     dkfac_default : int
         Default dkfac value
     kmaxfac_default : float
@@ -341,11 +368,11 @@ def test_convergence_intNablaUSquare(ueg_model, k_test_values,
     """
     print_title("Testing Convergence of intNablaUSquare", "=")
     
-    print_logging_info(f"Default parameters: dx={dx_default:.4f}, dkfac={dkfac_default}, kmaxfac={kmaxfac_default}", level=0)
+    print_logging_info(f"Default parameters: nx={nx_default}, dkfac={dkfac_default}, kmaxfac={kmaxfac_default}", level=0)
     print_logging_info(f"k_F = {ueg_model.kFermi:.6f} a.u.⁻¹", level=0)
     print_logging_info(f"Testing {len(k_test_values)} different k-vectors", level=0)
     print_logging_info(f"Parameter ranges:", level=0)
-    print_logging_info(f"  dx: {dx_values}", level=1)
+    print_logging_info(f"  nx: {nx_values}", level=1)
     print_logging_info(f"  dkfac: {dkfac_values}", level=1)
     print_logging_info(f"  kmaxfac: {kmaxfac_values}", level=1)
     
@@ -361,17 +388,17 @@ def test_convergence_intNablaUSquare(ueg_model, k_test_values,
         print_title(f"K-vector {k_idx+1}/{len(k_test_values)}: |k| = {k_mag:.6f}", "=")
         
         # Generate output filenames for this k-point
-        output_file_dx = f"{output_prefix}{k_mag:.4f}_dx.dat"
+        output_file_nx = f"{output_prefix}{k_mag:.4f}_nx.dat"
         output_file_dkfac = f"{output_prefix}{k_mag:.4f}_dkfac.dat"
         output_file_kmaxfac = f"{output_prefix}{k_mag:.4f}_kmaxfac.dat"
         
-        # Sweep 1: dx
+        # Sweep 1: nx
         sweep_count += 1
         print_logging_info(f"Sweep {sweep_count}/{total_sweeps}", level=0)
-        results_dx = sweep_dx_parameter(
-            ueg_model, k_vec, k_mag, dx_values,
-            dx_default, dkfac_default, kmaxfac_default,
-            output_file_dx
+        results_nx = sweep_nx_parameter(
+            ueg_model, k_vec, k_mag, nx_values,
+            nx_default, dkfac_default, kmaxfac_default,
+            output_file_nx
         )
         
         # Sweep 2: dkfac
@@ -379,7 +406,7 @@ def test_convergence_intNablaUSquare(ueg_model, k_test_values,
         print_logging_info(f"Sweep {sweep_count}/{total_sweeps}", level=0)
         results_dkfac = sweep_dkfac_parameter(
             ueg_model, k_vec, k_mag, dkfac_values,
-            dx_default, dkfac_default, kmaxfac_default,
+            nx_default, dkfac_default, kmaxfac_default,
             output_file_dkfac
         )
         
@@ -388,12 +415,12 @@ def test_convergence_intNablaUSquare(ueg_model, k_test_values,
         print_logging_info(f"Sweep {sweep_count}/{total_sweeps}", level=0)
         results_kmaxfac = sweep_kmaxfac_parameter(
             ueg_model, k_vec, k_mag, kmaxfac_values,
-            dx_default, dkfac_default, kmaxfac_default,
+            nx_default, dkfac_default, kmaxfac_default,
             output_file_kmaxfac
         )
         
         # Store results
-        all_results[f'k{k_idx}_dx'] = results_dx
+        all_results[f'k{k_idx}_nx'] = results_nx
         all_results[f'k{k_idx}_dkfac'] = results_dkfac
         all_results[f'k{k_idx}_kmaxfac'] = results_kmaxfac
         
@@ -490,9 +517,12 @@ def main(nel=14, rs=0.5, basis_cutoff=2, k_cutoff=1, gamma=None,
     
     # Test various k-vectors (in units of k_F)
     k_test_relative = [
+        np.array([0.0, 0.0, 0.0]),   # k = 0 Gamma point
+        np.array([0.1, 0.0, 0.0]),   # Very small k along x
         np.array([0.5, 0.0, 0.0]),   # Small k along x
         np.array([1.0, 0.0, 0.0]),   # k ~ k_F along x
         np.array([1.5, 0.0, 0.0]),   # k > k_F along x
+        np.array([0.1, 0.1, 0.0]),   # Very small k in xy-plane
         np.array([0.5, 0.5, 0.0]),   # Small k in xy-plane
         np.array([1.0, 1.0, 0.0]),   # Larger k in xy-plane
     ]
@@ -508,30 +538,30 @@ def main(nel=14, rs=0.5, basis_cutoff=2, k_cutoff=1, gamma=None,
     print_title("Defining grid parameters", "-")
     
     # Default values (used when parameter is not being swept)
-    dx_default = 0.002
+    nx_default = 200
     dkfac_default = 40
     kmaxfac_default = 20.0
     
     print_logging_info(f"Default values:", level=1)
-    print_logging_info(f"  dx_default = {dx_default}", level=2)
+    print_logging_info(f"  nx_default = {nx_default}", level=2)
     print_logging_info(f"  dkfac_default = {dkfac_default}", level=2)
     print_logging_info(f"  kmaxfac_default = {kmaxfac_default}", level=2)
     
     # Parameter ranges for sweeps
-    dx_values = [0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001]
+    nx_values = [10, 20, 50, 100, 200, 400, 800, 1000, 2000, 5000, 10000]
     dkfac_values = [10, 20, 40, 80, 160, 320]
     kmaxfac_values = [5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, 75.0, 100.0]
     
     print_logging_info(f"Sweep ranges:", level=1)
-    print_logging_info(f"  dx values: {dx_values}", level=2)
+    print_logging_info(f"  nx values: {nx_values}", level=2)
     print_logging_info(f"  dkfac values: {dkfac_values}", level=2)
     print_logging_info(f"  kmaxfac values: {kmaxfac_values}", level=2)
     
     # 4. Run convergence tests
     all_results = test_convergence_intNablaUSquare(
         ueg_model, k_test_values,
-        dx_values, dkfac_values, kmaxfac_values,
-        dx_default, dkfac_default, kmaxfac_default,
+        nx_values, dkfac_values, kmaxfac_values,
+        nx_default, dkfac_default, kmaxfac_default,
         output_prefix=output_prefix
     )
     
@@ -548,7 +578,7 @@ if __name__ == '__main__':
         nel=14,
         rs=0.5,
         basis_cutoff=2,
-        k_cutoff=1,
+        k_cutoff=1e-12,
         gamma=None,
         output_prefix='k'
     )

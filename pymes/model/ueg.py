@@ -73,7 +73,7 @@ class UEG:
         if ( not planewave.is_closed_shell(self.n_ele) ):
             raise ValueError("The number of electrons is not a closed shell system, currently only\
                           closed shell systems are supported!")
-        #: electronic density.
+        #: Wigner-Seitz radius.
         self.rs = rs
         #: length of the cubic simulation cell containing n_ele electrons
         #: at the density of rs.
@@ -83,6 +83,8 @@ class UEG:
         self.Omega = self.L ** 3
         #: electron density.
         self.rho = self.n_ele / self.Omega
+        #: Minimum momentum transfer in the simulation cell.
+        self.dk0 = 2.0 * np.pi / self.L
         #: Fermi wave vector.
         self.kFermi = (3 * np.pi ** 2 * self.rho) ** (1.0 / 3.0)
 
@@ -98,12 +100,13 @@ class UEG:
         self.kPrime = None
 
         #: Convolution integral in the TDL.
-        self.kp_grid = None
-        self.x_grid = None
-        self.kp_max = None
-        self.d_kp = None
-        self.d_x = None
-
+        self.kpts_mesh = None
+        self.xtheta_mesh = None
+        self.dkpts = None
+        self.dxtheta = None
+        self.kptsmax = None
+        #: Convolution at k=0 (Gamma) F{(∇u)²}(k=0).
+        self.Fk0_conv = None
 
         self.correlator = None
 
@@ -897,80 +900,88 @@ class UEG:
 
         self.kPrime = kPrime
 
-    def intNablaUSquare(self, kVec):
+    def intNablaUSquare(self, kVec, w=4):
         """ 
         Member function of class UEG. 
-        This function computes the convolution integral of the squared 
-        gradient of the correlator function in k-space, in the TDL: 
-        F{(Nabla u)^2}(k) = int d^3k' (k · k')·k  u(k') u(|k - k'|).
+        This function computes (minus) the convolution integral of the squared 
+        gradient of the correlator function in k-space, in the TDL:
+        - F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)
 
         Parameters
         ---------- 
         kVec: nparray of float dtype, size 3
             momentum transfer vector
+        w: int
+            weight exponent for the regularization factor (weight) removing singularity at |k-k'| ~ 0.
         Returns
         -------
         result: float
         """
-        if self.kp_grid is None or self.x_grid is None:
+        if self.kpts_mesh is None or self.xtheta_mesh is None:
             raise ValueError("Spherical integration grid not initialized!")
         # Compute |k| from kVec.
         kSquare = kVec.dot(kVec)
         k = np.sqrt(kSquare)
-        # Prefactor.
-        prefactor = (self.d_kp * self.d_x)/((2.0 * np.pi)**2)
-        # Precompute u(k') for all k' in the grid.
-        u_kp_grid = self.correlator(self.kp_grid ** 2)
-        # Now perform the convolution integral using the spherical grid.
-        result = 0.0
-        #for ikp, kp in enumerate(self.kp_grid):
-        for ix, x in enumerate(self.x_grid):
-            #u_kp = u_kp_grid[ikp]
-            inner_int = 0.0
-            #for ix, x in enumerate(self.x_grid):
-            for ikp, kp in enumerate(self.kp_grid):
-                if kp == 0.0:
-                    continue
-                u_kp = u_kp_grid[ikp]
-                kMinusKpSquare = kSquare + kp ** 2 - 2.0 * k * kp * x
-                kMinusKpSquare = 0.0 if kMinusKpSquare < 0.0 else kMinusKpSquare
-                if kMinusKpSquare == 0.0:
-                    continue
-                reg = (2.0 * kMinusKpSquare**2)/(kMinusKpSquare**2 + kp**4)
-                #reg = 1.0
-                u_kMinusKp = self.correlator(kMinusKpSquare)
-                inner_int += (k*kp*x - kp**2) * u_kMinusKp * reg * kp**2 * u_kp
-            result += inner_int
-            print_logging_info("Intermediate result at x = {:.4f}  {:.8f}".format(x, inner_int), level=0)
-        result *= prefactor # 2π from azimuthal integration.
-
-        return result
+        # Treat k = 0 case separately.
+        if abs(k) < 1.e-12:
+            # F{(∇u)²}(k=0) of finer k'-mesh.
+            if self.Fk0_conv is None:
+                dk = self.dkpts/100
+                kmax = self.kptsmax * 10
+                kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
+                u_kp = self.correlator(kptsmesh ** 2)
+                F = kptsmesh ** 4 * u_kp ** 2
+                result = -1.0 * (1.0/(2.0 * np.pi**2)) * sum(F[:]) * dk
+                self.Fk0_conv = result
+                return self.Fk0_conv
+            else:
+                return self.Fk0_conv
+        else:
+            prefac = (self.dkpts * self.dxtheta)/((2.0 * np.pi)**2)
+            u_kp_in_mesh = self.correlator(self.kpts_mesh ** 2)
+            result = 0.0
+            for ikp, kp in enumerate(self.kpts_mesh):
+                if abs(kp) < 1.e-12:
+                    raise ValueError("k' mesh contains zero value, which causes singularity!")
+                u_kp = u_kp_in_mesh[ikp]
+                kpSquare = kp ** 2
+                inner_int = 0.0
+                for ix, x in enumerate(self.xtheta_mesh):
+                    kMinusKpSquare = kSquare + kpSquare - 2.0 * k * kp * x
+                    if abs(kMinusKpSquare) < 1.e-12:
+                        continue
+                    weight = (2.0 * kMinusKpSquare**(w/2))/(kMinusKpSquare**(w/2) + kp**w)
+                    u_kMinusKp = self.correlator(kMinusKpSquare)
+                    inner_int += (k*kp*x - kpSquare) * u_kMinusKp * weight
+                result += inner_int * u_kp * kpSquare
+            result *= prefac # 2π from azimuthal integration.
+            return result
     
-    def init_ConvGrid( self, dx=0.002, dkfac=40, kmaxfac=20):
+    def init_ConvMesh( self, nx=200, dkfac=40, kmaxfac=20):
         """
         Member function of class UEG
-        This function initializes the integration spherical grid for the 
+        This function initializes the integration spherical mesh/grid for the 
         convolution integral of the squared gradient of the correlator
         function in k-space.
         Parameters
         ----------
-        dx: float
-            grid spacing dx of x=cosθ∈[-1,1],
+        nx: float
+            number of points in the x = cos(θ) grid.
         dkfac: int
-            determines the k'-grid spacing as dk = k_F/kfac,
+            determines the k'-grid spacing as dk = k_F/kfac.
         kmaxfac: float
-            maximum k' value in the grid kmax = k_F*kmaxfac,
+            maximum k' value in the grid kmax = k_F*kmaxfac.
         Returns
         """
-        self.d_x = dx
-        self.d_kp = self.kFermi / dkfac
-        self.kp_max = self.kFermi * kmaxfac
-
-        kgrid = np.arange(0.0, self.kp_max + self.d_kp, self.d_kp)
-        self.kp_grid = kgrid
-
-        xgrid = np.arange(-1.0, 1.0 + dx, dx)
-        self.x_grid = xgrid
+        self.dxtheta = 2.0 / nx
+        self.dkpts = self.kFermi / dkfac
+        self.kptsmax = self.kFermi * kmaxfac
+        #: k'-mesh: uniform for trapezoidal rule.
+        kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
+        self.kpts_mesh = kPrimeMesh
+        #: x = cos(θ) mesh: mid-point rule.
+        xThetaMesh = np.linspace(-1.0 + 0.5*self.dxtheta, 1.0 - 0.5*self.dxtheta, nx)
+        self.xtheta_mesh = xThetaMesh
 
     def triple_contractions_in_3_body(self):
         """
