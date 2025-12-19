@@ -10,6 +10,7 @@ Tests:
     - _coulomb_yukawa_correlator vs UEG.coulomb_yukawa
     - _RPA_correlator vs UEG.RPA
     - _sumNablaUSquare vs UEG.sumNablaUSquare
+    - _intNablaUSquare vs UEG.intNablaUSquare
     - _contract_exchange_3_body vs UEG.contract_exchange_3_body
     - _contractP_KWithQ vs UEG.contractP_KWithQ
 """
@@ -23,6 +24,7 @@ from pymes.model.ueg_helper import (_trunc_correlator,
                                      _coulomb_yukawa_correlator,
                                      _RPA_correlator,
                                      _sumNablaUSquare,
+                                     _intNablaUSquare,
                                      _contract_exchange_3_body,
                                      _contractP_KWithQ)
 from pymes.log import print_title, print_logging_info
@@ -414,6 +416,103 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     return all_pass
 
 
+def test_intNablaUSquare(ueg_model, tolerance=1e-10):
+    """
+    Test that _intNablaUSquare gives the same results as UEG.intNablaUSquare.
+    
+    NOTE: The k=0 case is NOT tested here because _intNablaUSquare does not handle it.
+    The k=0 case (Fk0) is computed separately in ueg.py and passed to _get_2b_int.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _intNablaUSquare", "=")
+    
+    # Prepare test data
+    rho = ueg_model.n_ele / ueg_model.Omega
+    L = ueg_model.L
+    k_cutoff = ueg_model.k_cutoff
+    gamma = ueg_model.gamma
+    k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
+    correlator_idx = ueg_model.get_correlator_idx()
+    
+    # Initialize convolution mesh if not already done
+    if ueg_model.kpts_mesh is None or ueg_model.xtheta_mesh is None:
+        print_logging_info("Initializing convolution mesh with default parameters", level=1)
+        ueg_model.init_ConvMesh(nx=200, dkfac=40, kmaxfac=20)
+    
+    kpts_mesh = ueg_model.kpts_mesh
+    xtheta_mesh = ueg_model.xtheta_mesh
+    dkpts = ueg_model.dkpts
+    dxtheta = ueg_model.dxtheta
+    
+    # Test with various k-vectors (EXCLUDING k=0)
+    nP = len(ueg_model.basis_fns) // 2
+    test_indices = [0, nP//4, nP//2, 3*nP//4, nP-1]
+    
+    # Build test cases from basis functions (all should have |k| > 0)
+    test_cases = []
+    for idx in test_indices:
+        kVec = ueg_model.basis_fns[idx * 2].kp
+        # Only add if |k| > 0
+        k_mag = np.sqrt(kVec.dot(kVec))
+        if k_mag > 1e-12:
+            test_cases.append(kVec)
+    
+    all_pass = True
+    max_diff = 0.0
+    
+    print_logging_info(f"Testing with {len(test_cases)} different k-vectors (k ≠ 0)", level=1)
+    print_logging_info(f"Using correlator index: {correlator_idx}", level=1)
+    print_logging_info(f"Grid sizes: n_kp={len(kpts_mesh)}, n_x={len(xtheta_mesh)}", level=1)
+    print_logging_info(f"NOTE: k=0 case is NOT tested (handled separately via Fk0)", level=1)
+    
+    for i, kVec in enumerate(test_cases):
+        k_mag = np.sqrt(kVec.dot(kVec))
+        
+        # Original function
+        start = time.time()
+        result_original = ueg_model.intNablaUSquare(kVec)
+        time_original = time.time() - start
+        
+        # Numba-compiled function
+        start = time.time()
+        result_compiled = _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
+                                          rho, k_cutoffSquare, gamma, correlator_idx)
+        time_compiled = time.time() - start
+        
+        # Compare
+        diff = np.abs(result_original - result_compiled)
+        max_diff = max(max_diff, diff)
+        
+        if diff > tolerance:
+            print_logging_info(f"  Test {i+1} FAILED: |k|={k_mag:.6f}, "
+                             f"original={result_original:.12e}, "
+                             f"compiled={result_compiled:.12e}, "
+                             f"diff={diff:.12e}", level=2)
+            all_pass = False
+        else:
+            speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
+            print_logging_info(f"  Test {i+1} PASSED: |k|={k_mag:.6f}, "
+                             f"diff={diff:.12e}, "
+                             f"time_orig={time_original:.4f}s, "
+                             f"time_comp={time_compiled:.4f}s, "
+                             f"speedup={speedup:.2f}x", level=2)
+    
+    print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    
+    return all_pass
+
+
 def test_contract_exchange_3_body(ueg_model, tolerance=1e-10):
     """
     Test that _contract_exchange_3_body gives the same results as 
@@ -632,6 +731,12 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     print_logging_info(f"gamma: {ueg_model.gamma}", level=1)
     print_logging_info(f"kPrime shape: {ueg_model.kPrime.shape}", level=1)
     
+    # Initialize convolution mesh for intNablaUSquare test
+    print_logging_info("Initializing convolution mesh", level=0)
+    ueg_model.init_ConvMesh(nx=200, dkfac=40, kmaxfac=20)
+    print_logging_info(f"kpts_mesh size: {len(ueg_model.kpts_mesh)}", level=1)
+    print_logging_info(f"xtheta_mesh size: {len(ueg_model.xtheta_mesh)}", level=1)
+    
     sys.stdout.flush()
     
     # Run tests
@@ -652,6 +757,9 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     
     # Test helper functions
     test_results['sumNablaUSquare'] = test_sumNablaUSquare(ueg_model)
+    sys.stdout.flush()
+    
+    test_results['intNablaUSquare'] = test_intNablaUSquare(ueg_model)
     sys.stdout.flush()
     
     test_results['contract_exchange_3_body'] = test_contract_exchange_3_body(ueg_model)

@@ -432,17 +432,28 @@ class UEG:
             correlator_idx = 0  # None
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
+        # kPrime (k') for convolution in the simulation cell.
         if self.kPrime is None:
             raise ValueError("kPrime not initialized!")
         else:
             kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
+        # k'-mesh and x-theta mesh for convolution in the continuum (TDL).
+        if self.kpts_mesh is None or self.xtheta_mesh is None:
+            raise ValueError("kpts_mesh or xtheta_mesh not initialized!")
+        if self.Fk0_conv is None:
+            kGamma = np.array([0, 0, 0], dtype=np.float64)
+            Fk0 = self.intNablaUSquare(kGamma)
+        else:
+            Fk0 = self.Fk0_conv
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.rho,
                                 self.imax, k_cutoff, gamma,
-                                kPrime, self.basis_indices_map,
+                                kPrime, self.kpts_mesh, self.xtheta_mesh,
+                                self.dkpts, self.dxtheta, Fk0,
+                                self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
                                 correlator_idx,
@@ -931,7 +942,7 @@ class UEG:
                 kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
                 u_kp = self.correlator(kptsmesh ** 2)
                 F = kptsmesh ** 4 * u_kp ** 2
-                result = -1.0 * (1.0/(2.0 * np.pi**2)) * sum(F[:]) * dk
+                result = -1.0 * (1.0/(2.0 * np.pi**2)) * np.sum(F[:]) * dk
                 self.Fk0_conv = result
                 return self.Fk0_conv
             else:
@@ -948,6 +959,7 @@ class UEG:
             # Compute |k - k'|^2.
             kMinusKpSquare = kSquare + kpGrid ** 2 - 2.0 * k * kpGrid * xThetaGrid
             # Avoid singularity at |k - k'| ~ 0.
+            # NOTE: this treatment for the vectorized version requires further testing.
             kMinusKpSquare = np.where(np.abs(kMinusKpSquare) < 1.e-12,
                                         1.e-12, kMinusKpSquare)
             # Compute weight factor.

@@ -19,7 +19,9 @@ Correlators:
 @jit(nopython=True, parallel=True)
 def _get_2b_int( idx, n_ele, Omega, L, rho, 
                     imax, k_cutoff, gamma, 
-                    kPrime, basis_indices_map,
+                    kPrime, kpts_mesh, xtheta_mesh,
+                    dkpts, dxtheta, Fk0,
+                    basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
                     dtype=np.float64):
@@ -96,9 +98,15 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
             #loc_r_idx = r - idx[4]
             d_int_k = basis_Kvec[r] - basis_Kvec[p]
             d_k_vec = basis_Kp[r] - basis_Kp[p]
+            dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
             u_mat = 0.
             if is_tc:
-                u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
+                if abs(dk_square) < 1.e-24: 
+                    u_mat = Fk0
+                else:
+                    u_mat = _intNablaUSquare(d_k_vec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
+                                            rho, k_cutoffSquare, gamma, correlator_idx)
+                    #u_mat = _sumNablaUSquare(d_k_vec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
             for q in range(idx[2], idx[3]):
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
@@ -116,7 +124,7 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
                 else:
                     continue
                 loc_s_idx = s - idx[6]
-                dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
+                #dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
                 w = 0.0
                 if is_tc:
                     if is_only_2b:
@@ -315,29 +323,82 @@ def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator
     return umat / Omega
 
 @jit(nopython=True)
-def _intNablaUSquare(kVec, rho, k_cutoffSquare, gamma, correlator_idx):
+def _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
+                        rho, k_cutoffSquare, gamma, correlator_idx,
+                        w=4):
+    
     """
     Numba JIT-compiled version of the intNablaUSquare function for better performance.
     Computes the convolution integral of the squared gradient of the correlator function in k-space,
-    in the TDL: F{(Nabla u)^2}(k) = int d^3k' (k · k')·k  u(k') u(|k - k'|).
+    in the TDL:
+    - F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)
+    
+    NOTE: This function does NOT handle the k=0 case. That should be computed separately
+    and passed as Fk0 to _get_2b_int.
+    
+    See intNablaUSquare() in ueg.py for more details.
+    
     Parameters
     ----------
-    kVec: nparray of float dtype
-        difference of two k-vectors (k_p - k_q).
-    rho: float
-        electron density.
-    k_cutoffSquare: float
-        plane wave vector cutoff inside the correlaor function trunc.
-    gamma: float
-        parameter in the correlator function.
-    correlator_idx: int
-        identifier for the correlator type.
+    kVec : np.ndarray
+        Momentum transfer vector k (3D array), must have |k| > 0
+    kpts_mesh : np.ndarray
+        k' grid points (1D array)
+    xtheta_mesh : np.ndarray
+        x = cos(θ) grid points (1D array)
+    dkpts : float
+        Spacing in k' grid
+    dxtheta : float
+        Spacing in x grid
+    rho : float
+        Electron density
+    k_cutoffSquare : float
+        Square of cutoff wave vector
+    gamma : float
+        Correlator parameter
+    correlator_idx : int
+        Correlator type identifier
+    w : int
+        Weight exponent for regularization (default=4)
+    
     Returns
     -------
-    u_mat: float
-        value of the convolution integral of the squared gradient of the correlator function in k-space.
+    result : float
+        Value of the convolution integral
     """
+    kSquare = kVec[0]**2 + kVec[1]**2 + kVec[2]**2
+    k = np.sqrt(kSquare)
+    # Prefactor: (dkp * dx) / (2π)².
+    prefac = (dkpts * dxtheta) / (2.0 * np.pi)**2
+    nkp = kpts_mesh.shape[0]
+    nx = xtheta_mesh.shape[0]
     umat = 0.0
+    # Double loop: outer over k', inner over x = cos(θ).
+    for ikp in range(nkp):
+        kp = kpts_mesh[ikp]
+        kpSquare = kp**2
+        kpW = kp**w
+        # Pre-compute u(kp²) once per kp.
+        u_kp = _calc_correlator(correlator_idx, kpSquare, k_cutoffSquare, rho, gamma)
+        inner_int = 0.0
+        for ix in range(nx):
+            x = xtheta_mesh[ix]
+            # |k - k'|² = k² + k'² - 2k·k'·cos(θ).
+            kMinusKpSquare = kSquare + kpSquare - 2.0 * k * kp * x
+            # Skip if |k-k'|² is too small (singularity).
+            if abs(kMinusKpSquare) < 1.e-12:
+                continue
+            # Regularization weight: 2·|k-k'|^w / (|k-k'|^w + k'^w).
+            kMinusKpW = kMinusKpSquare**(w/2)
+            weight = (2.0 * kMinusKpW) / (kMinusKpW + kpW)
+            # u(|k-k'|²).
+            u_kMinusKp = _calc_correlator(correlator_idx, kMinusKpSquare, k_cutoffSquare, rho, gamma)
+            # Integrand: (k·k'·x - k'²) · u(k') · u(|k-k'|) · k'² · weight.
+            inner_int += (k * kp * x - kpSquare) * u_kMinusKp * weight
+        # Add contribution from this k' point.
+        umat += inner_int * u_kp * kpSquare
+    umat *= prefac
+    
     return umat
 
 # CORRELATORS -----------------------------------------------------
