@@ -937,8 +937,8 @@ class UEG:
         if abs(k) < 1.e-12:
             # F{(∇u)²}(k=0) of finer k'-mesh.
             if self.Fk0_conv is None:
-                dk = self.dkpts/1000
-                kmax = self.kptsmax * 100
+                dk = self.dkpts/2000
+                kmax = self.kptsmax * 200
                 kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
                 u_kp = self.correlator(kptsmesh ** 2)
                 F = kptsmesh ** 4 * u_kp ** 2
