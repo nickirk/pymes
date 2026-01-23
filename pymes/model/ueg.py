@@ -997,7 +997,7 @@ class UEG:
             #result *= prefac # 2π from azimuthal integration.
             return result
     
-    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=20):
+    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
         """
         Member function of class UEG
         This function initializes the integration spherical mesh/grid for the 
