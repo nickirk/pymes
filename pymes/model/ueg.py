@@ -8,7 +8,7 @@ import pytblis as pytblis
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
-from pymes.model.ueg_helper import _get_2b_int
+from pymes.model.ueg_helper import _get_2b_int, _init_UMAT_TC, _init_UMAT_l_TC
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
@@ -20,7 +20,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, is_l_tc=False):
         """
         Parameters
         ----------
@@ -34,6 +34,9 @@ class UEG:
             density parameter
         is_tc: bool
             parameter which determines whether transcorrelated framework is
+            active or not for the calculation of the integrals.
+        is_l_tc: bool
+            parameter which determines whether long-range transcorrelated framework is
             active or not for the calculation of the integrals.
 
         Attributes
@@ -56,29 +59,31 @@ class UEG:
 
         k_cutoff: float
             plane wave vector cutoff inside the correlaor function trunc.
+
+        TODO: add description of extended attributes here.
         """
 
         if (n_ele) % 2 != 0:
             warnings.warn("The number of electrons is not even, currently only\
                           closed shell systems are supported!")
         self.n_ele = int(n_ele)
-        #: number of alpha (spin-up) electrons
+        #: Number of alpha (spin-up) electrons
         self.n_alpha = int(n_alpha)
-        #: number of beta (spin-down) electrons
+        #: Number of beta (spin-down) electrons
         self.n_beta = int(n_beta)
         if self.n_alpha != self.n_beta:
             warnings.warn("The number of electrons is not even, currently only\
                           closed shell systems are supported!")
-        #: number of electrons for closed shell systems
+        #: Number of electrons for closed shell systems
         if ( not planewave.is_closed_shell(self.n_ele) ):
             raise ValueError("The number of electrons is not a closed shell system, currently only\
                           closed shell systems are supported!")
         #: Wigner-Seitz radius.
         self.rs = rs
-        #: length of the cubic simulation cell containing n_ele electrons
+        #: Length of the cubic simulation cell containing n_ele electrons
         #: at the density of rs.
         self.L = self.rs * ((4 * np.pi * self.n_ele) / 3) ** (1.0 / 3.0)
-        #: volume of the cubic simulation cell containing n_ele electrons at the density.
+        #: Volume of the cubic simulation cell containing n_ele electrons at the density.
         #: of rs.
         self.Omega = self.L ** 3
         #: electron density.
@@ -87,36 +92,28 @@ class UEG:
         self.dk0 = 2.0 * np.pi / self.L
         #: Fermi wave vector.
         self.kFermi = (3 * np.pi ** 2 * self.rho) ** (1.0 / 3.0)
-
+        #: Single particle basis functions (PWs).
         self.basis_fns = None
-
         self.imax = 0
-
         self.cutoff = 0.
-
         self.basis_indices_map = None
-
-        #: Convolution integral for the simulation cell.
+        #: TC [transcorrelated] method
+        self.is_tc = is_tc
+        self.correlator = None
+        self.k_cutoff = None
+        self.gamma = None
+        self.UMAT = None
+        ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC]
+        self.is_l_tc = is_l_tc
+        ###: TC [canonical TC]
         self.kPrime = None
-
-        #: Convolution integral in the TDL.
+        ###: l-TC [long-range TC]
         self.kpts_mesh = None
         self.xtheta_mesh = None
         self.dkpts = None
         self.dxtheta = None
         self.kptsmax = None
-        #: Convolution at k=0 (Gamma) F{(∇u)²}(k=0).
-        self.Fk0_conv = None
-
-        self.correlator = None
-
-        self.k_cutoff = None
-
-        self.gamma = None
-
-        self.is_tc = is_tc
-
-        #: Correlator types and index mapping.
+        #: Correlator types and constants.
         self.CORRELATOR_NONE = 0
         self.CORRELATOR_TRUNC = 1
         self.CORRELATOR_COULOMB = 2
@@ -257,20 +254,21 @@ class UEG:
             raise ValueError(algo_name, "Basis functions not initialized!")
         if self.is_tc:
             print_logging_info("Using TC method", level=1)
+            print_logging_info("TC-type: {}".format("l-TC [long-range]" if self.is_l_tc else "TC [canonical]"), level=1)
             if self.correlator is None:
-                raise ValueError("Correlator for the transcorrelated framework not initialized!")
+                raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
             else:
                 print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
             if self.correlator == self.trunc:
                 if self.k_cutoff is None:
-                    raise ValueError("K-cutoff for the transcorrelated trunc. correlator not initialized!")
+                    raise ValueError(algo_name, "K-cutoff for the transcorrelated trunc. correlator not initialized!")
                 else:
                     print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
             else:
                 if self.k_cutoff is None:
                     print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
                 else:
-                    print_logging_info("K-cutoff in correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+                    print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
         else:
             print_logging_info("Using non-TC method", level=1)
         
@@ -412,10 +410,10 @@ class UEG:
             raise ValueError(algo_name, "Basis functions not initialized!")
         if self.is_tc:
             if self.correlator is None:
-                raise ValueError("Correlator for the transcorrelated framework not initialized!")
+                raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
             if self.correlator == self.trunc:
                 if self.k_cutoff is None:
-                    raise ValueError("K-Cutoff for the transcorrelated trunc. correlator not initialized!")
+                    raise ValueError(algo_name, "K-Cutoff for the transcorrelated trunc. correlator not initialized!")
 
         nP = int(len(self.basis_fns) / 2)
         no = int(self.n_ele / 2)
@@ -429,31 +427,18 @@ class UEG:
         if self.is_tc:
             correlator_idx = self.get_correlator_idx()
         else:
-            correlator_idx = 0  # None
+            correlator_idx = self.CORRELATOR_NONE # None
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
-        # kPrime (k') for convolution in the simulation cell.
-        if self.kPrime is None:
-            raise ValueError("kPrime not initialized!")
-        else:
-            kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
-        # k'-mesh and x-theta mesh for convolution in the continuum (TDL).
-        if self.kpts_mesh is None or self.xtheta_mesh is None:
-            raise ValueError("kpts_mesh or xtheta_mesh not initialized!")
-        if self.Fk0_conv is None:
-            kGamma = np.array([0, 0, 0], dtype=np.float64)
-            Fk0 = self.intNablaUSquare(kGamma)
-        else:
-            Fk0 = self.Fk0_conv
+        if self.is_tc and self.UMAT is None:
+            raise ValueError(algo_name, "UMAT for the transcorrelated framework not initialized!")
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.rho,
                                 self.imax, k_cutoff, gamma,
-                                kPrime, self.kpts_mesh, self.xtheta_mesh,
-                                self.dkpts, self.dxtheta, Fk0,
-                                self.basis_indices_map,
+                                self.UMAT, self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
                                 correlator_idx,
@@ -873,6 +858,123 @@ class UEG:
         RPA2Body = fac * einsum("opqrsq->oprs", integrals)
         return RPA2Body
 
+    def init_kPrime(self, cutoff=30):
+        """
+        Member function of class UEG
+        This function generates the k' vectors for the canonical transcorrelated
+        integrals. The k' vectors are generated in the range of -cutoff to 
+        cutoff (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
+        in each direction. The k' vectors are stored in the class
+        variable kPrime.
+
+        Note: need to test convergence of this k'-mesh cutoff.
+
+        Returns
+        -------
+        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
+        """
+        algo_name = "UEG.init_kPrime"
+        if not self.is_l_tc:
+            kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
+                           for j in range(-cutoff, cutoff + 1) for k in \
+                            range(-cutoff, cutoff + 1)])
+            self.kPrime = kPrime
+        else:
+            raise ValueError(algo_name, "init_kPrime not needed for l-Transcorrelated method!")
+    
+    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
+        """
+        Member function of class UEG
+        This function initializes the integration spherical mesh/grid for the 
+        convolution integral of the squared gradient of the correlator
+        function in k-space, for the l-Transcorrelated method.
+        Parameters
+        ----------
+        nx: float
+            number of points in the x = cos(θ) grid.
+        dkfac: int
+            determines the k'-grid spacing as dk = k_F/kfac.
+        kmaxfac: float
+            maximum k' value in the grid kmax = k_F*kmaxfac.
+        Returns
+        """
+        algo_name = "UEG.init_ConvMesh"
+        if self.is_l_tc:
+            self.dxtheta = 2.0 / nx
+            self.dkpts = self.kFermi / dkfac
+            self.kptsmax = self.kFermi * kmaxfac
+            #: k'-mesh: uniform for trapezoidal rule.
+            kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
+            self.kpts_mesh = kPrimeMesh
+            #: x = cos(θ) mesh:clear mid-point rule.
+            xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
+            self.xtheta_mesh = xThetaMesh
+        else:
+            raise ValueError(algo_name, "init_ConvMesh not needed for canonical TC method!")
+
+    def init_UMAT(self, dtype=np.float64):
+        """
+        Member function of class UEG
+        This function initializes and fills the UMAT array which stores the
+        pre-computed values of the convolution integral of the squared gradient
+        of the correlator function in k-space.
+
+        Depending on the type of transcorrelated method used (canonical or l-TC),
+        the UMAT array is filled:
+        TC:   F{(∇u)²}(k) = 1/Ω ∑k' (k'·(k-k')) u(k') u(|k-k'|) -> sumNablaUSquare
+        l-TC: F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)  -> intNablaUSquare
+        """
+        algo_name = "UEG.init_UMAT"
+
+        print_logging_info(algo_name, ": Initializing UMAT[kx,ky,kz]", level=0)
+        print_logging_info("TC-type: {}".format("l-TC [long-range]" if self.is_l_tc else "TC [canonical]"), level=1)
+
+        if not self.is_tc:
+            raise ValueError(algo_name, " cannot be initialized if TC method is not active!")
+        if self.correlator is None:
+            raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
+        else:
+            print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
+        if self.correlator == self.trunc:
+            if self.k_cutoff is None:
+                raise ValueError(algo_name, "K-cutoff for the transcorrelated trunc. correlator not initialized!")
+            else:
+                print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+        else:
+            if self.k_cutoff is None:
+                print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
+            else:
+                print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
+
+        correlator_idx = self.get_correlator_idx()
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        gamma  = self.gamma if self.gamma is not None else 1.0
+
+        start_time = time.time()
+        if not self.is_l_tc:
+            if self.kPrime is None:
+                raise ValueError(algo_name, "kPrime array not initialized for canonical TC!")
+            else:
+                kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
+            print_logging_info("Calculating UMAT elements with canonical TC: _init_UMAT_TC()", level=1)
+            self.UMAT = _init_UMAT_TC(self.Omega, self.L, self.rho, 
+                                        self.imax, k_cutoff, gamma,
+                                        kPrime, correlator_idx,
+                                        dtype=dtype)
+        elif self.is_l_tc:
+            if self.kpts_mesh is None or self.xtheta_mesh is None:
+                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for l-TC!")
+            print_logging_info("Calculating UMAT elements with l-TC: _init_UMAT_l_TC()", level=1)
+            self.UMAT = _init_UMAT_l_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
+                                        self.kpts_mesh, self.xtheta_mesh,
+                                        self.dkpts, self.dxtheta,
+                                        correlator_idx,
+                                        dtype=dtype)
+        end_time = time.time()
+        print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
+        print_logging_info("Gamma-point (Γ) UMAT value: {:.8f}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
+        print_logging_info(algo_name, ": UMAT initialized in {:.3f} s.".format(end_time - start_time), level=1)
+
     def sumNablaUSquare(self, k):
 
         if self.kPrime is None:
@@ -888,28 +990,6 @@ class UEG:
         result = np.einsum("n->", result, optimize=True) / self.Omega
 
         return result
-    
-    def init_kPrime(self, cutoff=30):
-        """
-        Member function of class UEG
-        This function generates the k' vectors for the transcorrelated
-        integrals. The k' vectors are generated in the range of -cutoff to 
-        cutoff (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
-        in each direction. The k' vectors are stored in the class
-        variable kPrime.
-
-        Note: need to test convergence of this k'-mesh cutoff.
-
-        Returns
-        -------
-        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
-        """
-
-        kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
-                           for j in range(-cutoff, cutoff + 1) for k in \
-                            range(-cutoff, cutoff + 1)])
-
-        self.kPrime = kPrime
 
     def intNablaUSquare(self, kVec, w=4):
         """ 
@@ -936,17 +1016,13 @@ class UEG:
         # Treat k = 0 case separately.
         if abs(k) < 1.e-12:
             # F{(∇u)²}(k=0) of finer k'-mesh.
-            if self.Fk0_conv is None:
-                dk = self.dkpts/2000
-                kmax = self.kptsmax * 200
-                kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
-                u_kp = self.correlator(kptsmesh ** 2)
-                F = kptsmesh ** 4 * u_kp ** 2
-                result = -1.0 * (1.0/(2.0 * np.pi**2)) * np.sum(F[:]) * dk
-                self.Fk0_conv = result
-                return self.Fk0_conv
-            else:
-                return self.Fk0_conv
+            dk = self.dkpts/2000
+            kmax = self.kptsmax * 200
+            kptsmesh = np.arange(0.0 + dk, kmax + dk, dk)
+            u_kp = self.correlator(kptsmesh ** 2)
+            F = kptsmesh ** 4 * u_kp ** 2
+            result = -1.0 * (1.0/(2.0 * np.pi**2)) * np.sum(F[:]) * dk
+            return result
         else:
             # Vectorized implementation.
             # Rename arrays.
@@ -996,32 +1072,6 @@ class UEG:
             #    result += inner_int * u_kp * kpSquare
             #result *= prefac # 2π from azimuthal integration.
             return result
-    
-    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
-        """
-        Member function of class UEG
-        This function initializes the integration spherical mesh/grid for the 
-        convolution integral of the squared gradient of the correlator
-        function in k-space.
-        Parameters
-        ----------
-        nx: float
-            number of points in the x = cos(θ) grid.
-        dkfac: int
-            determines the k'-grid spacing as dk = k_F/kfac.
-        kmaxfac: float
-            maximum k' value in the grid kmax = k_F*kmaxfac.
-        Returns
-        """
-        self.dxtheta = 2.0 / nx
-        self.dkpts = self.kFermi / dkfac
-        self.kptsmax = self.kFermi * kmaxfac
-        #: k'-mesh: uniform for trapezoidal rule.
-        kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
-        self.kpts_mesh = kPrimeMesh
-        #: x = cos(θ) mesh:clear mid-point rule.
-        xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
-        self.xtheta_mesh = xThetaMesh
 
     def triple_contractions_in_3_body(self):
         """
@@ -1180,9 +1230,9 @@ class UEG:
             $C^p_q({\bf G}) = \int\mathrm d{\bf r}
              \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}$
         """
-
+        algo_name = "UEG.calcGamma"
         if self.basis_fns == None:
-            raise ValueError("Basis functions not initialized!")
+            raise ValueError(algo_name, "Basis functions not initialized!")
 
         nG = int(len(overlap_basis) / 2)
         gamma_pqG = np.zeros((nP, nP, nG))
