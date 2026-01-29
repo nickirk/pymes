@@ -972,7 +972,7 @@ class UEG:
                                         dtype=dtype)
         end_time = time.time()
         print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
-        print_logging_info("Gamma-point (Γ) UMAT value: {:.8f}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
+        print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
         print_logging_info(algo_name, ": UMAT initialized in {:.3f} s.".format(end_time - start_time), level=1)
 
     def sumNablaUSquare(self, k):
