@@ -413,9 +413,9 @@ def _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
     # Treat k = 0 case separately.
     if abs(k) < 1.e-12:
         # F{(∇u)²}(k=0) of finer k'-mesh.
-        dk = dkpts/2000
-        kmax = kpts_mesh[-1] * 200
-        nkp = int(kmax / dk)
+        dk = dkpts/5000
+        kmax = kpts_mesh[-1] * 500
+        nkp = int(kmax / dk) + 1
         prefac = -1.0 * (1.0/(2.0 * np.pi**2)) * dk
         umat = 0.0
         for ikp in range(1, nkp+1):

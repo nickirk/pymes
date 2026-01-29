@@ -53,13 +53,24 @@ def test_trunc_correlator(ueg_model, tolerance=1e-12):
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     
     # Test with various k-vectors
-    test_k_values = [
+    test_k_values = [ 
         0.0,                                           # Zero
+        1.0e-12,                                       # Very small (at threshold)
+        1.0e-8,                                        # Small
+        1.0e-4,                                        # Small
+        0.01,                                          # Small
+        0.5,                                           # Small-medium
         k_cutoffSquare * 0.5,                         # Below cutoff
+        k_cutoffSquare * 0.9,                         # Just below cutoff
         k_cutoffSquare * 1.0001,                      # Just above cutoff
+        k_cutoffSquare * 1.5,                         # Above cutoff
         k_cutoffSquare * 2.0,                         # Well above cutoff
         (2 * np.pi / L) ** 2,                         # Typical value
         (5 * np.pi / L) ** 2,                         # Larger value
+        (10 * np.pi / L) ** 2,                        # Large value
+        (15 * np.pi / L) ** 2,                        # Very large value
+        (20 * np.pi / L) ** 2,                        # Very large value
+        (50 * np.pi / L) ** 2,                        # Extremely large value
     ]
     
     all_pass = True
@@ -135,13 +146,21 @@ def test_coulomb_correlator(ueg_model, tolerance=1e-12):
     gamma = ueg_model.gamma
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     
-    # Test with various k-vectors
+    # Test with various k-vectorsa
     test_k_values = [
         0.0,                                           # Zero (should return 0)
-        1e-15,                                         # Very small (should return 0)
+        1e-15,                                         # Very small (threshold test)
+        1e-12,                                         # At threshold
+        1e-10,                                         # Small
+        1e-6,                                          # Small
+        0.001,                                         # Small-medium
+        0.1,                                           # Medium
         (2 * np.pi / L) ** 2,                         # Typical value
         (5 * np.pi / L) ** 2,                         # Larger value
-        (10 * np.pi / L) ** 2,                        # Even larger
+        (10 * np.pi / L) ** 2,                        # Large value
+        (15 * np.pi / L) ** 2,                        # Very large value
+        (20 * np.pi / L) ** 2,                        # Very large value
+        (50 * np.pi / L) ** 2,                        # Extremely large value
     ]
     
     all_pass = True
@@ -203,9 +222,18 @@ def test_coulomb_yukawa_correlator(ueg_model, tolerance=1e-12):
     # Test with various k-vectors
     test_k_values = [
         1e-15,                                         # Very small (threshold test)
-        (2 * np.pi / ueg_model.L) ** 2,               # Typical value
-        (5 * np.pi / ueg_model.L) ** 2,               # Larger value
-        (10 * np.pi / ueg_model.L) ** 2,              # Even larger
+        1e-12,                                         # At threshold
+        1e-10,                                         # Small
+        1e-6,                                          # Small
+        0.001,                                         # Small-medium
+        0.1,                                           # Medium
+        (0.5 * np.pi / L) ** 2,                       # Small k
+        (2 * np.pi / L) ** 2,                         # Typical value
+        (5 * np.pi / L) ** 2,                         # Larger value
+        (10 * np.pi / L) ** 2,                        # Large value
+        (15 * np.pi / L) ** 2,                        # Very large value
+        (20 * np.pi / L) ** 2,                        # Very large value
+        (50 * np.pi / L) ** 2,                        # Extremely large value
     ]
     
     all_pass = True
@@ -286,11 +314,22 @@ def test_RPA_correlator(ueg_model, tolerance=1e-12):
     # Test with various k-vectors (relative to k_Fermi)
     test_k_values = [
         1e-15,                                         # Very small (threshold test)
+        1e-12,                                         # At threshold
+        1e-10,                                         # Small
+        1e-6,                                          # Small
+        0.001,                                         # Small-medium
+        0.1,                                           # Medium
+        (0.1 * kFermi) ** 2,                          # Well below k_F
         (0.5 * kFermi) ** 2,                          # Below 2*k_F
+        (1.0 * kFermi) ** 2,                          # At k_F
         (1.5 * kFermi) ** 2,                          # Below 2*k_F
-        (2.0 * kFermi) ** 2,                          # At 2*k_F
+        (1.99 * kFermi) ** 2,                         # Just below 2*k_F (critical!)
+        (2.0 * kFermi) ** 2,                          # At 2*k_F (critical point!)
+        (2.01 * kFermi) ** 2,                         # Just above 2*k_F (critical!)
         (2.5 * kFermi) ** 2,                          # Above 2*k_F
         (5.0 * kFermi) ** 2,                          # Well above 2*k_F
+        (10.0 * kFermi) ** 2,                         # Very large
+        (20.0 * kFermi) ** 2,                         # Extremely large
     ]
     
     all_pass = True
@@ -348,6 +387,8 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     """
     Test that _sumNablaUSquare gives the same results as UEG.sumNablaUSquare.
     
+    NOTE: This test is only applicable for canonical TC (is_l_tc=False).
+    
     Parameters
     ----------
     ueg_model : UEG
@@ -360,6 +401,16 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     bool : True if test passes, False otherwise
     """
     print_title("Testing _sumNablaUSquare", "=")
+    
+    # Check if this test is applicable
+    if ueg_model.is_l_tc:
+        print_logging_info("SKIPPING: sumNablaUSquare is for canonical TC only (is_l_tc=False)", level=1)
+        return True
+    
+    # Validate prerequisites
+    if ueg_model.kPrime is None:
+        print_logging_info("ERROR: kPrime not initialized! Call init_kPrime() first.", level=1)
+        return False
     
     # Prepare test data
     rho = ueg_model.n_ele / ueg_model.Omega
@@ -405,10 +456,8 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
                              f"diff={diff:.12e}", level=2)
             all_pass = False
         else:
-            speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
             print_logging_info(f"  Test {i+1} PASSED: idx={idx}, "
-                             f"diff={diff:.12e}, "
-                             f"speedup={speedup:.2f}x", level=2)
+                             f"diff={diff:.12e}", level=2)
     
     print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
     print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
@@ -420,8 +469,7 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     """
     Test that _intNablaUSquare gives the same results as UEG.intNablaUSquare.
     
-    NOTE: The k=0 case is NOT tested here because _intNablaUSquare does not handle it.
-    The k=0 case (Fk0) is computed separately in ueg.py and passed to _get_2b_int.
+    NOTE: This test is only applicable for l-TC (is_l_tc=True).
     
     Parameters
     ----------
@@ -436,6 +484,16 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     """
     print_title("Testing _intNablaUSquare", "=")
     
+    # Check if this test is applicable
+    if not ueg_model.is_l_tc:
+        print_logging_info("SKIPPING: intNablaUSquare is for l-TC only (is_l_tc=True)", level=1)
+        return True
+    
+    # Validate prerequisites
+    if ueg_model.kpts_mesh is None or ueg_model.xtheta_mesh is None:
+        print_logging_info("ERROR: Convolution mesh not initialized! Call init_ConvMesh() first.", level=1)
+        return False
+    
     # Prepare test data
     rho = ueg_model.n_ele / ueg_model.Omega
     L = ueg_model.L
@@ -444,22 +502,27 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     k_cutoffSquare = (k_cutoff * 2 * np.pi / L) ** 2
     correlator_idx = ueg_model.get_correlator_idx()
     
-    # Initialize convolution mesh if not already done
-    if ueg_model.kpts_mesh is None or ueg_model.xtheta_mesh is None:
-        print_logging_info("Initializing convolution mesh with default parameters", level=1)
-        ueg_model.init_ConvMesh(nx=200, dkfac=40, kmaxfac=20)
-    
     kpts_mesh = ueg_model.kpts_mesh
     xtheta_mesh = ueg_model.xtheta_mesh
     dkpts = ueg_model.dkpts
     dxtheta = ueg_model.dxtheta
     
-    # Test with various k-vectors (EXCLUDING k=0)
+    # Test with various k-vectors (INCLUDING k=0)
     nP = len(ueg_model.basis_fns) // 2
     test_indices = [0, nP//4, nP//2, 3*nP//4, nP-1]
     
     # Build test cases from basis functions (all should have |k| > 0)
     test_cases = []
+    # Include k=0
+    test_cases.append(np.array([0.0, 0.0, 0.0]))
+    # Include small k values
+    test_cases.append(np.array([1e-8, 0.0, 0.0]))
+    test_cases.append(np.array([1e-8, 1e-8, 0.0]))
+    test_cases.append(np.array([1e-8, 1e-8, 1e-8]))
+    test_cases.append(np.array([1e-5, 0.0, 0.0]))
+    test_cases.append(np.array([1e-5, 1e-5, 0.0]))
+    test_cases.append(np.array([1e-5, 1e-5, 1e-5]))
+    # Include allowed momentum transfer vectors
     for idx in test_indices:
         kVec = ueg_model.basis_fns[idx * 2].kp
         # Only add if |k| > 0
@@ -473,7 +536,6 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     print_logging_info(f"Testing with {len(test_cases)} different k-vectors (k ≠ 0)", level=1)
     print_logging_info(f"Using correlator index: {correlator_idx}", level=1)
     print_logging_info(f"Grid sizes: n_kp={len(kpts_mesh)}, n_x={len(xtheta_mesh)}", level=1)
-    print_logging_info(f"NOTE: k=0 case is NOT tested (handled separately via Fk0)", level=1)
     
     for i, kVec in enumerate(test_cases):
         k_mag = np.sqrt(kVec.dot(kVec))
@@ -494,14 +556,16 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
         max_diff = max(max_diff, diff)
         
         if diff > tolerance:
-            print_logging_info(f"  Test {i+1} FAILED: |k|={k_mag:.6f}, "
+            print_logging_info(f"  Test {i+1} FAILED: |k|={k_mag:.6e}, "
                              f"original={result_original:.12e}, "
                              f"compiled={result_compiled:.12e}, "
+                             f"time_orig={time_original:.4f}s, "
+                             f"time_comp={time_compiled:.4f}s, "
                              f"diff={diff:.12e}", level=2)
             all_pass = False
         else:
             speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
-            print_logging_info(f"  Test {i+1} PASSED: |k|={k_mag:.6f}, "
+            print_logging_info(f"  Test {i+1} PASSED: |k|={k_mag:.6e}, "
                              f"diff={diff:.12e}, "
                              f"time_orig={time_original:.4f}s, "
                              f"time_comp={time_compiled:.4f}s, "
@@ -682,7 +746,7 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
     return all_pass
 
 
-def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
+def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc=False):
     """
     Main test function.
     
@@ -698,6 +762,11 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
         Gamma parameter for correlator
     kc : float
         K-cutoff fraction for correlator
+    correlator : str
+        Correlator type: 'trunc', 'coulomb', 'coulomb_yukawa', 'RPA'
+    is_l_tc : bool
+        If True, use l-TC (long-range transcorrelated) method
+        If False, use canonical TC method
     """
     print_title("Testing Numba-Compiled UEG Helper Functions", "=")
     
@@ -705,13 +774,14 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     print_logging_info("Setting up UEG model", level=0)
     nalpha = nel // 2
     nbeta = nel // 2
-    ueg_model = ueg.UEG(nel, nalpha, nbeta, rs, is_tc=True)
+    ueg_model = ueg.UEG(nel, nalpha, nbeta, rs, is_tc=True, is_l_tc=is_l_tc)
     
     print_logging_info(f"Number of electrons: {nel}", level=1)
     print_logging_info(f"Cutoff: {cutoff}", level=1)
     print_logging_info(f"rs: {rs}", level=1)
     print_logging_info(f"Omega: {ueg_model.Omega:.6f}", level=1)
     print_logging_info(f"L: {ueg_model.L:.6f}", level=1)
+    print_logging_info(f"TC type: {'l-TC [long-range]' if is_l_tc else 'canonical TC'}", level=1)
     
     # Initialize basis
     print_logging_info("Initializing basis set", level=0)
@@ -721,28 +791,42 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     
     # Setup TC parameters
     print_logging_info("Setting up TC parameters", level=0)
-    ueg_model.correlator = ueg_model.trunc
+    if correlator == 'trunc':
+        ueg_model.correlator = ueg_model.trunc
+    elif correlator == 'coulomb':
+        ueg_model.correlator = ueg_model.coulomb
+    elif correlator == 'coulomb_yukawa':
+        ueg_model.correlator = ueg_model.coulomb_yukawa
+    elif correlator == 'RPA':
+        ueg_model.correlator = ueg_model.RPA
+    else:
+        raise ValueError(f"Unknown correlator type: {correlator}")
     ueg_model.k_cutoff = kc
     ueg_model.gamma = gamma if gamma is not None else 1.0
-    ueg_model.init_kPrime()
     
     print_logging_info(f"Correlator: {ueg_model.correlator.__name__}", level=1)
     print_logging_info(f"k_cutoff: {ueg_model.k_cutoff}", level=1)
     print_logging_info(f"gamma: {ueg_model.gamma}", level=1)
-    print_logging_info(f"kPrime shape: {ueg_model.kPrime.shape}", level=1)
     
-    # Initialize convolution mesh for intNablaUSquare test
-    print_logging_info("Initializing convolution mesh", level=0)
-    ueg_model.init_ConvMesh(nx=200, dkfac=60, kmaxfac=20)
-    print_logging_info(f"kpts_mesh size: {len(ueg_model.kpts_mesh)}", level=1)
-    print_logging_info(f"xtheta_mesh size: {len(ueg_model.xtheta_mesh)}", level=1)
+    # TC type-specific initialization
+    if is_l_tc:
+        print_logging_info("Using l-TC (long-range transcorrelated) method", level=0)
+        print_logging_info("Initializing convolution mesh for l-TC", level=1)
+        ueg_model.init_ConvMesh(nx=200, dkfac=60, kmaxfac=20)
+        print_logging_info(f"kpts_mesh size: {len(ueg_model.kpts_mesh)}", level=1)
+        print_logging_info(f"xtheta_mesh size: {len(ueg_model.xtheta_mesh)}", level=1)
+    else:
+        print_logging_info("Using canonical TC method", level=0)
+        print_logging_info("Initializing kPrime for canonical TC", level=1)
+        ueg_model.init_kPrime()
+        print_logging_info(f"kPrime shape: {ueg_model.kPrime.shape}", level=1)
     
     sys.stdout.flush()
     
     # Run tests
     test_results = {}
     
-    # Test correlators
+    # Test correlators (common to both TC types)
     test_results['trunc'] = test_trunc_correlator(ueg_model)
     sys.stdout.flush()
     
@@ -755,13 +839,19 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
     test_results['RPA'] = test_RPA_correlator(ueg_model)
     sys.stdout.flush()
     
-    # Test helper functions
-    test_results['sumNablaUSquare'] = test_sumNablaUSquare(ueg_model)
-    sys.stdout.flush()
+    # Test helper functions based on TC type
+    if not is_l_tc:
+        # Canonical TC tests
+        print_logging_info("Testing canonical TC helper function: sumNablaUSquare", level=0)
+        test_results['sumNablaUSquare'] = test_sumNablaUSquare(ueg_model)
+        sys.stdout.flush()
+    else:
+        # l-TC tests
+        print_logging_info("Testing l-TC helper function: intNablaUSquare", level=0)
+        test_results['intNablaUSquare'] = test_intNablaUSquare(ueg_model)
+        sys.stdout.flush()
     
-    test_results['intNablaUSquare'] = test_intNablaUSquare(ueg_model)
-    sys.stdout.flush()
-    
+    # Test 3-body contraction functions (common to both TC types)
     test_results['contract_exchange_3_body'] = test_contract_exchange_3_body(ueg_model)
     sys.stdout.flush()
     
@@ -786,6 +876,18 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1):
 
 
 if __name__ == '__main__':
-    # Test with small system for quick validation
-    exit_code = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1)
-    sys.exit(exit_code)
+    # Test both canonical TC and l-TC methods
+    print_title("=" * 80, "=")
+    print_title("TESTING CANONICAL TC METHOD", "=")
+    print_title("=" * 80, "=")
+    exit_code_tc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', is_l_tc=False)
+    
+    print("\n" * 3)
+    
+    print_title("=" * 80, "=")
+    print_title("TESTING LONG-RANGE TC (l-TC) METHOD", "=")
+    print_title("=" * 80, "=")
+    exit_code_ltc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', is_l_tc=True)
+    
+    # Return non-zero if either test failed
+    sys.exit(max(exit_code_tc, exit_code_ltc))
