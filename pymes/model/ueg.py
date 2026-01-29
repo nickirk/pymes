@@ -427,7 +427,11 @@ class UEG:
         if self.is_tc:
             correlator_idx = self.get_correlator_idx()
         else:
-            correlator_idx = self.CORRELATOR_NONE # None
+            # NONE.
+            correlator_idx = self.CORRELATOR_NONE
+            # Dummy UMAT for non-TC calculations.
+            if self.UMAT is None:
+                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
         if self.is_tc and self.UMAT is None:
