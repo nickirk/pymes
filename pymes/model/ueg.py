@@ -318,6 +318,9 @@ class UEG:
         # get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
 
+        # get the total kitenic energy of the system.
+        tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
+
         # get the orbital energies (with/without pure 2b int. from transcorrelation).
         Epsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
         Epsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
@@ -372,6 +375,8 @@ class UEG:
         fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
 
         print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
+        print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
+        print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
 
         print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
                            "calculating the Hartree Fock energy and the Fock matrix.", level=1)
