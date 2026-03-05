@@ -186,7 +186,7 @@ class UEG:
         # cutoff = cutoff*(2*np.pi/self.L)**2
 
         # Check that energy cutoff is larger than the Fermi energy.
-        min_cutoff = np.ceil(self.kFermi**2 / (2 * np.pi / self.L)**2)
+        min_cutoff = np.ceil(self.kFermi**2 / (2 * np.pi / self.L)**2) + 0.5
         if cutoff < min_cutoff:
             print_logging_info("WARNING: the (basis) energy cutoff is smaller than the Fermi energy.", level=0)
             print_logging_info("Setting cutoff to: {:.8f} [1/2*(2π/L)²] (Fermi energy).".format(min_cutoff), level=0)
