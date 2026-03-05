@@ -167,7 +167,7 @@ class UEG:
         Parameters
         ----------
         cutoff: float,
-            energy cutoff, in units of `2*(2pi/L)^2`, defining the
+            energy cutoff, in units of `1/2*(2pi/L)^2`, defining the
             single-particle basis.
             Only single-particle basis functions with a kinetic energy equal
             to or less than the cutoff are included as basis functions.
@@ -184,6 +184,14 @@ class UEG:
 
         # Single particle basis within the desired energy cutoff.
         # cutoff = cutoff*(2*np.pi/self.L)**2
+
+        # Check that energy cutoff is larger than the Fermi energy.
+        min_cutoff = self.kFermi**2 / (2 * np.pi / self.L)**2
+        if cutoff < min_cutoff:
+            print_logging_info("WARNING: the (basis) energy cutoff is smaller than the Fermi energy.", level=0)
+            print_logging_info("Setting cutoff to: {:.8f} [1/2*(2π/L)²] (~Fermi energy).".format(min_cutoff), level=0)
+            cutoff = min_cutoff
+        # Initialize the basis functions.        
         k_shift = np.array(k_shift)
         kp_shift = k_shift * 2 * np.pi / self.L
         imax = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1

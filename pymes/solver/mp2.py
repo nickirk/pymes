@@ -1,8 +1,9 @@
 import time
 import numpy as np
+import pytblis as pytblis
 from functools import partial
 
-einsum = partial(np.einsum, optimize=True)
+einsum = partial(pytblis.einsum, optimize='greedy')
 
 from pymes.log import print_logging_info
 
