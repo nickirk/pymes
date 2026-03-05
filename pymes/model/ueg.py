@@ -189,7 +189,7 @@ class UEG:
         min_cutoff = self.kFermi**2 / (2 * np.pi / self.L)**2
         if cutoff < min_cutoff:
             print_logging_info("WARNING: the (basis) energy cutoff is smaller than the Fermi energy.", level=0)
-            print_logging_info("Setting cutoff to: {:.8f} [1/2*(2π/L)²] (~Fermi energy).".format(min_cutoff), level=0)
+            print_logging_info("Setting cutoff to: {:.8f} [1/2*(2π/L)²] (Fermi energy).".format(min_cutoff), level=0)
             cutoff = min_cutoff
         # Initialize the basis functions.        
         k_shift = np.array(k_shift)
