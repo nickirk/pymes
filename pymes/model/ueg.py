@@ -20,7 +20,7 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, k_sampling='gamma', tc=None):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, k_symm='gamma', tc=None):
         """
         Parameters
         ----------
@@ -32,7 +32,7 @@ class UEG:
             number of spin down electrons.
         rs: float
             density parameter.
-        k_sampling: str
+        k_symm: str
             k-point sampling scheme, currently supports 'gamma' and 'baldereschi'.
         tc: str or None
             type of transcorrelation treatment, currently supports 'canonical' and 'long-range'.
@@ -73,10 +73,17 @@ class UEG:
         if self.n_alpha != self.n_beta:
             warnings.warn("The number of electrons is not even, currently only\
                           closed shell systems are supported!")
+        #: K-point symmetry (sampling scheme): 'gamma' and 'baldereschi'.
+        self.k_symm = k_symm
+        if self.k_symm == 'gamma':
+            self.k_symm_shift = np.array([0., 0., 0.])
+        elif self.k_symm == 'baldereschi':
+            self.k_symm_shift = np.array([0.25, 0.25, 0.25])
+        else:
+            raise ValueError(f"Unknown k-point symmetry: '{k_symm}'. Supported values are 'gamma' or 'baldereschi'.")
         #: Number of electrons for closed shell systems
-        if ( not planewave.is_closed_shell(self.n_ele) ):
-            raise ValueError("The number of electrons is not a closed shell system, currently only\
-                          closed shell systems are supported!")
+        if ( not planewave.is_closed_shell(self.n_ele, k_shift = self.k_symm_shift) ):
+            raise ValueError("The number of electrons is not a closed shell system for the {} k-point symmetry.".format(self.k_symm))
         #: Wigner-Seitz radius.
         self.rs = rs
         #: Length of the cubic simulation cell containing n_ele electrons
@@ -171,13 +178,13 @@ class UEG:
 
         Parameters
         ----------
-        cutoff: float,
-            energy cutoff, in units of `1/2*(2pi/L)^2`, defining the
+        cutoff: float
+            energy cutoff, in units of [1/2*(2π/L)²], defining the
             single-particle basis.
             Only single-particle basis functions with a kinetic energy equal
             to or less than the cutoff are included as basis functions.
-        k_shift: 1D float array or list, a shift added to plane waves, in
-                 unit of 2pi/L
+        k_shift: 1D float array or list 
+                a shift added to plane waves, in unit of 2π/L (Twisted Boundary Conditions).
 
         Returns
         -------
@@ -186,10 +193,12 @@ class UEG:
             i.e. the single-particle basis set.
 
     """
-
+        algo_name = "UEG.init_single_basis"
         # Single particle basis within the desired energy cutoff.
         # cutoff = cutoff*(2*np.pi/self.L)**2
-
+        print_logging_info(algo_name, ": initializing the single particle basis functions with cutoff = {:.8f} [1/2*(2π/L)²]".format(cutoff), level=0)
+        print_logging_info("K-point symmetry (sampling scheme): {} at k = {} [2π/L]".format(self.k_symm, self.k_symm_shift), level=1)
+        print_logging_info("Basis k-shift: {} [2π/L]".format(k_shift), level=1)
         # Check that energy cutoff is larger than the Fermi energy.
         min_cutoff = np.ceil(self.kFermi**2 / (2 * np.pi / self.L)**2) + 0.5
         if cutoff < min_cutoff:
@@ -198,11 +207,16 @@ class UEG:
             cutoff = min_cutoff
         # Initialize the basis functions.        
         k_shift = np.array(k_shift)
+        # Gamma-point or Baldereschi point shift in units of 2π/L.
+        k_shift += self.k_symm_shift 
+
         kp_shift = k_shift * 2 * np.pi / self.L
         imax = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1
         self.cutoff = cutoff
         self.imax = imax
         basis_fns = []
+        print_logging_info("Total k-shift: {} [2π/L]".format(k_shift), level=1)
+        print_logging_info("Generating basis functions with imax: {}".format(imax), level=1)
 
         for i in range(-imax, imax + 1):
             for j in range(-imax, imax + 1):
