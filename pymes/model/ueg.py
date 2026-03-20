@@ -20,24 +20,23 @@ class UEG:
     """ This class defines a model system of 3d uniform electron gas
     """
 
-    def __init__(self, n_ele, n_alpha, n_beta, rs, is_tc=False, is_l_tc=False):
+    def __init__(self, n_ele, n_alpha, n_beta, rs, k_sampling='gamma', tc=None):
         """
         Parameters
         ----------
         n_ele: int
-            number of electrons
+            number of electrons.
         n_alpha: int
-            number of spin up electrons
+            number of spin up electrons.
         n_beta: int
-            number of spin down electrons
+            number of spin down electrons.
         rs: float
-            density parameter
-        is_tc: bool
-            parameter which determines whether transcorrelated framework is
-            active or not for the calculation of the integrals.
-        is_l_tc: bool
-            parameter which determines whether long-range transcorrelated framework is
-            active or not for the calculation of the integrals.
+            density parameter.
+        k_sampling: str
+            k-point sampling scheme, currently supports 'gamma' and 'baldereschi'.
+        tc: str or None
+            type of transcorrelation treatment, currently supports 'canonical' and 'long-range'.
+            If None, no transcorrelation is applied.
 
         Attributes
         ----------
@@ -97,14 +96,20 @@ class UEG:
         self.imax = 0
         self.cutoff = 0.
         self.basis_indices_map = None
-        #: TC [transcorrelated] method
-        self.is_tc = is_tc
+        #: TC [transcorrelated] method.
+        self.is_tc = False
+        self.tc_type = None
         self.correlator = None
         self.k_cutoff = None
         self.gamma = None
         self.UMAT = None
-        ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC]
-        self.is_l_tc = is_l_tc
+        ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC].
+        if tc is not None:
+            if tc == 'canonical' or tc == 'long-range':
+                self.is_tc = True
+                self.tc_type = tc
+            else:
+                raise ValueError("Unsupported TC type: expected 'canonical' or 'long-range', got {}".format(tc))
         ###: TC [canonical TC]
         self.kPrime = None
         ###: l-TC [long-range TC]
@@ -262,7 +267,7 @@ class UEG:
             raise ValueError(algo_name, "Basis functions not initialized!")
         if self.is_tc:
             print_logging_info("Using TC method", level=1)
-            print_logging_info("TC-type: {}".format("l-TC [long-range]" if self.is_l_tc else "TC [canonical]"), level=1)
+            print_logging_info("TC-type: {}".format(self.tc_type), level=1)
             if self.correlator is None:
                 raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
             else:
@@ -891,20 +896,20 @@ class UEG:
         kPrime: nparray of int dtype, size (3*cutoff+1, 3)
         """
         algo_name = "UEG.init_kPrime"
-        if not self.is_l_tc:
+        if self.tc_type == "canonical":
             kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
                            for j in range(-cutoff, cutoff + 1) for k in \
                             range(-cutoff, cutoff + 1)])
             self.kPrime = kPrime
         else:
-            raise ValueError(algo_name, "init_kPrime not needed for l-Transcorrelated method!")
+            raise ValueError(algo_name, "init_kPrime not needed for long-range TC method!")
     
     def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
         """
         Member function of class UEG
         This function initializes the integration spherical mesh/grid for the 
         convolution integral of the squared gradient of the correlator
-        function in k-space, for the l-Transcorrelated method.
+        function in k-space, for the long-range TC method.
         Parameters
         ----------
         nx: float
@@ -916,7 +921,7 @@ class UEG:
         Returns
         """
         algo_name = "UEG.init_ConvMesh"
-        if self.is_l_tc:
+        if self.tc_type == "long-range":
             self.dxtheta = 2.0 / nx
             self.dkpts = self.kFermi / dkfac
             self.kptsmax = self.kFermi * kmaxfac
@@ -936,7 +941,7 @@ class UEG:
         pre-computed values of the convolution integral of the squared gradient
         of the correlator function in k-space.
 
-        Depending on the type of transcorrelated method used (canonical or l-TC),
+        Depending on the type of transcorrelated method used (canonical or long-range TC),
         the UMAT array is filled:
         TC:   F{(∇u)²}(k) = 1/Ω ∑k' (k'·(k-k')) u(k') u(|k-k'|) -> sumNablaUSquare
         l-TC: F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)  -> intNablaUSquare
@@ -944,7 +949,7 @@ class UEG:
         algo_name = "UEG.init_UMAT"
 
         print_logging_info(algo_name, ": Initializing UMAT[kx,ky,kz]", level=0)
-        print_logging_info("TC-type: {}".format("l-TC [long-range]" if self.is_l_tc else "TC [canonical]"), level=1)
+        print_logging_info("TC-type: {}".format(self.tc_type), level=1) 
 
         if not self.is_tc:
             raise ValueError(algo_name, " cannot be initialized if TC method is not active!")
@@ -968,7 +973,7 @@ class UEG:
         gamma  = self.gamma if self.gamma is not None else 1.0
 
         start_time = time.time()
-        if not self.is_l_tc:
+        if self.tc_type == "canonical":
             if self.kPrime is None:
                 raise ValueError(algo_name, "kPrime array not initialized for canonical TC!")
             else:
@@ -978,10 +983,10 @@ class UEG:
                                         self.imax, k_cutoff, gamma,
                                         kPrime, correlator_idx,
                                         dtype=dtype)
-        elif self.is_l_tc:
+        elif self.tc_type == "long-range":
             if self.kpts_mesh is None or self.xtheta_mesh is None:
-                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for l-TC!")
-            print_logging_info("Calculating UMAT elements with l-TC: _init_UMAT_l_TC()", level=1)
+                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
+            print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_l_TC()", level=1)
             self.UMAT = _init_UMAT_l_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
                                         self.kpts_mesh, self.xtheta_mesh,
                                         self.dkpts, self.dxtheta,
