@@ -3,10 +3,10 @@ import spglib as spg
 
 from pymes.log import print_title, print_logging_info
 
-
-def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, k_shift=[0., 0., 0.]):
+def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, kpoints='irreducible', shift=[0., 0., 0.]):
     """
-    Generate irreducible wedges from a uniform Monkhorst k-mesh in the 1.B.Z.
+    Generate a uniform Monkhorst k-mesh in the 1.B.Z., or the
+    irreducible wedges from a uniform Monkhorst k-mesh in the 1.B.Z (spglib).
     Args:
         mesh: list of 3 integers 
             Dimension of the uniform k-mesh in one direction. n_ks[1] x n_ks[2] x n_ks[3].
@@ -16,13 +16,21 @@ def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, k_shift=[0.,
             Defining the positions of the atoms in the primitive cell.
         number: list of integers
             Defining the species of the atoms in the cell.
-        k_shift: list of 3 floats
-            Shift in the k-mesh by half a grid spacing in each direction.
+        kpoints: string
+            Type of k-point generation. 'uniform' for uniform Monkhorst k-mesh,
+            'irreducible' for irreducible k-points from a uniform Monkhorst k-mesh (spglib).
+        shift: list of 3 floats
+            Shift in the k-mesh (Monkhorst-Pack).
+            shift = [0., 0., 0.] Gamma-centered mesh θ[i,j,k]=[i/n_ks[1], j/n_ks[2], k/n_ks[3]] ; i=0,...,n_ks[1]-1 / j=0,...,n_ks[2]-1 / k=0,...,n_ks[3]-1.
+            shift = [0.5, 0.5, 0.5] shifted mesh θ[i,j,k]=[(i+0.5)/n_ks[1], (j+0.5)/n_ks[2], (k+0.5)/n_ks[3]] ; i=0,...,n_ks[1]-1 / j=0,...,n_ks[2]-1 / k=0,...,n_ks[3]-1.
+            shift = [s1, s2, s3] shifted mesh θ[i,j,k]=[(i+s1)/n_ks[1], (j+s2)/n_ks[2], (k+s3)/n_ks[3]] ; i=0,...,n_ks[1]-1 / j=0,...,n_ks[2]-1 / k=0,...,n_ks[3]-1.
 
     Returns:
-        frac_grid: list of np arrays of size 3. The fractional coordinations of the irreducible k-points
-        weight: list of floats. The weight of each irreducible k-point. It is the number of equivalent k-points divided
-        by the total number of k-points.
+        frac_grid: list of np arrays of size 3
+            The fractional coordinations of the irreducible k-points.
+        weight: list of floats 
+            The weight of each irreducible k-point. It is the number of equivalent k-points divided
+            by the total number of k-points.
     """
     # Default: 3 x 3 x 3 uniform k-mesh.
     if mesh is None:
@@ -39,27 +47,40 @@ def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, k_shift=[0.,
     # Default: simple cubic lattice with one atom at the origin.
     if lattice is None:
         lattice = np.array([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
+    if kpoints == 'irreducible':
+        cell = (lattice, positions, number)
+        mapping, grid = spg.get_ir_reciprocal_mesh(mesh, cell, is_shift=shift)
+        # Get the weight of the irreducible k-points.
+        unique_inds = np.unique(mapping)
+        weight = []
+        total_n_ks = np.prod(mesh)
+        for uind in unique_inds:
+            locs = np.where(mapping == uind)
+            num = len(locs[0])
+            weight.append(num)
+        weight = np.array(weight)
+        assert (np.sum(weight) == total_n_ks)
+        weight = np.array(weight) / total_n_ks
+        # All k-points and mapping to ir-grid points.
+        for i, (ir_gp_id, gp) in enumerate(zip(mapping, grid)):
+            print_logging_info("%3d ->%3d %s" % (i, ir_gp_id, gp.astype(float) / mesh), level=2)
+        # Irreducible k-points.
+        frac_grid = grid[np.unique(mapping)] / np.array(mesh, dtype=float)
+        print_logging_info("Number of ir-kpoints: %d" % len(np.unique(mapping)), level=2)
+    elif kpoints == 'uniform':
+        # Generate the uniform k-mesh in fractional coordinates.
+        i = np.arange(mesh[0])
+        j = np.arange(mesh[1])
+        k = np.arange(mesh[2])
+        grid = np.array(np.meshgrid(i, j, k, indexing='ij')).reshape(3, -1).T
+        # Apply the shift (Monkhorst-Pack).
+        grid = grid + np.array(shift)
+        for i, gp in enumerate(grid):
+            print_logging_info("%3d %s" % (i, gp.astype(float) / mesh), level=2)
+        frac_grid = grid / np.array(mesh)
+        weight = np.ones(len(frac_grid)) / len(frac_grid)
+        print_logging_info("Number of uniform k-points: %d" % len(frac_grid), level=2)
+    else:
+        raise ValueError("Invalid type for k-point generation: %s" % kpoints)
 
-    cell = (lattice, positions, number)
-    mapping, grid = spg.get_ir_reciprocal_mesh(mesh, cell, is_shift=k_shift)
-    # Get the weight of the irreducible k-points.
-    unique_inds = np.unique(mapping)
-    weight = []
-    total_n_ks = np.prod(mesh)
-
-    for uind in unique_inds:
-        locs = np.where(mapping == uind)
-        num = len(locs[0])
-        weight.append(num)
-    weight = np.array(weight)
-    assert (np.sum(weight) == total_n_ks)
-    weight = np.array(weight) / total_n_ks
-
-    # All k-points and mapping to ir-grid points.
-    for i, (ir_gp_id, gp) in enumerate(zip(mapping, grid)):
-        print_logging_info("%3d ->%3d %s" % (i, ir_gp_id, gp.astype(float) / mesh), level=2)
-
-    # Irreducible k-points.
-    frac_grid = grid[np.unique(mapping)] / np.array(mesh, dtype=float)
-    print_logging_info("Number of ir-kpoints: %d" % len(np.unique(mapping)), level=2)
     return frac_grid, weight

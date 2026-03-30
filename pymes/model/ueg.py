@@ -230,6 +230,10 @@ class UEG:
         basis_fns = tuple(basis_fns)
         self.basis_fns = basis_fns
 
+        gap = planewave.get_planewaves_gap(self.basis_fns, self.n_ele // 2)
+        if abs(gap) < 1e-8:
+            print_logging_info("WARNING: the energy gap between the highest occupied and lowest unoccupied spatial states is too small: {:.8e} [1/2*(2π/L)²].".format(gap), level=0)
+
         self.init_basis_indices_map()
 
         return basis_fns

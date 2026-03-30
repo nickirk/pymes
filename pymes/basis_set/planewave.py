@@ -146,3 +146,23 @@ def count_spatial_states(s, k_shift=[0., 0., 0.]):
                             n_states += 1
     
     return n_states
+
+def get_planewaves_gap(basis_fns, no):
+    """Calculate the gap between the highest occupied and lowest unoccupied spatial states.
+    Args:
+        basis_fns: list or tuple
+            of BasisFunc objects, sorted by kinetic energy.
+        no: int
+            number of occupied spatial states (half the number of electrons).
+    Returns:
+        float: The gap between the highest occupied and lowest unoccupied spatial states.
+    """
+
+    if no <= 0 or no >= len(basis_fns) // 2:
+        raise ValueError("Invalid number of occupied states.")
+    # Get the kinetic energy of the highest occupied and lowest unoccupied spatial states.
+    occupied_kinetic = basis_fns[2*no - 1].kinetic
+    unoccupied_kinetic = basis_fns[2*no].kinetic
+    # Calculate the gap.
+    gap = unoccupied_kinetic - occupied_kinetic
+    return gap
