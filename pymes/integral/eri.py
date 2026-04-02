@@ -3,6 +3,7 @@ from pymes.util.tensors import get_block_index
 class ERI:
 
     def __init__(self, model=None):
+        self.mode = None
         self.model = model
         self.n_elec = self.model.n_ele if model else None
         self.n_orb = len(self.model.basis_fns)//2 if model else None
@@ -20,32 +21,36 @@ class ERI:
         self.vovo  = None
         self.vvvv  = None
     
-    def calc_eri(self, incore=True):
+    def calc_eri(self, mode='incore'):
         """
         Calculate the electron repulsion integrals (ERIs) for the system.
         
         Parameters:
-        incore (bool): If True, store ERIs in memory. If False, calculate on-the-fly.
+            mode: str
+                The mode of calculation. 
+                    'incore' to store ERIs in memory, 
+                    'semi-incore' to store ERIs in memory except for 'vvvv' block,
+                    'on-the-fly' to calculate on-the-fly.
         
         Returns:
-        eri (numpy.ndarray): The calculated ERIs.
+            eri: numpy.ndarray): 
+                The calculated ERIs in the specified mode.
         """
 
+        self.mode = mode
         nP = self.n_orb
         no = self.n_occ
 
-        if incore:
-
+        if self.mode == 'incore':
             self.EHF, self.eps_occ, self.eps_virt, self.fock, \
-                self.oooo, self.vovo, self.voov = self.model.get_fock()
-
+                self.oooo, self.vovo, self.voov = self.model.get_fock(mode='incore')
             idx = get_block_index('full', nP, no)
             V_pqrs = self.model.get_2b_int(idx) 
             self.part_eri(self.fock, V_pqrs)
 
-        else:
+        elif self.mode == 'semi-incore':
             self.EHF, self.eps_occ, self.eps_virt, self.fock, \
-                self.oooo, self.vovo, self.voov = self.model.get_fock()
+                self.oooo, self.vovo, self.voov = self.model.get_fock(mode='incore')
             idx    = get_block_index( 'ovvo', nP, no)
             self.ovvo =  self.model.get_2b_int( idx )
             idx    = get_block_index( 'oovv', nP, no)
@@ -54,6 +59,12 @@ class ERI:
             self.ovov =  self.model.get_2b_int( idx)
             idx    = get_block_index( 'vvoo', nP, no)
             self.vvoo =  self.model.get_2b_int( idx )
+
+        elif self.mode == 'on-the-fly':
+            self.EHF, self.eps_occ, self.eps_virt, self.fock = self.model.get_fock(mode='on-the-fly')
+
+        else:
+            raise ValueError("Invalid mode for ERI calculation. Choose from 'incore', 'semi-incore', or 'on-the-fly'.") 
 
     def part_eri(self, fock, V_pqrs):    
         no = self.n_occ

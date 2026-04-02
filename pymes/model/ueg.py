@@ -230,8 +230,8 @@ class UEG:
         basis_fns = tuple(basis_fns)
         self.basis_fns = basis_fns
 
-        gap = planewave.get_planewaves_gap(self.basis_fns, self.n_ele // 2)
-        if abs(gap) < 1e-8:
+        gap = planewave.get_planewave_gap(self.basis_fns, self.n_ele // 2)
+        if gap is not None and abs(gap) < 1e-8:
             print_logging_info("WARNING: the energy gap between the highest occupied and lowest unoccupied spatial states is too small: {:.8e} [1/2*(2π/L)²].".format(gap), level=0)
 
         self.init_basis_indices_map()
@@ -257,10 +257,16 @@ class UEG:
         return kinetic_G
     
     def get_fock(self,
-                 dtype=np.float64):
+                mode='incore',
+                dtype=np.float64):
         """ Member function of class UEG to compute the Hartree Fock Energy,
                     the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
                     the Coulomb tensor.
+        Parameters:
+        mode (str):
+            The mode of calculation. 
+                'incore' returns the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of the Coulomb tensor in memory,
+                'on-the-fly' returns the Fock matrix, and calculates the Coulomb tensor blocks on-the-fly.
         Returns:
         -----------
         EHF: scalar object
@@ -272,14 +278,15 @@ class UEG:
         fock_pq: array object
             Fock matrix, dimension [n_p, n_p] (number of spatial orbitals)
         V_oooo: array object
-            'OOOO' block of the Coulomb tensor, dimension [n_occ, n_occ, n_occ, n_occ]
+            'OOOO' block of the Coulomb tensor, dimension [n_occ, n_occ, n_occ, n_occ] (if mode='incore')
         V_vovo: array object
-            'VOVO' block of the Coulomb tensor, dimension [n_virt, n_occ, n_virt, n_occ]
+            'VOVO' block of the Coulomb tensor, dimension [n_virt, n_occ, n_virt, n_occ] (if mode='incore')
         V_voov: array object
-            'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt]
+            'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt] (if mode='incore')
         """
         algo_name = "UEG.get_fock"
         print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock energy", level=0)
+        print_logging_info("Mode of calculation: {}".format(mode), level=1)
         start_time = time.time()
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
@@ -308,111 +315,225 @@ class UEG:
         nv = nP - no
         # initialize the fock matrix.
         fock_pq = np.zeros([nP, nP], dtype=dtype)
-        # initialize the Coulomb tensor.
-        V_oooo = np.zeros([no, no, no, no], dtype=dtype)
-        V_vovo = np.zeros([nv, no, nv, no], dtype=dtype)
-        V_voov = np.zeros([nv, no, no, nv], dtype=dtype)
+        # initialize the orbital energies of the occupied and virtual orbitals.
+        Epsilon_i = np.zeros([no], dtype=dtype)
+        Epsilon_a = np.zeros([nv], dtype=dtype)
         # initialize the Hartree Fock energy.
         EHF = 0.0
-
-        # get the components of the Coulomb tensor.
-        start_time_coulomb = time.time()
-        if self.is_tc:
-            print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
-            print_logging_info("Calculating [oooo] block", level=2)
-            idx    = get_block_index( 'oooo', nP, no)
-            V_oooo = self.get_2b_int( idx, \
-                                 is_only_2b=True)
-            print_logging_info("Calculating [vovo] block", level=2)
-            idx    = get_block_index( 'vovo', nP, no)
-            V_vovo = self.get_2b_int( idx, \
-                                 is_only_2b=True)
-            print_logging_info("Calculating [voov] block", level=2)
-            idx    = get_block_index( 'voov', nP, no)
-            V_voov = self.get_2b_int( idx, \
-                                 is_only_2b=True)
-        else:
-            print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
-            print_logging_info("Calculating [oooo] block", level=2)
-            idx    = get_block_index( 'oooo', nP, no)
-            V_oooo = self.get_2b_int( idx )
-            print_logging_info("Calculating [vovo] block", level=2)
-            idx    = get_block_index( 'vovo', nP, no)
-            V_vovo = self.get_2b_int( idx )
-            print_logging_info("Calculating [voov] block", level=2)
-            idx    = get_block_index( 'voov', nP, no)
-            V_voov = self.get_2b_int( idx )
-        end_time_coulomb = time.time()
-        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
-                            "calculating the Coulomb tensor.", level=1)
-
         # get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
-
-        # get the total kitenic energy of the system.
+        # get the total kinetic energy of the system.
         tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
 
-        # get the orbital energies (with/without pure 2b int. from transcorrelation).
-        Epsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
-        Epsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
+        if mode == 'incore':
 
-        # get the Hartree Fock energy.
-        print_logging_info("Calculating the Hartree Fock energy", level=1)
-        EHF = hf.calc_hf_e_part(Epsilon_i, V_oooo)
-        print_logging_info("HF E = {:.8f}".format(EHF), level=2)
+            # initialize the Coulomb tensor.
+            V_oooo = np.zeros([no, no, no, no], dtype=dtype)
+            V_vovo = np.zeros([nv, no, nv, no], dtype=dtype)
+            V_voov = np.zeros([nv, no, no, nv], dtype=dtype)
 
-        # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
-        if self.is_tc:
-            start_time_effect_2b = time.time()
-            print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
-            print_logging_info("Calculating [oooo] block", level=2)
-            idx    = get_block_index( 'oooo', nP, no)
-            V_oooo += self.get_2b_int( idx, \
-                                    is_effect_2b=True)
-            print_logging_info("Calculating [vovo] block", level=2)
-            idx    = get_block_index( 'vovo', nP, no)
-            V_vovo += self.get_2b_int( idx, \
-                                    is_effect_2b=True)
-            print_logging_info("Calculating [voov] block", level=2)
-            idx    = get_block_index( 'voov', nP, no)
-            V_voov += self.get_2b_int( idx, \
-                                    is_effect_2b=True)
-            end_time_effect_2b = time.time()
-            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
-                                "calculating the effective 2-body integrals.", level=1)
+            # get the components of the Coulomb tensor.
+            start_time_coulomb = time.time()
+            if self.is_tc:
+                print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
+                print_logging_info("Calculating [oooo] block", level=2)
+                idx    = get_block_index( 'oooo', nP, no)
+                V_oooo = self.get_2b_int( idx, \
+                                    is_only_2b=True)
+                print_logging_info("Calculating [vovo] block", level=2)
+                idx    = get_block_index( 'vovo', nP, no)
+                V_vovo = self.get_2b_int( idx, \
+                                    is_only_2b=True)
+                print_logging_info("Calculating [voov] block", level=2)
+                idx    = get_block_index( 'voov', nP, no)
+                V_voov = self.get_2b_int( idx, \
+                                    is_only_2b=True)
+            else:
+                print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
+                print_logging_info("Calculating [oooo] block", level=2)
+                idx    = get_block_index( 'oooo', nP, no)
+                V_oooo = self.get_2b_int( idx )
+                print_logging_info("Calculating [vovo] block", level=2)
+                idx    = get_block_index( 'vovo', nP, no)
+                V_vovo = self.get_2b_int( idx )
+                print_logging_info("Calculating [voov] block", level=2)
+                idx    = get_block_index( 'voov', nP, no)
+                V_voov = self.get_2b_int( idx )
+            end_time_coulomb = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
+                                "calculating the Coulomb tensor.", level=1)
+
+            # get the orbital energies (with/without pure 2b int. from transcorrelation).
+            Epsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
+            Epsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
+
+            # get the Hartree Fock energy.
+            print_logging_info("Calculating the Hartree Fock energy", level=1)
+            EHF = hf.calc_hf_e_part(Epsilon_i, V_oooo)
+            print_logging_info("HF E = {:.8f}".format(EHF), level=2)
+
+            # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
+            if self.is_tc:
+                start_time_effect_2b = time.time()
+                print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
+                print_logging_info("Calculating [oooo] block", level=2)
+                idx    = get_block_index( 'oooo', nP, no)
+                V_oooo += self.get_2b_int( idx, \
+                                        is_effect_2b=True)
+                print_logging_info("Calculating [vovo] block", level=2)
+                idx    = get_block_index( 'vovo', nP, no)
+                V_vovo += self.get_2b_int( idx, \
+                                        is_effect_2b=True)
+                print_logging_info("Calculating [voov] block", level=2)
+                idx    = get_block_index( 'voov', nP, no)
+                V_voov += self.get_2b_int( idx, \
+                                        is_effect_2b=True)
+                end_time_effect_2b = time.time()
+                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
+                                    "calculating the effective 2-body integrals.", level=1)
             
-        # get doubly and tryply contractions of the 3-body integrals,
-        #     correct orbital energies,
-        #     and add the mean field contribution from the 3-body integrals 
-        #     to the Hartree Fock energy.
-        if self.is_tc:
-            start_time_3b = time.time()
-            print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
+            # get doubly and tryply contractions of the 3-body integrals,
+            #     correct orbital energies,
+            #     and add the mean field contribution from the 3-body integrals 
+            #     to the Hartree Fock energy.
+            if self.is_tc:
+                start_time_3b = time.time()
+                print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
-            contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
-            contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
+                contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
+                contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
 
-            Epsilon_i += contr_from_doubly_contra_3b[:no]
-            Epsilon_a += contr_from_doubly_contra_3b[no:]
+                Epsilon_i += contr_from_doubly_contra_3b[:no]
+                Epsilon_a += contr_from_doubly_contra_3b[no:]
 
-            print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
-            EHF += contr_from_triply_contra_3b
-            end_time_3b = time.time()
-            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
-                                "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
+                print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
+                EHF += contr_from_triply_contra_3b
+                end_time_3b = time.time()
+                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
+                                    "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
 
-        # get the Hartree Fock matrix.
-        print_logging_info("Calculating the Fock matrix", level=1)
-        fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
+            # get the Hartree Fock matrix.
+            print_logging_info("Calculating the Fock matrix", level=1)
+            fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
 
-        print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
-        print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
-        print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
+            print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
+            print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
+            print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
 
-        print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
-                           "calculating the Hartree Fock energy and the Fock matrix.", level=1)
+            print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
+                            "calculating the Hartree Fock energy and the Fock matrix.", level=1)
 
-        return EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov
+            return EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov
+
+        elif mode == 'on-the-fly':
+
+            # get the orbital energies (with/without pure 2b int. from transcorrelation).
+            V_popo = np.zeros([1, no, 1, no], dtype=dtype)
+            V_poop = np.zeros([1, no, no, 1], dtype=dtype)
+            Epsilon_i = kinetic_G[:no].copy()
+            Epsilon_a = kinetic_G[no:].copy()
+            HF_dirE = 0.
+            HF_exE = 0.
+            start_time_orbital_energy = time.time()
+            if self.is_tc:
+                print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
+                for p in range(no):
+                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                    V_popo = self.get_2b_int(idx, is_only_2b=True)
+                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                    V_poop = self.get_2b_int(idx, is_only_2b=True)
+                    dirE = 2. * einsum('popo->', V_popo)
+                    exE = -1. * einsum('poop->', V_poop)
+                    Epsilon_i[p] += dirE + exE
+                    HF_dirE += dirE
+                    HF_exE += exE
+                print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
+                for p in range(no, nP):
+                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                    V_popo = self.get_2b_int(idx, is_only_2b=True)
+                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                    V_poop = self.get_2b_int(idx, is_only_2b=True)
+                    dirE = 2. * einsum('popo->', V_popo)
+                    exE = -1. * einsum('poop->', V_poop)
+                    Epsilon_a[p-no] += dirE + exE
+            else:
+                print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
+                for p in range(no):
+                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                    V_popo = self.get_2b_int(idx)
+                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                    V_poop = self.get_2b_int(idx)
+                    dirE = 2. * einsum('popo->', V_popo)
+                    exE = -1. * einsum('poop->', V_poop)
+                    Epsilon_i[p] += dirE + exE
+                    HF_dirE += dirE
+                    HF_exE += exE
+                print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
+                for p in range(no, nP):
+                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                    V_popo = self.get_2b_int(idx)
+                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                    V_poop = self.get_2b_int(idx)
+                    dirE = 2. * einsum('popo->', V_popo)
+                    exE = -1. * einsum('poop->', V_poop)
+                    Epsilon_a[p-no] += dirE + exE
+            del V_popo, V_poop
+            end_time_orbital_energy = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_orbital_energy - start_time_orbital_energy) +
+                                "calculating the orbital energies.", level=1)
+
+            # get the Hartree Fock energy.
+            print_logging_info("Calculating the Hartree Fock energy", level=1)
+            EHF = 2. * np.sum(Epsilon_i) - HF_dirE - HF_exE
+            print_logging_info("HF E = {:.8f}".format(EHF), level=2)
+
+            # get doubly and triply contractions of the 3-body integrals,
+            #    correct orbital energies,
+            #    and add the mean field contribution from the 3-body integrals to the Hartree Fock energy.
+            if self.is_tc:
+                start_time_3b = time.time()
+                print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
+
+                contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
+                contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
+
+                Epsilon_i += contr_from_doubly_contra_3b[:no]
+                Epsilon_a += contr_from_doubly_contra_3b[no:]
+
+                print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
+                EHF += contr_from_triply_contra_3b
+                end_time_3b = time.time()
+                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
+                                    "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
+
+            # get the Fock matrix (diagonal).
+            print_logging_info("Calculating the Fock matrix (diagonal)", level=1)
+            V_popo = np.zeros([1, no, 1, no], dtype=dtype)
+            V_poop = np.zeros([1, no, no, 1], dtype=dtype)
+            fock_pq = np.diag(kinetic_G)
+            start_time_fock = time.time()
+            for p in range(nP):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                V_popo = self.get_2b_int(idx)
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                V_poop = self.get_2b_int(idx)
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                fock_pq[p,p] += dirE + exE
+            del V_popo, V_poop
+            end_time_fock = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_fock - start_time_fock) +
+                                "calculating the Fock matrix.", level=1)
+
+            print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
+            print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
+            print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
+
+            print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
+                            "calculating the Hartree Fock energy and the Fock matrix.", level=1)
+            return EHF, Epsilon_i, Epsilon_a, fock_pq
+        else :
+            raise ValueError("Unsupported mode of calculation: expected 'incore' or 'on-the-fly', got {}".format(mode))
     
     def get_2b_int(self, idx, 
                    is_only_2b=False, 
