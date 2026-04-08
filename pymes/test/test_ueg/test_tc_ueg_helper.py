@@ -13,6 +13,8 @@ Tests:
     - _intNablaUSquare vs UEG.intNablaUSquare
     - _contract_exchange_3_body vs UEG.contract_exchange_3_body
     - _contractP_KWithQ vs UEG.contractP_KWithQ
+    - _double_contractions_in_3_body vs UEG.double_contractions_in_3_body
+    - _triple_contractions_in_3_body vs UEG.triple_contractions_in_3_body
 """
 
 import sys
@@ -26,7 +28,9 @@ from pymes.model.ueg_helper import (_trunc_correlator,
                                      _sumNablaUSquare,
                                      _intNablaUSquare,
                                      _contract_exchange_3_body,
-                                     _contractP_KWithQ)
+                                     _contractP_KWithQ,
+                                     _double_contractions_in_3_body,
+                                     _triple_contractions_in_3_body)
 from pymes.log import print_title, print_logging_info
 
 def test_trunc_correlator(ueg_model, tolerance=1e-12):
@@ -403,8 +407,8 @@ def test_sumNablaUSquare(ueg_model, tolerance=1e-10):
     print_title("Testing _sumNablaUSquare", "=")
     
     # Check if this test is applicable
-    if ueg_model.is_l_tc:
-        print_logging_info("SKIPPING: sumNablaUSquare is for canonical TC only (is_l_tc=False)", level=1)
+    if ueg_model.tc_type != 'canonical':
+        print_logging_info("SKIPPING: sumNablaUSquare is for canonical TC only (tc_type='canonical')", level=1)
         return True
     
     # Validate prerequisites
@@ -469,7 +473,7 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     """
     Test that _intNablaUSquare gives the same results as UEG.intNablaUSquare.
     
-    NOTE: This test is only applicable for l-TC (is_l_tc=True).
+    NOTE: This test is only applicable for long-range TC (tc_type='long-range').
     
     Parameters
     ----------
@@ -485,8 +489,8 @@ def test_intNablaUSquare(ueg_model, tolerance=1e-10):
     print_title("Testing _intNablaUSquare", "=")
     
     # Check if this test is applicable
-    if not ueg_model.is_l_tc:
-        print_logging_info("SKIPPING: intNablaUSquare is for l-TC only (is_l_tc=True)", level=1)
+    if ueg_model.tc_type != 'long-range':
+        print_logging_info("SKIPPING: intNablaUSquare is for long-range TC only (tc_type='long-range')", level=1)
         return True
     
     # Validate prerequisites
@@ -745,8 +749,97 @@ def test_contractP_KWithQ(ueg_model, tolerance=1e-10):
     
     return all_pass
 
+def test_double_contractions_3_body(ueg_model, tolerance=1e-10):
+    """
+    Test that _double_contractions_3_body gives the same results as 
+    UEG.double_contractions_3_body.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _double_contractions_3_body", "=")
+    nP = ueg_model.n_ele // 2
+    wp_original =  np.zeros(nP)
+    wp_compiled =  np.zeros(nP)
+    # Original function
+    start_original = time.time()
+    wp_original = ueg_model.double_contractions_in_3_body()
+    time_original = time.time() - start_original
+    # Numba-compiled function
+    _ = ueg_model.get_double_contractions_3b_int()
+    start_compiled = time.time()
+    wp_compiled = ueg_model.get_double_contractions_3b_int()
+    time_compiled = time.time() - start_compiled
+    # Compare
+    diff = np.abs(wp_original - wp_compiled)
+    max_diff = np.max(diff)
+    if max_diff > tolerance:
+        print_logging_info(f"  Test FAILED: max_diff={max_diff:.12e}", level=2)
+        all_pass = False
+    else:
+        speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
+        print_logging_info(f"  Test PASSED: max_diff={max_diff:.12e}, "
+                         f"time_orig={time_original:.4f}s, "
+                         f"time_comp={time_compiled:.4f}s, "
+                         f"speedup={speedup:.2f}x", level=2)
+        all_pass = True
+    print_logging_info(f"Maximum difference: {max_diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    return all_pass
 
-def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc=False):
+def test_triple_contractions_3_body(ueg_model, tolerance=1e-10):
+    """
+    Test that _triple_contractions_3_body gives the same results as 
+    UEG.triple_contractions_3_body.
+    
+    Parameters
+    ----------
+    ueg_model : UEG
+        Initialized UEG model
+    tolerance : float
+        Absolute tolerance for comparison
+    
+    Returns
+    -------
+    bool : True if test passes, False otherwise
+    """
+    print_title("Testing _triple_contractions_3_body", "=")
+    nP = ueg_model.n_ele // 2
+    # Original function
+    start_original = time.time()
+    ET_original = ueg_model.triple_contractions_in_3_body()
+    time_original = time.time() - start_original
+    # Numba-compiled function
+    _ = ueg_model.get_triple_contractions_3b_int()
+    start_compiled = time.time()
+    ET_compiled = ueg_model.get_triple_contractions_3b_int()
+    time_compiled = time.time() - start_compiled
+    # Compare
+    diff = np.abs(ET_original - ET_compiled)
+    if diff > tolerance:
+        print_logging_info(f"  Test FAILED: diff={diff:.12e}", level=2)
+        all_pass = False
+    else:
+        speedup = time_original/time_compiled if time_compiled > 0 else float('inf')
+        print_logging_info(f"  Test PASSED: diff={diff:.12e}, "
+                         f"time_orig={time_original:.4f}s, "
+                         f"time_comp={time_compiled:.4f}s, "
+                         f"speedup={speedup:.2f}x", level=2)
+        all_pass = True
+    print_logging_info(f"Difference: {diff:.12e}", level=1)
+    print_logging_info(f"Test result: {'PASSED' if all_pass else 'FAILED'}", level=1)
+    return all_pass
+
+
+def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', tc='canonical'):
     """
     Main test function.
     
@@ -764,24 +857,23 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc
         K-cutoff fraction for correlator
     correlator : str
         Correlator type: 'trunc', 'coulomb', 'coulomb_yukawa', 'RPA'
-    is_l_tc : bool
-        If True, use l-TC (long-range transcorrelated) method
-        If False, use canonical TC method
+    tc : str
+        TC type: 'canonical' or 'long-range'
     """
-    print_title("Testing Numba-Compiled UEG Helper Functions", "=")
+    print_title("Testing Numba JIT-Compiled UEG Helper Functions", "=")
     
     # Setup UEG model
     print_logging_info("Setting up UEG model", level=0)
     nalpha = nel // 2
     nbeta = nel // 2
-    ueg_model = ueg.UEG(nel, nalpha, nbeta, rs, is_tc=True, is_l_tc=is_l_tc)
+    ueg_model = ueg.UEG(nel, nalpha, nbeta, rs, tc=tc)
     
     print_logging_info(f"Number of electrons: {nel}", level=1)
     print_logging_info(f"Cutoff: {cutoff}", level=1)
     print_logging_info(f"rs: {rs}", level=1)
     print_logging_info(f"Omega: {ueg_model.Omega:.6f}", level=1)
     print_logging_info(f"L: {ueg_model.L:.6f}", level=1)
-    print_logging_info(f"TC type: {'l-TC [long-range]' if is_l_tc else 'canonical TC'}", level=1)
+    print_logging_info(f"TC type: {'l-TC [long-range]' if tc == 'long-range' else 'canonical TC'}", level=1)
     
     # Initialize basis
     print_logging_info("Initializing basis set", level=0)
@@ -809,9 +901,9 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc
     print_logging_info(f"gamma: {ueg_model.gamma}", level=1)
     
     # TC type-specific initialization
-    if is_l_tc:
-        print_logging_info("Using l-TC (long-range transcorrelated) method", level=0)
-        print_logging_info("Initializing convolution mesh for l-TC", level=1)
+    if tc == 'long-range':
+        print_logging_info("Using long-range TC (long-range transcorrelated) method", level=0)
+        print_logging_info("Initializing convolution mesh for long-range TC", level=1)
         ueg_model.init_ConvMesh(nx=200, dkfac=60, kmaxfac=20)
         print_logging_info(f"kpts_mesh size: {len(ueg_model.kpts_mesh)}", level=1)
         print_logging_info(f"xtheta_mesh size: {len(ueg_model.xtheta_mesh)}", level=1)
@@ -840,14 +932,14 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc
     sys.stdout.flush()
     
     # Test helper functions based on TC type
-    if not is_l_tc:
+    if tc == 'canonical':
         # Canonical TC tests
         print_logging_info("Testing canonical TC helper function: sumNablaUSquare", level=0)
         test_results['sumNablaUSquare'] = test_sumNablaUSquare(ueg_model)
         sys.stdout.flush()
     else:
-        # l-TC tests
-        print_logging_info("Testing l-TC helper function: intNablaUSquare", level=0)
+        # long-range TC tests
+        print_logging_info("Testing long-range TC helper function: intNablaUSquare", level=0)
         test_results['intNablaUSquare'] = test_intNablaUSquare(ueg_model)
         sys.stdout.flush()
     
@@ -856,6 +948,12 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc
     sys.stdout.flush()
     
     test_results['contractP_KWithQ'] = test_contractP_KWithQ(ueg_model)
+    sys.stdout.flush()
+
+    test_results['double_contractions_3_body'] = test_double_contractions_3_body(ueg_model)
+    sys.stdout.flush()
+
+    test_results['triple_contractions_3_body'] = test_triple_contractions_3_body(ueg_model)
     sys.stdout.flush()
     
     # Summary
@@ -876,18 +974,18 @@ def main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1, correlator='trunc', is_l_tc
 
 
 if __name__ == '__main__':
-    # Test both canonical TC and l-TC methods
+    # Test both canonical TC and long-range TC methods
     print_title("=" * 80, "=")
     print_title("TESTING CANONICAL TC METHOD", "=")
     print_title("=" * 80, "=")
-    exit_code_tc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', is_l_tc=False)
+    exit_code_tc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', tc='canonical')
     
     print("\n" * 3)
     
     print_title("=" * 80, "=")
-    print_title("TESTING LONG-RANGE TC (l-TC) METHOD", "=")
+    print_title("TESTING LONG-RANGE TC METHOD", "=")
     print_title("=" * 80, "=")
-    exit_code_ltc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', is_l_tc=True)
+    exit_code_ltc = main(nel=14, cutoff=2, rs=0.5, gamma=None, kc=1e-12, correlator='RPA', tc='long-range')
     
     # Return non-zero if either test failed
     sys.exit(max(exit_code_tc, exit_code_ltc))
