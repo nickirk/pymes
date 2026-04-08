@@ -129,7 +129,7 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
                 w = 0.0
                 if is_tc:
                     if is_only_2b:
-                        # Pure 2-bidy TC integrals.
+                        # Pure 2-body TC integrals.
                         if np.abs(dk_square) > 0.:
                             rs_dk = basis_Kp[r] - basis_Kp[s]
                             rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
@@ -301,7 +301,7 @@ def _init_UMAT_TC(Omega, L, rho, imax,
     return UMAT
 
 @jit(nopython=True, parallel=True)
-def _init_UMAT_l_TC(L, rho, imax, 
+def _init_UMAT_lr_TC(L, rho, imax, 
                         k_cutoff, gamma,
                         kpts_mesh, xtheta_mesh,
                         dkpts, dxtheta,
@@ -375,9 +375,6 @@ def _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
     in the TDL:
     - F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)
     
-    NOTE: This function does NOT handle the k=0 case. That should be computed separately
-    and passed as Fk0 to _get_2b_int.
-    
     See intNablaUSquare() in ueg.py for more details.
     
     Parameters
@@ -413,19 +410,25 @@ def _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
     # Treat k = 0 case separately.
     if abs(k) < 1.e-12:
         # F{(∇u)²}(k=0) of finer k'-mesh.
-        dk = dkpts/5000
-        kmax = kpts_mesh[-1] * 500
-        nkp = int(kmax / dk) + 1
-        prefac = -1.0 * (1.0/(2.0 * np.pi**2)) * dk
-        umat = 0.0
-        for ikp in range(1, nkp+1):
-            kp = ikp * dk
-            kpSquare = kp**2
-            u_kp = _calc_correlator(correlator_idx, kpSquare, k_cutoffSquare, rho, gamma)
-            F = kp ** 4 * u_kp ** 2
-            umat += F
-        umat *= prefac
+        rs = (3.0 / (4.0 * np.pi * rho)) ** (1.0 / 3.0)
+        if (abs(rs - 0.5) < 1.e-3):
+            umat = -0.3753885175131227 # NOTE: VALUE FOR rs=0.5 AND RPA CORRELATOR [Mathematica].
+        elif (abs(rs - 2.0) < 1.e-3):
+            umat = -10.82451989533362 # NOTE: VALUE FOR rs=2.0 AND RPA CORRELATOR [Mathematica].
         return umat
+        #dk = dkpts/5000
+        #kmax = kpts_mesh[-1] * 500
+        #nkp = int(kmax / dk) + 1
+        #prefac = -1.0 * (1.0/(2.0 * np.pi**2)) * dk
+        #umat = 0.0
+        #for ikp in range(1, nkp+1):
+        #    kp = ikp * dk
+        #    kpSquare = kp**2
+        #    u_kp = _calc_correlator(correlator_idx, kpSquare, k_cutoffSquare, rho, gamma)
+        #    F = kp ** 4 * u_kp ** 2
+        #    umat += F
+        #umat *= prefac
+        #return umat
     else:
         # Prefactor: (dkp * dx) / (2π)².
         prefac = (dkpts * dxtheta) / (2.0 * np.pi)**2

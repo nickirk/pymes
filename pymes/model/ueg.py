@@ -8,7 +8,7 @@ import pytblis as pytblis
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
-from pymes.model.ueg_helper import _get_2b_int, _init_UMAT_TC, _init_UMAT_l_TC
+from pymes.model.ueg_helper import _get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
@@ -1125,8 +1125,8 @@ class UEG:
         elif self.tc_type == "long-range":
             if self.kpts_mesh is None or self.xtheta_mesh is None:
                 raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
-            print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_l_TC()", level=1)
-            self.UMAT = _init_UMAT_l_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
+            print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_lr_TC()", level=1)
+            self.UMAT = _init_UMAT_lr_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
                                         self.kpts_mesh, self.xtheta_mesh,
                                         self.dkpts, self.dxtheta,
                                         correlator_idx,
