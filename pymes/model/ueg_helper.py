@@ -3,10 +3,12 @@ from numba import jit, prange, get_num_threads, config
 
 """
 Helper functions for UEG model system JIT-compiled with Numba for better performance.
-    This module includes functions to compute two-body integrals in a transcorrelated framework 
+    This module includes functions to compute two-body integrals in a transcorrelated framework
     in a JIT-compiled manner using Numba for enhanced performance.
 Main functions:
     _get_2b_int: Numba JIT-compiled version of the get_2b_int().
+    _triple_contractions_in_3_body: Numba JIT-compiled version of triple_contractions_in_3_body().
+    _double_contractions_in_3_body: Numba JIT-compiled version of double_contractions_in_3_body().
 Auxiliary functions:
     _sumNablaUSquare: Numba JIT-compiled version of the sumNablaUSquare().
     _contract_exchange_3_body: Numba JIT-compiled version of the contract_exchange_3_body().
@@ -15,6 +17,179 @@ Correlators:
     _calc_correlator: wrapper function to select the correlator type.
 """
 
+# TRIPLY AND DOUBLY CONTRACTED 3-BODY INTEGRALS -------------------------
+
+@jit(nopython=True, parallel=True)
+def _triple_contractions_in_3_body(basis_occ_Kp, n_ele, Omega, rho, k_cutoffSquare, gamma, correlator_idx):
+    """Numba JIT-compiled version of UEG.triple_contractions_in_3_body().
+
+    Computes the triply contracted 3-body interactions (a scalar energy contribution).
+
+    Parameters
+    ----------
+    basis_occ_Kp : ndarray, shape (n_occ, 3), float64
+        k-vectors of occupied orbitals (spin-up only, i.e. n_ele/2 entries).
+    n_ele : int
+        Total number of electrons.
+    Omega : float
+        Volume of the simulation cell.
+    rho : float
+        Electron density.
+    k_cutoffSquare : float
+        Square of the k-space cutoff for the correlator.
+    gamma : float
+        Correlator amplitude parameter.
+    correlator_idx : int
+        Integer identifier selecting the correlator type (see _calc_correlator).
+
+    Returns
+    -------
+    result : float
+        Triply contracted 3-body energy contribution.
+    """
+    no = basis_occ_Kp.shape[0]
+
+    # Build tables: p_qSquare[p,q] = |k_occ[p] - k_occ[q]|^2
+    #               up_q_pq[p,q]   = correlator(p_qSquare[p,q])
+    p_qSquare = np.zeros((no, no))
+    up_q_pq   = np.zeros((no, no))
+    for p in prange(no):
+        for q in range(no):
+            sq = 0.0
+            for kk in range(3):
+                d = basis_occ_Kp[p, kk] - basis_occ_Kp[q, kk]
+                sq += d * d
+            p_qSquare[p, q] = sq
+            up_q_pq[p, q]   = _calc_correlator(correlator_idx, sq, k_cutoffSquare, rho, gamma)
+
+    # Direct diagram: factor 2 from spin sum
+    # dirE = sum_{p,q} u(p-q)^2 * |p-q|^2  *  (n_ele/2) / Omega^2 * 2
+    dirE = np.sum(up_q_pq * up_q_pq * p_qSquare) * n_ele / 2.0 / Omega**2 * 2.0
+
+    # Exchange diagram: sum_{p,q,o} [(p-q)·(p-o)] * u(p-q) * u(p-o)
+    # Original: -2*2 * einsum("pqo,pqo->", p_o_dot_p_q, u_pq_u_po) / 2 / Omega^2
+    # Accumulate per-p slice so each prange iteration is independent.
+    excE_arr = np.zeros(no)
+    for p in prange(no):
+        for q in range(no):
+            for o in range(no):
+                dot_qo = 0.0
+                for kk in range(3):
+                    dot_qo += (basis_occ_Kp[p, kk] - basis_occ_Kp[q, kk]) * (basis_occ_Kp[p, kk] - basis_occ_Kp[o, kk])
+                excE_arr[p] += dot_qo * up_q_pq[p, q] * up_q_pq[p, o]
+    excE = -4.0 * np.sum(excE_arr) / 2.0 / Omega**2
+
+    return dirE + excE
+
+
+@jit(nopython=True, parallel=True)
+def _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, n_ele, Omega, rho, k_cutoffSquare, gamma, correlator_idx):
+    """Numba JIT-compiled version of UEG.double_contractions_in_3_body().
+
+    Computes the doubly contracted 3-body integrals, yielding one-body energy corrections
+    for all orbitals (occupied + virtual).  Four diagram types are computed: perl, wave,
+    shield, and frog.
+
+    Parameters
+    ----------
+    basis_occ_Kp : ndarray, shape (n_occ, 3), float64
+        k-vectors of occupied orbitals (spin-up only, i.e. n_ele/2 entries).
+    basis_Kp : ndarray, shape (n_p, 3), float64
+        k-vectors of all orbitals (occupied + virtual, spin-up only).
+    n_ele : int
+        Total number of electrons.
+    Omega : float
+        Volume of the simulation cell.
+    rho : float
+        Electron density.
+    k_cutoffSquare : float
+        Square of the k-space cutoff for the correlator.
+    gamma : float
+        Correlator amplitude parameter.
+    correlator_idx : int
+        Integer identifier selecting the correlator type (see _calc_correlator).
+
+    Returns
+    -------
+    one_particle_energies : ndarray, shape (n_p,), float64
+        One-body energy corrections from doubly contracted 3-body integrals.
+    """
+    no = basis_occ_Kp.shape[0]
+    nP   = basis_Kp.shape[0]
+
+    # --- Pre-compute (p,i) tables: differences between all and occupied k-vectors ---
+    # u_diff_pi[p,i]  = correlator(|k_all[p] - k_occ[i]|^2)
+    # sq_diff_pi[p,i] = |k_all[p] - k_occ[i]|^2
+    u_diff_pi  = np.zeros((nP, no))
+    sq_diff_pi = np.zeros((nP, no))
+    for p in prange(nP):
+        for i in range(no):
+            sq = 0.0
+            for kk in range(3):
+                d = basis_Kp[p, kk] - basis_occ_Kp[i, kk]
+                sq += d * d
+            sq_diff_pi[p, i] = sq
+            u_diff_pi[p, i]  = _calc_correlator(correlator_idx, sq, k_cutoffSquare, rho, gamma)
+
+    # --- Perl diagram ---
+    # e_perl[p] = sum_i u(|k_all[p]-k_occ[i]|^2)^2 * |k_all[p]-k_occ[i]|^2
+    e_perl = np.zeros(nP)
+    for p in prange(nP):
+        for i in range(no):
+            e_perl[p] += u_diff_pi[p, i] * u_diff_pi[p, i] * sq_diff_pi[p, i]
+    e_perl = 2.0 * n_ele / Omega**2 / 2.0 * e_perl
+
+    # --- Wave diagram ---
+    # e_wave[p] = sum_{i,j} [(k_all[p]-k_occ[i])·(k_all[p]-k_occ[j])] * u_diff_pi[p,i] * u_diff_pi[p,j]
+    e_wave = np.zeros(nP)
+    for p in prange(nP):
+        for i in range(no):
+            for j in range(no):
+                dot_ij = 0.0
+                for kk in range(3):
+                    dot_ij += (basis_Kp[p, kk] - basis_occ_Kp[i, kk]) * (basis_Kp[p, kk] - basis_occ_Kp[j, kk])
+                e_wave[p] += dot_ij * u_diff_pi[p, i] * u_diff_pi[p, j]
+    e_wave = -e_wave * 2.0 / Omega**2 / 2.0
+
+    # --- Pre-compute (i,j) tables: differences within occupied k-vectors ---
+    # u_diff_ij[i,j]  = correlator(|k_occ[i] - k_occ[j]|^2)
+    # sq_diff_ij[i,j] = |k_occ[i] - k_occ[j]|^2
+    u_diff_ij  = np.zeros((no, no))
+    sq_diff_ij = np.zeros((no, no))
+    for i in prange(no):
+        for j in range(no):
+            sq = 0.0
+            for kk in range(3):
+                d = basis_occ_Kp[i, kk] - basis_occ_Kp[j, kk]
+                sq += d * d
+            sq_diff_ij[i, j] = sq
+            u_diff_ij[i, j]  = _calc_correlator(correlator_idx, sq, k_cutoffSquare, rho, gamma)
+
+    # --- Shield diagram (independent of p) ---
+    # shield_val = sum_{i,j} u_diff_ij[i,j]^2 * sq_diff_ij[i,j]
+    shield_val = 0.0
+    for i in range(no):
+        for j in range(no):
+            shield_val += u_diff_ij[i, j] * u_diff_ij[i, j] * sq_diff_ij[i, j]
+    # factor: 2 (spin) / 2 (symmetry) / Omega^2 — same net factor as in the original
+    e_shield = np.ones(nP) * (2.0 * shield_val / 2.0 / Omega**2)
+
+    # --- Frog diagram ---
+    # e_frog[p] = sum_{i,j} [(k_occ[i]-k_occ[j])·(k_occ[i]-k_all[p])] * u_diff_ij[i,j] * u_diff_pi[p,i]
+    # (the -(diff_vec_pi) used in the original is equivalent to k_occ[i]-k_all[p])
+    e_frog = np.zeros(nP)
+    for p in prange(nP):
+        for i in range(no):
+            for j in range(no):
+                dot_ijip = 0.0
+                for kk in range(3):
+                    dot_ijip += (basis_occ_Kp[i, kk] - basis_occ_Kp[j, kk]) * (basis_occ_Kp[i, kk] - basis_Kp[p, kk])
+                e_frog[p] += dot_ijip * u_diff_ij[i, j] * u_diff_pi[p, i]
+    e_frog = -e_frog * 4.0 / Omega**2 / 2.0
+
+    return e_perl + e_wave + e_shield + e_frog
+
+# PURE AND EFFECTIVETWO-BODY INTEGRALS -------------------------------------------------
 
 @jit(nopython=True, parallel=True)
 def _get_2b_int( idx, n_ele, Omega, L, rho, 
@@ -280,6 +455,8 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
         w += vec1Dotvec2 * corr_vec1 * corr_vec2
 
     return w / Omega
+
+# UMATRIX FOR PURE AND EFFECTIVE TWO-BODY TC INTEGRALS -------------------------------------------------
 
 @jit(nopython=True, parallel=True)
 def _init_UMAT_TC(Omega, L, rho, imax, 

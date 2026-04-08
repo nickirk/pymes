@@ -8,7 +8,9 @@ import pytblis as pytblis
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
-from pymes.model.ueg_helper import _get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC
+from pymes.model.ueg_helper import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
+                                    _triple_contractions_in_3_body,
+                                    _double_contractions_in_3_body)
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
@@ -400,8 +402,8 @@ class UEG:
                 start_time_3b = time.time()
                 print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
-                contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
-                contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
+                contr_from_doubly_contra_3b = self.get_double_contractions()
+                contr_from_triply_contra_3b = self.get_triple_contractions()
 
                 Epsilon_i += contr_from_doubly_contra_3b[:no]
                 Epsilon_a += contr_from_doubly_contra_3b[no:]
@@ -494,8 +496,8 @@ class UEG:
                 start_time_3b = time.time()
                 print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
-                contr_from_doubly_contra_3b = self.double_contractions_in_3_body()
-                contr_from_triply_contra_3b = self.triple_contractions_in_3_body()
+                contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
+                contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
 
                 Epsilon_i += contr_from_doubly_contra_3b[:no]
                 Epsilon_a += contr_from_doubly_contra_3b[no:]
@@ -543,6 +545,10 @@ class UEG:
         (Coulomb integrals) and the additional 2-body integrals from
         the transcorrelated method: pure 2-body integrals, effective 2-body
         integrals from the singly contracted 3-body integrals.
+
+        Wrapper calling the JIT-compiled _get_2b_int. Extracts the numpy arrays 
+        and scalar parameters from self and dispatches to the Numba nopython function.
+
         Parameters
         ----------
         idx: tuple of int
@@ -605,7 +611,58 @@ class UEG:
                                 correlator_idx,
                                 dtype=dtype)
         return V_pqrs
-    
+
+    def get_triple_contractions_3b_int(self):
+        """ Member function of class UEG to compute the triply contracted 3-body integrals,
+        which contribute to the mean-field energy correction from the 3-body integrals 
+        in the transcorrelated framework.
+
+        Wrapper calling the JIT-compiled _triple_contractions_in_3_body. Extracts the numpy 
+        arrays and scalar parameters from self and dispatches to the Numba nopython function.
+
+        Returns
+        -------
+        float
+            Triply contracted 3-body energy contribution (same as triple_contractions_in_3_body).
+        """
+        algo_name = "UEG.get_triple_contractions_3b_int"
+        print_logging_info(algo_name, level=1)
+        no = int(self.n_ele / 2)
+        basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
+        correlator_idx = self.get_correlator_idx()
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
+        gamma = self.gamma if self.gamma is not None else 1.0
+        return _triple_contractions_in_3_body(basis_occ_Kp, self.n_ele, self.Omega, self.rho,
+                                              k_cutoffSquare, gamma, correlator_idx)
+
+    def get_double_contractions_3b_int(self):
+        """Member function of class UEG to compute the doubly contracted 3-body integrals,
+        which contribute to the orbital energy corrections from the 3-body integrals
+        in the transcorrelated framework.
+        
+        Wrapper calling the JIT-compiled _double_contractions_in_3_body. Extracts the numpy 
+        arrays and scalar parameters from self and dispatches to the Numba nopython function.
+
+        Returns
+        -------
+        ndarray, shape (n_p,)
+            One-body energy corrections from doubly contracted 3-body integrals
+            (same as double_contractions_in_3_body).
+        """
+        algo_name = "UEG.get_double_contractions_3b_int"
+        print_logging_info(algo_name, level=1)
+        no = int(self.n_ele / 2)
+        nP   = int(len(self.basis_fns) / 2)
+        basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
+        basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)],  dtype=np.float64)
+        correlator_idx = self.get_correlator_idx()
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
+        gamma = self.gamma if self.gamma is not None else 1.0
+        return _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, self.n_ele, self.Omega, self.rho,
+                                              k_cutoffSquare, gamma, correlator_idx)
+
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
         within the transcorrelation framework.
