@@ -289,7 +289,7 @@ class UEG:
         algo_name = "UEG.get_fock"
         print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock energy", level=0)
         print_logging_info("Mode of calculation: {}".format(mode), level=1)
-        start_time = time.time()
+
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
         if self.is_tc:
@@ -312,231 +312,267 @@ class UEG:
         else:
             print_logging_info("Using non-TC method", level=1)
         
+        if mode == 'incore':
+            EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov = self._get_fock_incore(dtype=dtype)
+            return EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov
+        elif mode == 'on-the-fly':
+            EHF, Epsilon_i, Epsilon_a, fock_pq = self._get_fock_on_the_fly(dtype=dtype)
+            return EHF, Epsilon_i, Epsilon_a, fock_pq
+        else :
+            raise ValueError("Unsupported mode of calculation: expected 'incore' or 'on-the-fly', got {}".format(mode))
+
+    def _get_fock_incore(self, dtype=np.float64):
+        """ Member function of class UEG to compute the Hartree Fock Energy,
+                    the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
+                    the Coulomb tensor, using the incore mode.
+        """
+        algo_name = "UEG._get_fock_incore"
+        print_logging_info(algo_name, ": using incore mode", level=1)
+        start_time = time.time()
+        # Get orbital parameters.
         nP = int(len(self.basis_fns) / 2)
         no = int(self.n_ele / 2)
         nv = nP - no
-        # initialize the fock matrix.
+        # Initialize the fock matrix.
         fock_pq = np.zeros([nP, nP], dtype=dtype)
-        # initialize the orbital energies of the occupied and virtual orbitals.
+        # Initialize the orbital energies of the occupied and virtual orbitals.
         Epsilon_i = np.zeros([no], dtype=dtype)
         Epsilon_a = np.zeros([nv], dtype=dtype)
-        # initialize the Hartree Fock energy.
+        # Initialize the Hartree Fock energy.
         EHF = 0.0
-        # get the kinetic energies of the basis functions.
+        # Get the kinetic energies of the basis functions.
         kinetic_G = self.compute_kinetic_energy()
-        # get the total kinetic energy of the system.
+        # Get the total kinetic energy of the system.
         tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
 
-        if mode == 'incore':
+        # Initialize the Coulomb tensor.
+        V_oooo = np.zeros([no, no, no, no], dtype=dtype)
+        V_vovo = np.zeros([nv, no, nv, no], dtype=dtype)
+        V_voov = np.zeros([nv, no, no, nv], dtype=dtype)
 
-            # initialize the Coulomb tensor.
-            V_oooo = np.zeros([no, no, no, no], dtype=dtype)
-            V_vovo = np.zeros([nv, no, nv, no], dtype=dtype)
-            V_voov = np.zeros([nv, no, no, nv], dtype=dtype)
+        # Get the components of the Coulomb tensor.
+        start_time_coulomb = time.time()
+        if self.is_tc:
+            print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=1)
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo = self.get_2b_int( idx, \
+                                is_only_2b=True)
+            print_logging_info("Calculating [vovo] block", level=1)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo = self.get_2b_int( idx, \
+                                is_only_2b=True)
+            print_logging_info("Calculating [voov] block", level=1)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov = self.get_2b_int( idx, \
+                                is_only_2b=True)
+        else:
+            print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=1)
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo = self.get_2b_int( idx )
+            print_logging_info("Calculating [vovo] block", level=1)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo = self.get_2b_int( idx )
+            print_logging_info("Calculating [voov] block", level=1)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov = self.get_2b_int( idx )
+        end_time_coulomb = time.time()
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
+                            "calculating the Coulomb tensor.", level=1)
 
-            # get the components of the Coulomb tensor.
-            start_time_coulomb = time.time()
-            if self.is_tc:
-                print_logging_info("Calculating the Coulomb tensor and pure TC 2-body integrals [oooo][vovo][voov]", level=1)
-                print_logging_info("Calculating [oooo] block", level=2)
-                idx    = get_block_index( 'oooo', nP, no)
-                V_oooo = self.get_2b_int( idx, \
-                                    is_only_2b=True)
-                print_logging_info("Calculating [vovo] block", level=2)
-                idx    = get_block_index( 'vovo', nP, no)
-                V_vovo = self.get_2b_int( idx, \
-                                    is_only_2b=True)
-                print_logging_info("Calculating [voov] block", level=2)
-                idx    = get_block_index( 'voov', nP, no)
-                V_voov = self.get_2b_int( idx, \
-                                    is_only_2b=True)
-            else:
-                print_logging_info("Calculating the Coulomb tensor [oooo][vovo][voov]", level=1)
-                print_logging_info("Calculating [oooo] block", level=2)
-                idx    = get_block_index( 'oooo', nP, no)
-                V_oooo = self.get_2b_int( idx )
-                print_logging_info("Calculating [vovo] block", level=2)
-                idx    = get_block_index( 'vovo', nP, no)
-                V_vovo = self.get_2b_int( idx )
-                print_logging_info("Calculating [voov] block", level=2)
-                idx    = get_block_index( 'voov', nP, no)
-                V_voov = self.get_2b_int( idx )
-            end_time_coulomb = time.time()
-            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_coulomb - start_time_coulomb) +
-                                "calculating the Coulomb tensor.", level=1)
+        # Get the orbital energies (with/without pure 2b int. from transcorrelation).
+        Epsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
+        Epsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
 
-            # get the orbital energies (with/without pure 2b int. from transcorrelation).
-            Epsilon_i = hf.calcOccupiedOrbE(kinetic_G, V_oooo, no)
-            Epsilon_a = hf.calcVirtualOrbE(kinetic_G, V_vovo, V_voov, no, nv)
+        # Get the Hartree Fock energy.
+        print_logging_info("Calculating the Hartree Fock energy", level=1)
+        EHF = hf.calc_hf_e_part(Epsilon_i, V_oooo)
+        print_logging_info("HF E = {:.8f}".format(EHF), level=1)
 
-            # get the Hartree Fock energy.
-            print_logging_info("Calculating the Hartree Fock energy", level=1)
-            EHF = hf.calc_hf_e_part(Epsilon_i, V_oooo)
-            print_logging_info("HF E = {:.8f}".format(EHF), level=2)
-
-            # get the singly contractions (effective 2-body integrals) from the 3-body integrals.
-            if self.is_tc:
-                start_time_effect_2b = time.time()
-                print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
-                print_logging_info("Calculating [oooo] block", level=2)
-                idx    = get_block_index( 'oooo', nP, no)
-                V_oooo += self.get_2b_int( idx, \
-                                        is_effect_2b=True)
-                print_logging_info("Calculating [vovo] block", level=2)
-                idx    = get_block_index( 'vovo', nP, no)
-                V_vovo += self.get_2b_int( idx, \
-                                        is_effect_2b=True)
-                print_logging_info("Calculating [voov] block", level=2)
-                idx    = get_block_index( 'voov', nP, no)
-                V_voov += self.get_2b_int( idx, \
-                                        is_effect_2b=True)
-                end_time_effect_2b = time.time()
-                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
-                                    "calculating the effective 2-body integrals.", level=1)
+        # Get the singly contractions (effective 2-body integrals) from the 3-body integrals.
+        if self.is_tc:
+            start_time_effect_2b = time.time()
+            print_logging_info("Calculating the effective 2-body integrals [oooo][vovo][voov]", level=1)
+            print_logging_info("Calculating [oooo] block", level=1)
+            idx    = get_block_index( 'oooo', nP, no)
+            V_oooo += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            print_logging_info("Calculating [vovo] block", level=1)
+            idx    = get_block_index( 'vovo', nP, no)
+            V_vovo += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            print_logging_info("Calculating [voov] block", level=1)
+            idx    = get_block_index( 'voov', nP, no)
+            V_voov += self.get_2b_int( idx, \
+                                    is_effect_2b=True)
+            end_time_effect_2b = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_effect_2b - start_time_effect_2b) +
+                                "calculating the effective 2-body integrals.", level=1)
             
-            # get doubly and tryply contractions of the 3-body integrals,
-            #     correct orbital energies,
-            #     and add the mean field contribution from the 3-body integrals 
-            #     to the Hartree Fock energy.
-            if self.is_tc:
-                start_time_3b = time.time()
-                print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
+        # Get doubly and triply contractions of the 3-body integrals,
+        #     correct orbital energies,
+        #     and add the mean field contribution from the 3-body integrals 
+        #     to the Hartree Fock energy.
+        if self.is_tc:
+            start_time_3b = time.time()
+            print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
-                contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
-                contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
+            contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
+            contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
 
-                Epsilon_i += contr_from_doubly_contra_3b[:no]
-                Epsilon_a += contr_from_doubly_contra_3b[no:]
+            Epsilon_i += contr_from_doubly_contra_3b[:no]
+            Epsilon_a += contr_from_doubly_contra_3b[no:]
 
-                print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
-                EHF += contr_from_triply_contra_3b
-                end_time_3b = time.time()
-                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
-                                    "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
+            print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
+            EHF += contr_from_triply_contra_3b
+            end_time_3b = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
+                                "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
 
-            # get the Hartree Fock matrix.
-            print_logging_info("Calculating the Fock matrix", level=1)
-            fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
+        # Get the Hartree Fock matrix.
+        print_logging_info("Calculating the Fock matrix", level=1)
+        fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
 
-            print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
-            print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
-            print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
+        print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
+        print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
+        print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
 
-            print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
-                            "calculating the Hartree Fock energy and the Fock matrix.", level=1)
+        print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
+                        "calculating the Hartree Fock energy and the Fock matrix.", level=1)
 
-            return EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov
+        return EHF, Epsilon_i, Epsilon_a, fock_pq, V_oooo, V_vovo, V_voov
 
-        elif mode == 'on-the-fly':
+    def _get_fock_on_the_fly(self, dtype=np.float64):
+        """ Member function of class UEG to compute the Hartree Fock Energy,
+                    the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
+                    the Coulomb tensor, using the on-the-fly mode.
+        """
+        algo_name = "UEG._get_fock_on_the_fly"
+        print_logging_info(algo_name, ": using on-the-fly mode", level=1)
+        start_time = time.time()
+        # Get orbital parameters.
+        nP = int(len(self.basis_fns) / 2)
+        no = int(self.n_ele / 2)
+        nv = nP - no
+        # Initialize the fock matrix.
+        fock_pq = np.zeros([nP, nP], dtype=dtype)
+        # Initialize the orbital energies of the occupied and virtual orbitals.
+        Epsilon_i = np.zeros([no], dtype=dtype)
+        Epsilon_a = np.zeros([nv], dtype=dtype)
+        # Initialize the Hartree Fock energy.
+        EHF = 0.0
+        # Get the kinetic energies of the basis functions.
+        kinetic_G = self.compute_kinetic_energy()
+        # Get the total kinetic energy of the system.
+        tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
 
-            # get the orbital energies (with/without pure 2b int. from transcorrelation).
-            V_popo = np.zeros([1, no, 1, no], dtype=dtype)
-            V_poop = np.zeros([1, no, no, 1], dtype=dtype)
-            Epsilon_i = kinetic_G[:no].copy()
-            Epsilon_a = kinetic_G[no:].copy()
-            HF_dirE = 0.
-            HF_exE = 0.
-            start_time_orbital_energy = time.time()
-            if self.is_tc:
-                print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-                for p in range(no):
-                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                    V_popo = self.get_2b_int(idx, is_only_2b=True)
-                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                    V_poop = self.get_2b_int(idx, is_only_2b=True)
-                    dirE = 2. * einsum('popo->', V_popo)
-                    exE = -1. * einsum('poop->', V_poop)
-                    Epsilon_i[p] += dirE + exE
-                    HF_dirE += dirE
-                    HF_exE += exE
-                print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-                for p in range(no, nP):
-                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                    V_popo = self.get_2b_int(idx, is_only_2b=True)
-                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                    V_poop = self.get_2b_int(idx, is_only_2b=True)
-                    dirE = 2. * einsum('popo->', V_popo)
-                    exE = -1. * einsum('poop->', V_poop)
-                    Epsilon_a[p-no] += dirE + exE
-            else:
-                print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-                for p in range(no):
-                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                    V_popo = self.get_2b_int(idx)
-                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                    V_poop = self.get_2b_int(idx)
-                    dirE = 2. * einsum('popo->', V_popo)
-                    exE = -1. * einsum('poop->', V_poop)
-                    Epsilon_i[p] += dirE + exE
-                    HF_dirE += dirE
-                    HF_exE += exE
-                print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-                for p in range(no, nP):
-                    idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                    V_popo = self.get_2b_int(idx)
-                    idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                    V_poop = self.get_2b_int(idx)
-                    dirE = 2. * einsum('popo->', V_popo)
-                    exE = -1. * einsum('poop->', V_poop)
-                    Epsilon_a[p-no] += dirE + exE
-            del V_popo, V_poop
-            end_time_orbital_energy = time.time()
-            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_orbital_energy - start_time_orbital_energy) +
-                                "calculating the orbital energies.", level=1)
-
-            # get the Hartree Fock energy.
-            print_logging_info("Calculating the Hartree Fock energy", level=1)
-            EHF = 2. * np.sum(Epsilon_i) - HF_dirE - HF_exE
-            print_logging_info("HF E = {:.8f}".format(EHF), level=2)
-
-            # get doubly and triply contractions of the 3-body integrals,
-            #    correct orbital energies,
-            #    and add the mean field contribution from the 3-body integrals to the Hartree Fock energy.
-            if self.is_tc:
-                start_time_3b = time.time()
-                print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
-
-                contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
-                contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
-
-                Epsilon_i += contr_from_doubly_contra_3b[:no]
-                Epsilon_a += contr_from_doubly_contra_3b[no:]
-
-                print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
-                EHF += contr_from_triply_contra_3b
-                end_time_3b = time.time()
-                print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
-                                    "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
-
-            # get the Fock matrix (diagonal).
-            print_logging_info("Calculating the Fock matrix (diagonal)", level=1)
-            V_popo = np.zeros([1, no, 1, no], dtype=dtype)
-            V_poop = np.zeros([1, no, no, 1], dtype=dtype)
-            fock_pq = np.diag(kinetic_G)
-            start_time_fock = time.time()
-            for p in range(nP):
+        # Get the orbital energies (with/without pure 2b int. from transcorrelation).
+        V_popo = np.zeros([1, no, 1, no], dtype=dtype)
+        V_poop = np.zeros([1, no, no, 1], dtype=dtype)
+        Epsilon_i = kinetic_G[:no].copy()
+        Epsilon_a = kinetic_G[no:].copy()
+        HF_dirE = 0.
+        HF_exE = 0.
+        start_time_orbital_energy = time.time()
+        if self.is_tc:
+            print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
+            for p in range(no):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                V_popo = self.get_2b_int(idx, is_only_2b=True)
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                V_poop = self.get_2b_int(idx, is_only_2b=True)
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_i[p] += dirE + exE
+                HF_dirE += dirE
+                HF_exE += exE
+            print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
+            for p in range(no, nP):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                V_popo = self.get_2b_int(idx, is_only_2b=True)
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                V_poop = self.get_2b_int(idx, is_only_2b=True)
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_a[p-no] += dirE + exE
+        else:
+            print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
+            for p in range(no):
                 idx = tuple((p,p+1,0,no,p,p+1,0,no))
                 V_popo = self.get_2b_int(idx)
                 idx = tuple((p,p+1,0,no,0,no,p,p+1))
                 V_poop = self.get_2b_int(idx)
                 dirE = 2. * einsum('popo->', V_popo)
                 exE = -1. * einsum('poop->', V_poop)
-                fock_pq[p,p] += dirE + exE
-            del V_popo, V_poop
-            end_time_fock = time.time()
-            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_fock - start_time_fock) +
-                                "calculating the Fock matrix.", level=1)
+                Epsilon_i[p] += dirE + exE
+                HF_dirE += dirE
+                HF_exE += exE
+            print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
+            for p in range(no, nP):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
+                V_popo = self.get_2b_int(idx)
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
+                V_poop = self.get_2b_int(idx)
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_a[p-no] += dirE + exE
+        del V_popo, V_poop
+        end_time_orbital_energy = time.time()
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_orbital_energy - start_time_orbital_energy) +
+                            "calculating the orbital energies.", level=1)
 
-            print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
-            print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
-            print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
+        # Get the Hartree Fock energy.
+        print_logging_info("Calculating the Hartree Fock energy", level=1)
+        EHF = 2. * np.sum(Epsilon_i) - HF_dirE - HF_exE
+        print_logging_info("HF E = {:.8f}".format(EHF), level=1)
 
-            print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
-                            "calculating the Hartree Fock energy and the Fock matrix.", level=1)
-            return EHF, Epsilon_i, Epsilon_a, fock_pq
-        else :
-            raise ValueError("Unsupported mode of calculation: expected 'incore' or 'on-the-fly', got {}".format(mode))
-    
+        # Get doubly and triply contractions of the 3-body integrals,
+        #    correct orbital energies,
+        #    and add the mean field contribution from the 3-body integrals to the Hartree Fock energy.
+        if self.is_tc:
+            start_time_3b = time.time()
+            print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
+
+            contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
+            contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
+
+            Epsilon_i += contr_from_doubly_contra_3b[:no]
+            Epsilon_a += contr_from_doubly_contra_3b[no:]
+
+            print_logging_info("3-body mean-field E = {:.8f}".format(contr_from_triply_contra_3b), level=1)
+            EHF += contr_from_triply_contra_3b
+            end_time_3b = time.time()
+            print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
+                                "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
+
+        # Get the Fock matrix (diagonal).
+        print_logging_info("Calculating the Fock matrix (diagonal)", level=1)
+        V_popo = np.zeros([1, no, 1, no], dtype=dtype)
+        V_poop = np.zeros([1, no, no, 1], dtype=dtype)
+        fock_pq = np.diag(kinetic_G)
+        start_time_fock = time.time()
+        for p in range(nP):
+            idx = tuple((p,p+1,0,no,p,p+1,0,no))
+            V_popo = self.get_2b_int(idx)
+            idx = tuple((p,p+1,0,no,0,no,p,p+1))
+            V_poop = self.get_2b_int(idx)
+            dirE = 2. * einsum('popo->', V_popo)
+            exE = -1. * einsum('poop->', V_poop)
+            fock_pq[p,p] += dirE + exE
+        del V_popo, V_poop
+        end_time_fock = time.time()
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_fock - start_time_fock) +
+                            "calculating the Fock matrix.", level=1)
+
+        print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
+        print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
+        print_logging_info("Total Int. E = {:.8f}".format(EHF - tot_kinetic_energy), level=1)
+
+        print_logging_info("Elapsed time = {:.3f} s: ".format(time.time() - start_time) +   
+                        "calculating the Hartree Fock energy and the Fock matrix.", level=1)
+        return EHF, Epsilon_i, Epsilon_a, fock_pq
+
     def get_2b_int(self, idx, 
                    is_only_2b=False, 
                    is_effect_2b=False,
@@ -663,6 +699,346 @@ class UEG:
         return _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, self.n_ele, self.Omega, self.rho,
                                               k_cutoffSquare, gamma, correlator_idx)
 
+    def init_kPrime(self, cutoff=30):
+        """
+        Member function of class UEG
+        This function generates the k' vectors for the canonical transcorrelated
+        integrals. The k' vectors are generated in the range of -cutoff to 
+        cutoff (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
+        in each direction. The k' vectors are stored in the class
+        variable kPrime.
+
+        Note: need to test convergence of this k'-mesh cutoff.
+
+        Returns
+        -------
+        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
+        """
+        algo_name = "UEG.init_kPrime"
+        if self.tc_type == "canonical":
+            kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
+                           for j in range(-cutoff, cutoff + 1) for k in \
+                            range(-cutoff, cutoff + 1)])
+            self.kPrime = kPrime
+        else:
+            raise ValueError(algo_name, "init_kPrime not needed for long-range TC method!")
+    
+    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
+        """
+        Member function of class UEG
+        This function initializes the integration spherical mesh/grid for the 
+        convolution integral of the squared gradient of the correlator
+        function in k-space, for the long-range TC method.
+        Parameters
+        ----------
+        nx: float
+            number of points in the x = cos(θ) grid.
+        dkfac: int
+            determines the k'-grid spacing as dk = k_F/kfac.
+        kmaxfac: float
+            maximum k' value in the grid kmax = k_F*kmaxfac.
+        Returns
+        """
+        algo_name = "UEG.init_ConvMesh"
+        if self.tc_type == "long-range":
+            self.dxtheta = 2.0 / nx
+            self.dkpts = self.kFermi / dkfac
+            self.kptsmax = self.kFermi * kmaxfac
+            #: k'-mesh: uniform for trapezoidal rule.
+            kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
+            self.kpts_mesh = kPrimeMesh
+            #: x = cos(θ) mesh:clear mid-point rule.
+            xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
+            self.xtheta_mesh = xThetaMesh
+        else:
+            raise ValueError(algo_name, "init_ConvMesh not needed for canonical TC method!")
+
+    def init_UMAT(self, dtype=np.float64):
+        """
+        Member function of class UEG
+        This function initializes and fills the UMAT array which stores the
+        pre-computed values of the convolution integral of the squared gradient
+        of the correlator function in k-space.
+
+        Depending on the type of transcorrelated method used (canonical or long-range TC),
+        the UMAT array is filled:
+        canonical  TC: F{(∇u)²}(k) = 1/Ω ∑k' (k'·(k-k')) u(k') u(|k-k'|) -> sumNablaUSquare
+        long-range TC: F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)  -> intNablaUSquare
+        """
+        algo_name = "UEG.init_UMAT"
+
+        print_logging_info(algo_name, ": Initializing UMAT[kx,ky,kz]", level=0)
+        print_logging_info("TC-type: {}".format(self.tc_type), level=1) 
+
+        if not self.is_tc:
+            raise ValueError(algo_name, " cannot be initialized if TC method is not active!")
+        if self.correlator is None:
+            raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
+        else:
+            print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
+        if self.correlator == self.trunc:
+            if self.k_cutoff is None:
+                raise ValueError(algo_name, "K-cutoff for the transcorrelated trunc. correlator not initialized!")
+            else:
+                print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+        else:
+            if self.k_cutoff is None:
+                print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
+            else:
+                print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
+
+        correlator_idx = self.get_correlator_idx()
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        gamma  = self.gamma if self.gamma is not None else 1.0
+
+        start_time = time.time()
+        if self.tc_type == "canonical":
+            if self.kPrime is None:
+                raise ValueError(algo_name, "kPrime array not initialized for canonical TC!")
+            else:
+                kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
+            print_logging_info("Calculating UMAT elements with canonical TC: _init_UMAT_TC()", level=1)
+            self.UMAT = _init_UMAT_TC(self.Omega, self.L, self.rho, 
+                                        self.imax, k_cutoff, gamma,
+                                        kPrime, correlator_idx,
+                                        dtype=dtype)
+        elif self.tc_type == "long-range":
+            if self.kpts_mesh is None or self.xtheta_mesh is None:
+                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
+            print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_lr_TC()", level=1)
+            self.UMAT = _init_UMAT_lr_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
+                                        self.kpts_mesh, self.xtheta_mesh,
+                                        self.dkpts, self.dxtheta,
+                                        correlator_idx,
+                                        dtype=dtype)
+        end_time = time.time()
+        print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
+        print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
+        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) + "initializing UMAT.", level=1)
+
+    def madelung(self, rs, nel):
+        """
+        Madelung Constant for the UEG: correction of the interaction of the electrons
+        with themselves (periodic images).
+        Notes:
+            # there is still uncertainty in the factor of 2 divided ##
+            # but using it seems to make the tc-dcd agree with BF-DMC
+
+        Args:
+            rs: float. Wigner-Seitz radius for controlling the density
+            nel: int. Number of electrons.
+
+        Returns:
+            float
+        """
+        return -1.760118928190842*rs**(-1)*nel**(-1./3)/2
+
+    # CORRELATORS -----------------------------------------------------
+    # Collection of correlators, should them be collected into a class?
+    # Each correlator has some default parameters that are dependent on
+    # the system and they are specific to UEG, so they should be part of
+    # the UEG class.
+
+    def get_correlator_idx(self):
+        """ Member function of class UEG.
+        Returns an integer index for the correlator function being used.
+
+        Returns
+        -------
+        idx: int
+            index of the correlator function
+            0: None,
+            1: trunc,
+            2: coulomb,
+            3: coulomb-yukawa,
+            4: RPA.
+        """
+        if self.correlator is None:
+            raise ValueError("Correlator function not initialized!")
+        elif self.correlator == self.trunc:
+            idx = self.CORRELATOR_TRUNC
+        elif self.correlator == self.coulomb:
+            idx = self.CORRELATOR_COULOMB
+        elif self.correlator == self.coulomb_yukawa:
+            idx = self.CORRELATOR_COULOMB_YUKAWA
+        elif self.correlator == self.RPA:
+            idx = self.CORRELATOR_RPA
+        else:
+            raise ValueError("Correlator function not recognized!")
+        return idx
+
+    def trunc(self, kSquare):
+        """ Member function of class UEG. 
+        A correlator function, defined as
+        -4pi/k^4 (k>kc), 0 (k<=kc).
+        i.e. u(k) = -γ · 4π / k⁴, for k > k_c; 0, for k ≤ k_c
+
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+
+        Returns
+        -------
+        result: float or nparray of float
+        """
+
+        if self.gamma is None:
+            gamma = 1.0
+        else:
+            gamma = self.gamma
+
+        if self.k_cutoff is None:
+            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
+
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+
+        if not isinstance(kSquare, np.ndarray):
+            if kSquare <= k_cutoffSquare * (1 + 0.00001):
+                result = 0.0
+            elif kSquare > 1.e-12:
+                result = -4. * np.pi / (kSquare ** 2)
+            else:
+                result = 0.0
+        else:
+            cond = (kSquare > k_cutoffSquare * (1 + 0.00001)) & (kSquare > 1.e-12)
+            result = np.divide(-4. * np.pi, kSquare ** 2, 
+                        out=np.zeros_like(kSquare), 
+                        where=cond)
+        return result * gamma
+
+    def coulomb(self, kSquare):
+        ''' Member function of class UEG.
+        A  correlator function, defined as
+        -4pi/k^2.   
+        i.e. u(k) = -γ · 4π / k²
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Note:
+        ---------
+        The G=0 terms need more consideration
+        '''
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+        result = np.divide(-4. * np.pi, kSquare, \
+                           out=np.zeros_like(kSquare), where=kSquare > k_cutoffSquare)
+        return result * gamma
+    
+    def coulomb_yukawa(self, kSquare):
+        ''' Member function of class UEG.
+        A correlator function, defined as
+        -4pi/(k^2*(k^2+wp)) ; wp = sqrt(4*pi*rho) [plasma frequency].
+        i.e. u(k) = -γ · 4π / (k² · (k² + ωₚ))
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Reference:
+        ---------
+        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+        Note:
+        ---------
+        The G=0 terms need more consideration.
+        '''
+
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
+        wp = np.sqrt(4. * np.pi * self.rho)
+        k_cutoffDenom = k_cutoffSquare * (k_cutoffSquare + wp)
+        a  = - 4. * np.pi
+        if not isinstance(kSquare, np.ndarray):
+            b = kSquare * (kSquare + wp)
+            if np.abs(b) > k_cutoffDenom:
+                result = a / b
+            else:
+                result = 0.0
+        else:
+            b = kSquare * (kSquare + wp)
+            result = np.where(np.abs(b) > k_cutoffDenom,
+                         a / b,
+                         0.0)
+        return result * gamma
+   
+    def RPA(self, kSquare):
+        ''' Member function of class UEG.
+        A correlator function based on the RPA theory, defined as:
+        u(k) = γ · [A(k) - B(k)]
+        with,
+        A(k) = 1 / (2ρ · T₂(k))
+        B(k) = √(k⁴ + 16π·ρ·T₂(k)²) / (2ρ · T₂(k) · k²)
+        where,
+            T₂(k) = 1,                                   if k > 2k_F
+            T₂(k) = (3/4)·(k/k_F) - (1/16)·(k/k_F)³,     if k ≤ 2k_F
+        Parameters
+        ----------
+        kSquare: float or nparray of float
+            the k-vector squared ($k^2$).
+        Returns
+        -------
+        result: float or nparray of float
+        Reference:
+        ---------
+        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
+        '''
+
+        if self.gamma is None:
+            gamma = 1.
+        else:
+            gamma = self.gamma
+        if self.k_cutoff is None:
+            self.k_cutoff = 1.e-12
+        k_cutoff = self.k_cutoff * (2 * np.pi / self.L)
+        k_cutoffDenom = 2. * (k_cutoff**2) * self.rho *   \
+                        ((3./4.)*(k_cutoff/self.kFermi) - \
+                        (1./16.)*(k_cutoff/self.kFermi)**3)
+
+        if not isinstance(kSquare, np.ndarray):
+            kVec = np.sqrt(kSquare)
+            if kVec > (2*self.kFermi):
+                T2 = 1.0
+            else:
+                T2 = (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
+            b = 2. * self.rho * T2 * kSquare
+            if np.abs(b) > k_cutoffDenom:
+                result = a / b
+            else:
+                result = 0.0
+        else:
+            kVec = np.sqrt(kSquare)
+            T2 = np.where(kVec > (2*self.kFermi), 
+                          1.0,
+                          (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3)
+            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
+            b = 2. * self.rho * T2 * kSquare
+            result = np.where(np.abs(b) > k_cutoffDenom,
+                         a/b,
+                         0.0)
+    
+        return result * gamma
+    
+    # -------------------------------------------------------------------------
+    # LEGACY ROUTINES ---------------------------------------------------------
+    # -------------------------------------------------------------------------
+
     def eval_3b_integrals(self, correlator=None, dtype=np.float64, sp=1):
         """ Member function of class UEG to evaluate the full 3-body integrals
         within the transcorrelation framework.
@@ -753,7 +1129,7 @@ class UEG:
                            level=1)
 
         return V_opqrst
-
+    
     def eval_2b_integrals(self, correlator=None,
                           is_rpa_approx=False,
                           is_only_2b=False,
@@ -1076,123 +1452,6 @@ class UEG:
         RPA2Body = fac * einsum("opqrsq->oprs", integrals)
         return RPA2Body
 
-    def init_kPrime(self, cutoff=30):
-        """
-        Member function of class UEG
-        This function generates the k' vectors for the canonical transcorrelated
-        integrals. The k' vectors are generated in the range of -cutoff to 
-        cutoff (defined by the energy cutoff in the k'-mesh self.kmesh_cutoff) 
-        in each direction. The k' vectors are stored in the class
-        variable kPrime.
-
-        Note: need to test convergence of this k'-mesh cutoff.
-
-        Returns
-        -------
-        kPrime: nparray of int dtype, size (3*cutoff+1, 3)
-        """
-        algo_name = "UEG.init_kPrime"
-        if self.tc_type == "canonical":
-            kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
-                           for j in range(-cutoff, cutoff + 1) for k in \
-                            range(-cutoff, cutoff + 1)])
-            self.kPrime = kPrime
-        else:
-            raise ValueError(algo_name, "init_kPrime not needed for long-range TC method!")
-    
-    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
-        """
-        Member function of class UEG
-        This function initializes the integration spherical mesh/grid for the 
-        convolution integral of the squared gradient of the correlator
-        function in k-space, for the long-range TC method.
-        Parameters
-        ----------
-        nx: float
-            number of points in the x = cos(θ) grid.
-        dkfac: int
-            determines the k'-grid spacing as dk = k_F/kfac.
-        kmaxfac: float
-            maximum k' value in the grid kmax = k_F*kmaxfac.
-        Returns
-        """
-        algo_name = "UEG.init_ConvMesh"
-        if self.tc_type == "long-range":
-            self.dxtheta = 2.0 / nx
-            self.dkpts = self.kFermi / dkfac
-            self.kptsmax = self.kFermi * kmaxfac
-            #: k'-mesh: uniform for trapezoidal rule.
-            kPrimeMesh = np.arange(0.0 + self.dkpts, self.kptsmax + self.dkpts, self.dkpts)
-            self.kpts_mesh = kPrimeMesh
-            #: x = cos(θ) mesh:clear mid-point rule.
-            xThetaMesh = np.arange(-1.0 + 0.5*self.dxtheta, 1.0, self.dxtheta)
-            self.xtheta_mesh = xThetaMesh
-        else:
-            raise ValueError(algo_name, "init_ConvMesh not needed for canonical TC method!")
-
-    def init_UMAT(self, dtype=np.float64):
-        """
-        Member function of class UEG
-        This function initializes and fills the UMAT array which stores the
-        pre-computed values of the convolution integral of the squared gradient
-        of the correlator function in k-space.
-
-        Depending on the type of transcorrelated method used (canonical or long-range TC),
-        the UMAT array is filled:
-        TC:   F{(∇u)²}(k) = 1/Ω ∑k' (k'·(k-k')) u(k') u(|k-k'|) -> sumNablaUSquare
-        l-TC: F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)  -> intNablaUSquare
-        """
-        algo_name = "UEG.init_UMAT"
-
-        print_logging_info(algo_name, ": Initializing UMAT[kx,ky,kz]", level=0)
-        print_logging_info("TC-type: {}".format(self.tc_type), level=1) 
-
-        if not self.is_tc:
-            raise ValueError(algo_name, " cannot be initialized if TC method is not active!")
-        if self.correlator is None:
-            raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
-        else:
-            print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
-        if self.correlator == self.trunc:
-            if self.k_cutoff is None:
-                raise ValueError(algo_name, "K-cutoff for the transcorrelated trunc. correlator not initialized!")
-            else:
-                print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
-        else:
-            if self.k_cutoff is None:
-                print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
-            else:
-                print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
-
-        correlator_idx = self.get_correlator_idx()
-        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
-        gamma  = self.gamma if self.gamma is not None else 1.0
-
-        start_time = time.time()
-        if self.tc_type == "canonical":
-            if self.kPrime is None:
-                raise ValueError(algo_name, "kPrime array not initialized for canonical TC!")
-            else:
-                kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
-            print_logging_info("Calculating UMAT elements with canonical TC: _init_UMAT_TC()", level=1)
-            self.UMAT = _init_UMAT_TC(self.Omega, self.L, self.rho, 
-                                        self.imax, k_cutoff, gamma,
-                                        kPrime, correlator_idx,
-                                        dtype=dtype)
-        elif self.tc_type == "long-range":
-            if self.kpts_mesh is None or self.xtheta_mesh is None:
-                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
-            print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_lr_TC()", level=1)
-            self.UMAT = _init_UMAT_lr_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
-                                        self.kpts_mesh, self.xtheta_mesh,
-                                        self.dkpts, self.dxtheta,
-                                        correlator_idx,
-                                        dtype=dtype)
-        end_time = time.time()
-        print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
-        print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
-        print_logging_info(algo_name, ": UMAT initialized in {:.3f} s.".format(end_time - start_time), level=1)
-
     def sumNablaUSquare(self, k):
 
         if self.kPrime is None:
@@ -1464,225 +1723,7 @@ class UEG:
                             gamma_pqG[p, q, g] = np.sqrt(4. * np.pi / GSquare / self.Omega)
         return gamma_pqG
 
-    def madelung(self, rs, nel):
-        """
-        Madelung Constant for the UEG: correction of the interaction of the electrons
-        with themselves (periodic images).
-        Notes:
-            # there is still uncertainty in the factor of 2 divided ##
-            # but using it seems to make the tc-dcd agree with BF-DMC
 
-        Args:
-            rs: float. Wigner-Seitz radius for controlling the density
-            nel: int. Number of electrons.
-
-        Returns:
-            float
-        """
-        return -1.760118928190842*rs**(-1)*nel**(-1./3)/2
-
-    # CORRELATORS -----------------------------------------------------
-    # Collection of correlators, should them be collected into a class?
-    # Each correlator has some default parameters that are dependent on
-    # the system and they are specific to UEG, so they should be part of
-    # the UEG class.
-
-    def get_correlator_idx(self):
-        """ Member function of class UEG.
-        Returns an integer index for the correlator function being used.
-
-        Returns
-        -------
-        idx: int
-            index of the correlator function
-            0: None,
-            1: trunc,
-            2: coulomb,
-            3: coulomb-yukawa,
-            4: RPA.
-        """
-        if self.correlator is None:
-            raise ValueError("Correlator function not initialized!")
-        elif self.correlator == self.trunc:
-            idx = self.CORRELATOR_TRUNC
-        elif self.correlator == self.coulomb:
-            idx = self.CORRELATOR_COULOMB
-        elif self.correlator == self.coulomb_yukawa:
-            idx = self.CORRELATOR_COULOMB_YUKAWA
-        elif self.correlator == self.RPA:
-            idx = self.CORRELATOR_RPA
-        else:
-            raise ValueError("Correlator function not recognized!")
-        return idx
-
-    def trunc(self, kSquare):
-        """ Member function of class UEG. 
-        A correlator function, defined as
-        -4pi/k^4 (k>kc), 0 (k<=kc).
-        i.e. u(k) = -γ · 4π / k⁴, for k > k_c; 0, for k ≤ k_c
-
-        Parameters
-        ----------
-        kSquare: float or nparray of float
-            the k-vector squared ($k^2$).
-
-        Returns
-        -------
-        result: float or nparray of float
-        """
-
-        if self.gamma is None:
-            gamma = 1.0
-        else:
-            gamma = self.gamma
-
-        if self.k_cutoff is None:
-            self.k_cutoff = int(np.ceil(np.sqrt(self.cutoff)))
-
-        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-
-        if not isinstance(kSquare, np.ndarray):
-            if kSquare <= k_cutoffSquare * (1 + 0.00001):
-                result = 0.0
-            elif kSquare > 1.e-12:
-                result = -4. * np.pi / (kSquare ** 2)
-            else:
-                result = 0.0
-        else:
-            cond = (kSquare > k_cutoffSquare * (1 + 0.00001)) & (kSquare > 1.e-12)
-            result = np.divide(-4. * np.pi, kSquare ** 2, 
-                        out=np.zeros_like(kSquare), 
-                        where=cond)
-        return result * gamma
-
-    def coulomb(self, kSquare):
-        ''' Member function of class UEG.
-        A  correlator function, defined as
-        -4pi/k^2.   
-        i.e. u(k) = -γ · 4π / k²
-        Parameters
-        ----------
-        kSquare: float or nparray of float
-            the k-vector squared ($k^2$).
-        Returns
-        -------
-        result: float or nparray of float
-        Note:
-        ---------
-        The G=0 terms need more consideration
-        '''
-        if self.gamma is None:
-            gamma = 1.
-        else:
-            gamma = self.gamma
-        if self.k_cutoff is None:
-            self.k_cutoff = 1.e-12
-        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-        result = np.divide(-4. * np.pi, kSquare, \
-                           out=np.zeros_like(kSquare), where=kSquare > k_cutoffSquare)
-        return result * gamma
-    
-    def coulomb_yukawa(self, kSquare):
-        ''' Member function of class UEG.
-        A correlator function, defined as
-        -4pi/(k^2*(k^2+wp)) ; wp = sqrt(4*pi*rho) [plasma frequency].
-        i.e. u(k) = -γ · 4π / (k² · (k² + ωₚ))
-        Parameters
-        ----------
-        kSquare: float or nparray of float
-            the k-vector squared ($k^2$).
-        Returns
-        -------
-        result: float or nparray of float
-        Reference:
-        ---------
-        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
-        Note:
-        ---------
-        The G=0 terms need more consideration.
-        '''
-
-        if self.gamma is None:
-            gamma = 1.
-        else:
-            gamma = self.gamma
-        if self.k_cutoff is None:
-            self.k_cutoff = 1.e-12
-        k_cutoffSquare = (self.k_cutoff * (2 * np.pi / self.L)) ** 2
-        wp = np.sqrt(4. * np.pi * self.rho)
-        k_cutoffDenom = k_cutoffSquare * (k_cutoffSquare + wp)
-        a  = - 4. * np.pi
-        if not isinstance(kSquare, np.ndarray):
-            b = kSquare * (kSquare + wp)
-            if np.abs(b) > k_cutoffDenom:
-                result = a / b
-            else:
-                result = 0.0
-        else:
-            b = kSquare * (kSquare + wp)
-            result = np.where(np.abs(b) > k_cutoffDenom,
-                         a / b,
-                         0.0)
-        return result * gamma
-   
-    def RPA(self, kSquare):
-        ''' Member function of class UEG.
-        A correlator function based on the RPA theory, defined as:
-        u(k) = γ · [A(k) - B(k)]
-        with,
-        A(k) = 1 / (2ρ · T₂(k))
-        B(k) = √(k⁴ + 16π·ρ·T₂(k)²) / (2ρ · T₂(k) · k²)
-        where,
-            T₂(k) = 1,                                   if k > 2k_F
-            T₂(k) = (3/4)·(k/k_F) - (1/16)·(k/k_F)³,     if k ≤ 2k_F
-        Parameters
-        ----------
-        kSquare: float or nparray of float
-            the k-vector squared ($k^2$).
-        Returns
-        -------
-        result: float or nparray of float
-        Reference:
-        ---------
-        J. Chem. Phys. 157, 074105 (2022); https://doi.org/10.1063/5.0101776
-        '''
-
-        if self.gamma is None:
-            gamma = 1.
-        else:
-            gamma = self.gamma
-        if self.k_cutoff is None:
-            self.k_cutoff = 1.e-12
-        k_cutoff = self.k_cutoff * (2 * np.pi / self.L)
-        k_cutoffDenom = 2. * (k_cutoff**2) * self.rho *   \
-                        ((3./4.)*(k_cutoff/self.kFermi) - \
-                        (1./16.)*(k_cutoff/self.kFermi)**3)
-
-        if not isinstance(kSquare, np.ndarray):
-            kVec = np.sqrt(kSquare)
-            if kVec > (2*self.kFermi):
-                T2 = 1.0
-            else:
-                T2 = (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3
-            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
-            b = 2. * self.rho * T2 * kSquare
-            if np.abs(b) > k_cutoffDenom:
-                result = a / b
-            else:
-                result = 0.0
-        else:
-            kVec = np.sqrt(kSquare)
-            T2 = np.where(kVec > (2*self.kFermi), 
-                          1.0,
-                          (3./4.)*(kVec/self.kFermi) - (1./16.)*(kVec/self.kFermi)**3)
-            a = kSquare - np.sqrt((kSquare ** 2) + 16. * np.pi * self.rho * (T2**2))
-            b = 2. * self.rho * T2 * kSquare
-            result = np.where(np.abs(b) > k_cutoffDenom,
-                         a/b,
-                         0.0)
-    
-        return result * gamma
-   
     # NOT-MAINTAINED CORRELATORS ----------------------------------------------
     # List of non-maintained correlators, kept here for future reference.
     # 1. Yukawa correlator,

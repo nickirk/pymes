@@ -91,8 +91,7 @@ class MP2:
         print_logging_info("Exchange contribution = {:.12f}".format(np.real(e_exc_mp2)),\
                         level=2)
         print_logging_info("MP2 correlation energy = {:.12f}".format(np.real(e_total_mp2)), level=2)
-        print_logging_info("{:.3f} seconds spent on "\
-                        .format((end_time-start_time))+algo_name, level=2)
+        print_logging_info("{:.3f} seconds spent on MP2".format((end_time-start_time)), level=2)
         
         return [e_total_mp2, t_T_abij]
 
@@ -187,8 +186,7 @@ class MP2:
         print_logging_info("Exchange contribution = {:.12f}".format(np.real(e_exc_mp2)),\
                         level=2)
         print_logging_info("MP2 correlation energy = {:.12f}".format(np.real(e_total_mp2)), level=2)
-        print_logging_info("{:.3f} seconds spent on "\
-                        .format((end_time-start_time))+algo_name, level=2)
+        print_logging_info("{:.3f} seconds spent on MP2".format((end_time-start_time)), level=2)
         
         return [e_total_mp2, t_T_abij]
 
@@ -275,7 +273,6 @@ class MP2:
         print_logging_info("Exchange contribution = {:.12f}".format(np.real(e_exc_mp2)),\
                         level=2)
         print_logging_info("MP2 correlation energy = {:.12f}".format(np.real(e_total_mp2)), level=2)
-        print_logging_info("{:.3f} seconds spent on "\
-                        .format((end_time-start_time))+algo_name, level=2)
+        print_logging_info("{:.3f} seconds spent on MP2".format((end_time-start_time)), level=2)
         
         return [e_total_mp2, t_T_abij]
