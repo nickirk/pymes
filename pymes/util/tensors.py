@@ -1,10 +1,10 @@
 import psutil
 from math import ceil
 
-def calculate_block_size(total_elements_dimension, element_size, memory_fraction=0.5, is_shared_memory=False):
+def calculate_block_size(idx, dim, element_size, memory_fraction=0.5, is_shared_memory=False):
         """
         Calculate the block size for tensor slicing one dimension based on available memory:
-        A tensor [nd, nd, nd, nd] has a total of nd^4 elements and each element has a size of
+        A tensor [n0, n1, n2, n3] has a total of n0*n1*n2*n3 elements and each element has a size of
         element_size bytes. The function calculates the maximum number of elements that can be
         processed in one block without exceeding the available memory, considering a fraction of
         the available memory.
@@ -15,20 +15,28 @@ def calculate_block_size(total_elements_dimension, element_size, memory_fraction
             total number of elements.
 
         Args:
-            total_elements (int): Total number of elements in the tensor along the specified dimension.
-            element_size (int): Size of one element in bytes.
-            memory_fraction (float): Fraction of available memory to use (default: 50%).
+            idx (int):
+                The dimension along which to calculate the block size.
+            dim (tuple): 
+                The shape of the tensor as a tuple (n0, n1, n2, n3).
+            element_size (int): 
+                Size of one element in bytes.
+            memory_fraction (float): 
+                Fraction of available memory to use (default: 50%).
+            is_shared_memory (bool):
+                Whether the memory is shared (default: False). If True, it reduces the usable memory
+                to account for other processes using the shared memory.
 
         Returns:
             int: Block size for slicing.
         """
-        total_elements = int(total_elements_dimension**4)
+        other_dims_product = dim[0] * dim[1] * dim[2] * dim[3] // dim[idx]
         available_memory = psutil.virtual_memory().available
         usable_memory = available_memory * memory_fraction
         if is_shared_memory:
             usable_memory *= 0.45
-        max_elements = ceil( usable_memory / ( element_size * total_elements_dimension**3))
-        return min(total_elements_dimension, max_elements)
+        max_elements = ceil( usable_memory / ( element_size * other_dims_product))
+        return min(dim[idx], max_elements)
 
 def get_block_index( block_string, n_p, n_occ):
     """

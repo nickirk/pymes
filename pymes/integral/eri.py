@@ -83,7 +83,7 @@ class ERI:
         Get the electron repulsion integrals for the virtual-virtual-virtual-virtual (vvvv) block.
         
         Parameters:
-        idx (tuple): A tuple specifying the range of indices to extract.
+        idx (tuple): A tuple specifying the range of local indices to extract.
             idx[0] (int): The start of 0th index 
             idx[1] (int): The end of 0th index
             idx[2] (int): The start of 1st index
@@ -96,6 +96,8 @@ class ERI:
         Returns:
         vvvv (numpy.ndarray): The extracted vvvv block of ERIs.
         """
+        nP = self.n_orb
+        no = self.n_occ
         if self.vvvv is not None:
             if idx is None:
                 return self.vvvv
@@ -103,15 +105,185 @@ class ERI:
                 return self.vvvv[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
         else:
             if idx is None:
-                nP  = self.n_orb
-                no  = self.n_occ
                 idx = get_block_index('vvvv', nP, no)
                 self.vvvv = self.model.get_2b_int( idx )
                 return self.vvvv
             else:
-                no  = self.n_occ
                 global_idx = tuple((no+idx[0], no+idx[1], \
                                     no+idx[2], no+idx[3], \
                                     no+idx[4], no+idx[5], \
                                     no+idx[6], no+idx[7]))
                 return self.model.get_2b_int( global_idx )
+    
+    def get_pqrs(self, block, idx=None):
+        """
+        Get the electron repulsion integrals for the specified block.
+        
+        Parameters:
+        block (str): The block of ERIs to extract. 
+            Options include 'oooo', 'ovvo', 'voov', 'oovv', 'vvoo', 'ovov', 'vovo',  'vvvv' or 'full'.
+        idx (tuple): A tuple specifying the range of local indices to extract.
+            idx[0] (int): The start of 0th index 
+            idx[1] (int): The end of 0th index
+            idx[2] (int): The start of 1st index
+            idx[3] (int): The end of 1st index
+            idx[4] (int): The start of 2nd index
+            idx[5] (int): The end of 2nd index
+            idx[6] (int): The start of 3rd index
+            idx[7] (int): The end of 3rd index
+
+        Returns:
+        V_pqrs (numpy.ndarray): The extracted block of ERIs.
+        """
+        nP = self.n_orb
+        no = self.n_occ
+        if block == 'oooo':
+            if self.oooo is not None:
+                if idx is None:
+                    return self.oooo
+                else:
+                    return self.oooo[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('oooo', nP, no)
+                    self.oooo = self.model.get_2b_int( idx )
+                    return self.oooo
+                else:
+                    global_idx = tuple((idx[0], idx[1], \
+                                        idx[2], idx[3], \
+                                        idx[4], idx[5], \
+                                        idx[6], idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'ovvo':
+            if self.ovvo is not None:
+                if idx is None:
+                    return self.ovvo
+                else:
+                    return self.ovvo[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('ovvo', nP, no)
+                    self.ovvo = self.model.get_2b_int( idx )
+                    return self.ovvo
+                else:
+                    global_idx = tuple((idx[0], idx[1], \
+                                        no+idx[2], no+idx[3], \
+                                        no+idx[4], no+idx[5], \
+                                        idx[6], idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'voov':
+            if self.voov is not None:
+                if idx is None:
+                    return self.voov
+                else:
+                    return self.voov[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('voov', nP, no)
+                    self.voov = self.model.get_2b_int( idx )
+                    return self.voov
+                else:
+                    global_idx = tuple((no+idx[0], no+idx[1], \
+                                        idx[2], idx[3], \
+                                        idx[4], idx[5], \
+                                        no+idx[6], no+idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'oovv':
+            if self.oovv is not None:
+                if idx is None:
+                    return self.oovv
+                else:
+                    return self.oovv[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('oovv', nP, no)
+                    self.oovv = self.model.get_2b_int( idx )
+                    return self.oovv
+                else:
+                    global_idx = tuple((idx[0], idx[1], \
+                                        idx[2], idx[3], \
+                                        no+idx[4], no+idx[5], \
+                                        no+idx[6], no+idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'vvoo':
+            if self.vvoo is not None:
+                if idx is None:
+                    return self.vvoo
+                else:
+                    return self.vvoo[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('vvoo', nP, no)
+                    self.vvoo = self.model.get_2b_int( idx )
+                    return self.vvoo
+                else:
+                    global_idx = tuple((no+idx[0], no+idx[1], \
+                                        no+idx[2], no+idx[3], \
+                                        idx[4], idx[5], \
+                                        idx[6], idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'ovov':
+            if self.ovov is not None:
+                if idx is None:
+                    return self.ovov
+                else:
+                    return self.ovov[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('ovov', nP, no)
+                    self.ovov = self.model.get_2b_int( idx )
+                    return self.ovov
+                else:
+                    global_idx = tuple((idx[0], idx[1], \
+                                        no+idx[2], no+idx[3], \
+                                        idx[4], idx[5], \
+                                        no+idx[6], no+idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'vovo':
+            if self.vovo is not None:
+                if idx is None:
+                    return self.vovo
+                else:
+                    return self.vovo[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('vovo', nP, no)
+                    self.vovo = self.model.get_2b_int( idx )
+                    return self.vovo
+                else:
+                    global_idx = tuple((no+idx[0], no+idx[1], \
+                                        idx[2], idx[3], \
+                                        no+idx[4], no+idx[5], \
+                                        idx[6], idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'vvvv':
+            if self.vvvv is not None:
+                if idx is None:
+                    return self.vvvv
+                else:
+                    return self.vvvv[idx[0]:idx[1], idx[2]:idx[3], idx[4]:idx[5], idx[6]:idx[7]]
+            else:
+                if idx is None:
+                    idx = get_block_index('vvvv', nP, no)
+                    self.vvvv = self.model.get_2b_int( idx )
+                    return self.vvvv
+                else:
+                    global_idx = tuple((no+idx[0], no+idx[1], \
+                                        no+idx[2], no+idx[3], \
+                                        no+idx[4], no+idx[5], \
+                                        no+idx[6], no+idx[7]))
+                    return self.model.get_2b_int( global_idx )
+        elif block == 'full':
+            if idx is None:
+                idx = get_block_index('full', nP, no)
+                V_pqrs = self.model.get_2b_int( idx )
+                self.part_eri(self.fock, V_pqrs)
+                return V_pqrs
+            else:
+                global_idx = tuple((idx[0], idx[1], \
+                                    idx[2], idx[3], \
+                                    idx[4], idx[5], \
+                                    idx[6], idx[7]))
+                return self.model.get_2b_int( global_idx )
+        else:
+            raise ValueError("Invalid block name. Choose from 'oooo', 'ovvo', 'voov', 'oovv', 'vvoo', 'ovov', 'vovo', 'vvvv', or 'full'.")

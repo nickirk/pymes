@@ -40,8 +40,14 @@ class CCD:
         t_T_abij = T^{ab}_{ij}
         the upper indices refer to conjugation
         '''
-        algo_name = "ccd.solve"
+        algo_name = "CCD.solve"
+
         time_ccd = time.time()
+        print_logging_info(algo_name, level=0)
+        mode = eri.mode
+        print_logging_info("Using ERI mode: ", mode, level=1)
+        if eri.mode == 'on-the-fly':
+            raise NotImplementedError("CCD with on-the-fly ERI is currently not implemented.")
 
         no = self.no
 
@@ -72,7 +78,6 @@ class CCD:
 
         delta = 1.0
 
-        print_logging_info(algo_name)
         print_logging_info("Using DCD: ", self.is_dcd, level=1)
         print_logging_info("Using dr-CCD: ", self.is_dr_ccd, level=1)
         print_logging_info("Solving doubles amplitude equation", level=1)
@@ -82,11 +87,15 @@ class CCD:
                            level=1)
         print_logging_info("Using tolerance for energy convergence: {:.3e}".format(delta_e), level=1)
         print_logging_info("Initial memory usage: {:.2f} GB".format(get_memory_usage()), level=1)
+
         print_logging_info("Iteration = 0", level=1)
-        e_mp2, t_T_abij = mp2.solve(t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift)
-        print("MP2 energy = ", e_mp2)
+        tMP2 = mp2.MP2(no)
+        mp2_results = tMP2.solve(eri, level_shift=level_shift)
+        e_mp2 = mp2_results['mp2 e']
+        t_T_abij = mp2_results['t2 amp']
         if amps is not None:
             t_T_abij = amps
+        del tMP2
 
         t_D_abij = t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[:, None, None, None] - t_epsilon_a[None, :, None, None]
 
@@ -198,7 +207,7 @@ class CCD:
 
     def get_residual(self, eri, t_T_abij):
 
-        algo_name = "ccd.get_residual"
+        algo_name = "CCD.get_residual"
 
         print_logging_info(algo_name + ": Calculating R_abij residual ...", level=2)
         start_initial_residual_time = time.time()
@@ -234,10 +243,8 @@ class CCD:
 
         # Calculate block size dynamically to optimize memory usage.
         element_size = t_T_abij.dtype.itemsize  # Size of one element in bytes
-        total_elements_dimension = nv           # Total elements along the first axis.
-        block_size = tensors.calculate_block_size(total_elements_dimension, element_size,
-                                                  memory_fraction=0.55,
-                                                  is_shared_memory=False)
+        block_size = tensors.calculate_block_size(0, tuple((nv, nv, nv, nv)), element_size,
+                                                    memory_fraction=0.55, is_shared_memory=False)
         
         print_logging_info("Using block size of {} for 'vvvv'-contribution.".format(block_size), level=3)
         print_logging_info("Memory per block: {:.2f} GB".format(
@@ -249,7 +256,7 @@ class CCD:
             block_end = min(block_start + block_size, nv)
             print_logging_info(" Calculating block: {} to {}.".format(block_start, block_end), level=3)
             indx = tuple((block_start, block_end, 0, nv, 0, nv, 0, nv))
-            t_V_xbcd = eri.get_vvvv(indx)
+            t_V_xbcd = eri.get_pqrs('vvvv', idx=indx)
             end_vvvv_time = time.time()
             print_logging_info(" Elapsed vvvv integral time: {:.3f} seconds.".format(
                 end_vvvv_time - start_vvvv_time), level=3)

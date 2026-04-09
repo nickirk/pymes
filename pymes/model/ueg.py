@@ -402,8 +402,8 @@ class UEG:
                 start_time_3b = time.time()
                 print_logging_info("Calculating the doubly and triply contractions of the 3-body integrals", level=1)
 
-                contr_from_doubly_contra_3b = self.get_double_contractions()
-                contr_from_triply_contra_3b = self.get_triple_contractions()
+                contr_from_doubly_contra_3b = self.get_double_contractions_3b_int()
+                contr_from_triply_contra_3b = self.get_triple_contractions_3b_int()
 
                 Epsilon_i += contr_from_doubly_contra_3b[:no]
                 Epsilon_a += contr_from_doubly_contra_3b[no:]
