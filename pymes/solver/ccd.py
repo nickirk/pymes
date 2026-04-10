@@ -40,10 +40,11 @@ class CCD:
         t_T_abij = T^{ab}_{ij}
         the upper indices refer to conjugation
         '''
-        algo_name = "CCD.solve"
+        algo_name = "ccd.solve"
 
         time_ccd = time.time()
         print_logging_info(algo_name, level=0)
+
         mode = eri.mode
         print_logging_info("Using ERI mode: ", mode, level=1)
         if eri.mode == 'on-the-fly':
@@ -52,11 +53,11 @@ class CCD:
         no = self.no
 
         t_fock_pq = eri.fock
-        t_V_klij  = eri.oooo
-        t_V_iabj  = eri.ovvo 
-        t_V_aijb  = eri.voov
-        t_V_ijab  = eri.oovv
-        t_V_abij  = eri.vvoo
+        t_V_klij  = eri.get_pqrs('oooo')
+        t_V_iabj  = eri.get_pqrs('ovvo')
+        t_V_aijb  = eri.get_pqrs('voov')
+        t_V_ijab  = eri.get_pqrs('oovv')
+        t_V_abij  = eri.get_pqrs('vvoo')
 
         nv = t_fock_pq.shape[0] - no
 
@@ -207,7 +208,7 @@ class CCD:
 
     def get_residual(self, eri, t_T_abij):
 
-        algo_name = "CCD.get_residual"
+        algo_name = "ccd.get_residual"
 
         print_logging_info(algo_name + ": Calculating R_abij residual ...", level=2)
         start_initial_residual_time = time.time()
@@ -215,11 +216,11 @@ class CCD:
         no = self.no
 
         t_fock_pq = eri.fock 
-        t_V_iabj  = eri.ovvo
-        t_V_ijab  = eri.oovv
-        t_V_klij  = eri.oooo
-        t_V_iajb  = eri.ovov
-        t_V_abij  = eri.vvoo
+        t_V_iabj  = eri.get_pqrs('ovvo')
+        t_V_ijab  = eri.get_pqrs('oovv')
+        t_V_klij  = eri.get_pqrs('oooo')
+        t_V_iajb  = eri.get_pqrs('ovov')
+        t_V_abij  = eri.get_pqrs('vvoo')
 
         nv = t_fock_pq.shape[0] - no
 

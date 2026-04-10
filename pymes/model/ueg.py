@@ -195,7 +195,7 @@ class UEG:
             i.e. the single-particle basis set.
 
     """
-        algo_name = "UEG.init_single_basis"
+        algo_name = "ueg.init_single_basis"
         # Single particle basis within the desired energy cutoff.
         # cutoff = cutoff*(2*np.pi/self.L)**2
         print_logging_info(algo_name, ": initializing the single particle basis functions with cutoff = {:.8f} [1/2*(2π/L)²]".format(cutoff), level=0)
@@ -249,7 +249,7 @@ class UEG:
         kinetic_G: array object
             Kinetic energies, dimension [n_p] (number of spatial orbitals).
         """
-        algo_name = "UEG.compute_kinetic_energy"
+        algo_name = "ueg.compute_kinetic_energy"
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
         n_p = int(len(self.basis_fns)/2)
@@ -286,7 +286,7 @@ class UEG:
         V_voov: array object
             'VOOV' block of the Coulomb tensor, dimension [n_virt, n_occ, n_occ, n_virt] (if mode='incore')
         """
-        algo_name = "UEG.get_fock"
+        algo_name = "ueg.get_fock"
         print_logging_info(algo_name, ": calculating the Fock Matrix and the Hatree-Fock energy", level=0)
         print_logging_info("Mode of calculation: {}".format(mode), level=1)
 
@@ -326,7 +326,7 @@ class UEG:
                     the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
                     the Coulomb tensor, using the incore mode.
         """
-        algo_name = "UEG._get_fock_incore"
+        algo_name = "ueg._get_fock_incore"
         print_logging_info(algo_name, ": using incore mode", level=1)
         start_time = time.time()
         # Get orbital parameters.
@@ -433,6 +433,8 @@ class UEG:
         # Get the Hartree Fock matrix.
         print_logging_info("Calculating the Fock matrix", level=1)
         fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
+        #np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
+        #np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
 
         print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
         print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
@@ -448,7 +450,7 @@ class UEG:
                     the Fock matrix and the 'OOOO', 'VOVO', 'VOOV' block of 
                     the Coulomb tensor, using the on-the-fly mode.
         """
-        algo_name = "UEG._get_fock_on_the_fly"
+        algo_name = "ueg._get_fock_on_the_fly"
         print_logging_info(algo_name, ": using on-the-fly mode", level=1)
         start_time = time.time()
         # Get orbital parameters.
@@ -561,6 +563,8 @@ class UEG:
             exE = -1. * einsum('poop->', V_poop)
             fock_pq[p,p] += dirE + exE
         del V_popo, V_poop
+        #np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
+        #np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
         end_time_fock = time.time()
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_fock - start_time_fock) +
                             "calculating the Fock matrix.", level=1)
@@ -603,7 +607,7 @@ class UEG:
         V_pqrs: tensor object (tensor by default)
             of size [ idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
         """
-        algo_name = "UEG.get_2b_int"
+        algo_name = "ueg.get_2b_int"
         #start_time = time.time()
         if self.basis_fns is None:
             raise ValueError(algo_name, "Basis functions not initialized!")
@@ -661,7 +665,7 @@ class UEG:
         float
             Triply contracted 3-body energy contribution (same as triple_contractions_in_3_body).
         """
-        algo_name = "UEG.get_triple_contractions_3b_int"
+        algo_name = "ueg.get_triple_contractions_3b_int"
         print_logging_info(algo_name, level=1)
         no = int(self.n_ele / 2)
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
@@ -686,7 +690,7 @@ class UEG:
             One-body energy corrections from doubly contracted 3-body integrals
             (same as double_contractions_in_3_body).
         """
-        algo_name = "UEG.get_double_contractions_3b_int"
+        algo_name = "ueg.get_double_contractions_3b_int"
         print_logging_info(algo_name, level=1)
         no = int(self.n_ele / 2)
         nP   = int(len(self.basis_fns) / 2)
@@ -714,7 +718,7 @@ class UEG:
         -------
         kPrime: nparray of int dtype, size (3*cutoff+1, 3)
         """
-        algo_name = "UEG.init_kPrime"
+        algo_name = "ueg.init_kPrime"
         if self.tc_type == "canonical":
             kPrime = np.array([[i, j, k] for i in range(-cutoff, cutoff + 1) \
                            for j in range(-cutoff, cutoff + 1) for k in \
@@ -739,7 +743,7 @@ class UEG:
             maximum k' value in the grid kmax = k_F*kmaxfac.
         Returns
         """
-        algo_name = "UEG.init_ConvMesh"
+        algo_name = "ueg.init_ConvMesh"
         if self.tc_type == "long-range":
             self.dxtheta = 2.0 / nx
             self.dkpts = self.kFermi / dkfac
@@ -765,7 +769,7 @@ class UEG:
         canonical  TC: F{(∇u)²}(k) = 1/Ω ∑k' (k'·(k-k')) u(k') u(|k-k'|) -> sumNablaUSquare
         long-range TC: F{(∇u)²}(k) = ∫ d³k' (k'·(k-k')) u(k') u(|k-k'|)  -> intNablaUSquare
         """
-        algo_name = "UEG.init_UMAT"
+        algo_name = "ueg.init_UMAT"
 
         print_logging_info(algo_name, ": Initializing UMAT[kx,ky,kz]", level=0)
         print_logging_info("TC-type: {}".format(self.tc_type), level=1) 
@@ -1061,7 +1065,7 @@ class UEG:
             where nP: int, is the number of spatial orbitals.
         """
 
-        algo_name = "UEG.eval_3b_integrals"
+        algo_name = "ueg.eval_3b_integrals"
         print_logging_info(algo_name, level=0)
         start_time = time.time()
 
@@ -1555,7 +1559,7 @@ class UEG:
         This function computes the triply contracted 3-body interactions.
         Return: a scalar (float) which should be added to the total energy
         """
-        algo_name = "UEG.triple_contractions_in_3_body"
+        algo_name = "ueg.triple_contractions_in_3_body"
         print_logging_info(algo_name, level=1)
 
         p_pi = np.array([self.basis_fns[i * 2].kp for i in range(int(self.n_ele / 2))])
@@ -1592,7 +1596,7 @@ class UEG:
 
             return: a numpy array of size equal to the number of plane waves
         """
-        algo_name = "UEG.double_contractions_in_3_body"
+        algo_name = "ueg.double_contractions_in_3_body"
         print_logging_info(algo_name, level=1)
         # some constants
 
@@ -1707,7 +1711,7 @@ class UEG:
             $C^p_q({\bf G}) = \int\mathrm d{\bf r}
              \phi^*_p({\bf r}\phi_q({\bf r})e^{i{\bf G\cdot r}}$
         """
-        algo_name = "UEG.calcGamma"
+        algo_name = "ueg.calcGamma"
         if self.basis_fns == None:
             raise ValueError(algo_name, "Basis functions not initialized!")
 

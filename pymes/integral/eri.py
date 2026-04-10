@@ -38,27 +38,20 @@ class ERI:
         """
 
         self.mode = mode
-        nP = self.n_orb
-        no = self.n_occ
 
         if self.mode == 'incore':
             self.EHF, self.eps_occ, self.eps_virt, self.fock, \
                 self.oooo, self.vovo, self.voov = self.model.get_fock(mode='incore')
-            idx = get_block_index('full', nP, no)
-            V_pqrs = self.model.get_2b_int(idx) 
+            V_pqrs = self.get_pqrs('full')
             self.part_eri(self.fock, V_pqrs)
 
         elif self.mode == 'semi-incore':
             self.EHF, self.eps_occ, self.eps_virt, self.fock, \
                 self.oooo, self.vovo, self.voov = self.model.get_fock(mode='incore')
-            idx    = get_block_index( 'ovvo', nP, no)
-            self.ovvo =  self.model.get_2b_int( idx )
-            idx    = get_block_index( 'oovv', nP, no)
-            self.oovv =  self.model.get_2b_int( idx )
-            idx    = get_block_index( 'ovov', nP, no)
-            self.ovov =  self.model.get_2b_int( idx)
-            idx    = get_block_index( 'vvoo', nP, no)
-            self.vvoo =  self.model.get_2b_int( idx )
+            self.ovvo =  self.get_pqrs('ovvo')
+            self.oovv =  self.get_pqrs('oovv')
+            self.ovov =  self.get_pqrs('ovov')
+            self.vvoo =  self.get_pqrs('vvoo')
 
         elif self.mode == 'on-the-fly':
             self.EHF, self.eps_occ, self.eps_virt, self.fock = self.model.get_fock(mode='on-the-fly')
@@ -146,8 +139,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('oooo', nP, no)
-                    self.oooo = self.model.get_2b_int( idx )
-                    return self.oooo
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((idx[0], idx[1], \
                                         idx[2], idx[3], \
@@ -163,8 +155,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('ovvo', nP, no)
-                    self.ovvo = self.model.get_2b_int( idx )
-                    return self.ovvo
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((idx[0], idx[1], \
                                         no+idx[2], no+idx[3], \
@@ -180,8 +171,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('voov', nP, no)
-                    self.voov = self.model.get_2b_int( idx )
-                    return self.voov
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((no+idx[0], no+idx[1], \
                                         idx[2], idx[3], \
@@ -197,8 +187,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('oovv', nP, no)
-                    self.oovv = self.model.get_2b_int( idx )
-                    return self.oovv
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((idx[0], idx[1], \
                                         idx[2], idx[3], \
@@ -214,8 +203,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('vvoo', nP, no)
-                    self.vvoo = self.model.get_2b_int( idx )
-                    return self.vvoo
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((no+idx[0], no+idx[1], \
                                         no+idx[2], no+idx[3], \
@@ -231,8 +219,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('ovov', nP, no)
-                    self.ovov = self.model.get_2b_int( idx )
-                    return self.ovov
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((idx[0], idx[1], \
                                         no+idx[2], no+idx[3], \
@@ -248,8 +235,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('vovo', nP, no)
-                    self.vovo = self.model.get_2b_int( idx )
-                    return self.vovo
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((no+idx[0], no+idx[1], \
                                         idx[2], idx[3], \
@@ -265,8 +251,7 @@ class ERI:
             else:
                 if idx is None:
                     idx = get_block_index('vvvv', nP, no)
-                    self.vvvv = self.model.get_2b_int( idx )
-                    return self.vvvv
+                    return self.model.get_2b_int( idx )
                 else:
                     global_idx = tuple((no+idx[0], no+idx[1], \
                                         no+idx[2], no+idx[3], \
@@ -276,9 +261,7 @@ class ERI:
         elif block == 'full':
             if idx is None:
                 idx = get_block_index('full', nP, no)
-                V_pqrs = self.model.get_2b_int( idx )
-                self.part_eri(self.fock, V_pqrs)
-                return V_pqrs
+                return self.model.get_2b_int( idx )
             else:
                 global_idx = tuple((idx[0], idx[1], \
                                     idx[2], idx[3], \

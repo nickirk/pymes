@@ -36,17 +36,17 @@ class MP2:
             T_abij: np array.
                     The calculated MP2 amplitudes.
         """
-        algo_name = "MP2.solve"
+        algo_name = "mp2.solve"
         print_logging_info(algo_name, level=0)
         mode = eri.mode
         print_logging_info("Using ERI mode: ", mode, level=1)
         if mode == 'incore' or mode == 'semi-incore':
             if sp == 0:
                 print_logging_info("Using incore-dense MP2 algorithm", level=1)
-                e_mp2, T_abij = self._solve_incore_dense(eri.eps_occ, eri.eps_virt, eri.oovv, eri.vvoo, level_shift=level_shift, **kwargs)
+                e_mp2, T_abij = self._solve_incore_dense(eri, level_shift=level_shift, **kwargs)
             elif sp == 1:
                 print_logging_info("Using incore-sparse MP2 algorithm", level=1)
-                e_mp2, T_abij = self._solve_incore_sp(eri.eps_occ, eri.eps_virt, eri.oovv, eri.vvoo, level_shift=level_shift, sp=sp, nv_part_size=nv_part_size, **kwargs)
+                e_mp2, T_abij = self._solve_incore_sp(eri, level_shift=level_shift, sp=sp, nv_part_size=nv_part_size, **kwargs)
             else:
                 raise ValueError(algo_name, "Invalid value for sp: ", sp)
         elif mode == 'on-the-fly':
@@ -54,28 +54,27 @@ class MP2:
             e_mp2, T_abij = self._solve_on_the_fly(eri, level_shift=level_shift, **kwargs)
         return {"mp2 e": e_mp2, "t2 amp": T_abij}
 
-    def _solve_incore_dense(self, t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift=0., **kwargs):
+    def _solve_incore_dense(self, eri, level_shift=0., **kwargs):
         """
         dense mp2 algorithm
         Note that t_V_ijab and t_V_abij are not necessarily
         the same, e.g. in transcorrelated Hamiltonian.
         -------------
         Parameters:
-            t_epsilon_i: 1D np array.
-                The occupied orbital energies
-            t_epsilon_a: 1D np array.
-                The unoccupied orbital energies
-            t_V_ijab: np array. 
-                oovv 2-body integrals
-            t_V_abij: np array. 
-                vvoo 2-body integrals
+            eri: ERI class object. 
+                The ERI object containing the necessary tensors for MP2 calculation.
             level_shift: float.
                 The level shift to be added to the energy denominator in MP2 amplitude calculation, to avoid divergence.
         kwargs: other keyword arguments for MP2 solver, e.g. debug_level for logging.
 
         """
-        algo_name = "MP2._solve_incore_dense"
+        algo_name = "mp2._solve_incore_dense"
         print_logging_info(algo_name, level=1)
+
+        t_epsilon_i = eri.eps_occ
+        t_epsilon_a = eri.eps_virt
+        t_V_ijab = eri.get_pqrs('oovv')
+        t_V_abij = eri.get_pqrs('vvoo')
 
         start_time = time.time()
         t_T_abij = t_V_abij.copy()
@@ -95,20 +94,14 @@ class MP2:
         
         return [e_total_mp2, t_T_abij]
 
-    def _solve_incore_sp(self, t_epsilon_i, t_epsilon_a, t_V_ijab, t_V_abij, level_shift=0., sp=0, nv_part_size=None, **kwargs):
+    def _solve_incore_sp(self, eri, level_shift=0., sp=0, nv_part_size=None, **kwargs):
         """
         sparse mp2 algorithm: not debugged yet
         Note that t_V_ijab and t_V_abij are not necessarily the same, e.g. in transcorrelated Hamiltonian.
         -------------
         Parameters:
-            t_epsilon_i: 1D np array.
-                The occupied orbital energies
-            t_epsilon_a: 1D np array.
-                The unoccupied orbital energies
-            t_V_ijab: np array. 
-                oovv 2-body integrals
-            t_V_abij: np array. 
-                vvoo 2-body integrals
+            eri: ERI class object.
+                The ERI object containing the necessary tensors for MP2 calculation, and the tensors are in sparse format.
             level_shift: float.
                 The level shift to be added to the energy denominator in MP2 amplitude calculation, to avoid divergence.
             sp: 0 or 1. 
@@ -118,7 +111,7 @@ class MP2:
                 The default value is 0, which means no partition is used. It will be set to nv in the algorithm.
         """
 
-        algo_name = "MP2._solve_incore_sp"
+        algo_name = "mp2._solve_incore_sp"
         start_time = time.time()
         print_logging_info(algo_name,level=1)
 
@@ -126,6 +119,11 @@ class MP2:
             debug_level = kwargs["debug_level"]
         else:
             debug_level = 3
+
+        t_epsilon_i = eri.eps_occ
+        t_epsilon_a = eri.eps_virt
+        t_V_ijab = eri.get_pqrs('oovv')
+        t_V_abij = eri.get_pqrs('vvoo')
 
         no = t_epsilon_i.size
         nv = t_epsilon_a.size
@@ -219,7 +217,7 @@ class MP2:
                 The level shift to be added to the energy denominator in MP2 amplitude calculation, to avoid divergence.
         """
 
-        algo_name = "MP2.solve_on_the_fly"
+        algo_name = "mp2.solve_on_the_fly"
         start_time = time.time()
         print_logging_info(algo_name,level=1)
         e_dir_mp2 = 0.
