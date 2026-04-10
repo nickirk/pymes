@@ -430,11 +430,10 @@ class UEG:
             print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_3b - start_time_3b) +
                                 "calculating the doubly and triply contractions of the 3-body integrals.", level=1)
 
-        # Get the Hartree Fock matrix.
-        print_logging_info("Calculating the Fock matrix", level=1)
-        fock_pq = hf.construct_hf_matrix_part(no, np.diag(kinetic_G), V_oooo, V_vovo, V_voov)
-        #np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
-        #np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
+        # Get the Hartree Fock matrix (diagonal).
+        print_logging_info("Calculating the Fock matrix (diagonal)", level=1)
+        np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
+        np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
 
         print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
         print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
@@ -550,24 +549,8 @@ class UEG:
 
         # Get the Fock matrix (diagonal).
         print_logging_info("Calculating the Fock matrix (diagonal)", level=1)
-        V_popo = np.zeros([1, no, 1, no], dtype=dtype)
-        V_poop = np.zeros([1, no, no, 1], dtype=dtype)
-        fock_pq = np.diag(kinetic_G)
-        start_time_fock = time.time()
-        for p in range(nP):
-            idx = tuple((p,p+1,0,no,p,p+1,0,no))
-            V_popo = self.get_2b_int(idx)
-            idx = tuple((p,p+1,0,no,0,no,p,p+1))
-            V_poop = self.get_2b_int(idx)
-            dirE = 2. * einsum('popo->', V_popo)
-            exE = -1. * einsum('poop->', V_poop)
-            fock_pq[p,p] += dirE + exE
-        del V_popo, V_poop
-        #np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
-        #np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
-        end_time_fock = time.time()
-        print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_fock - start_time_fock) +
-                            "calculating the Fock matrix.", level=1)
+        np.fill_diagonal(fock_pq[:no, :no], Epsilon_i)
+        np.fill_diagonal(fock_pq[no:, no:], Epsilon_a)
 
         print_logging_info("Total HF E = {:.8f}".format(EHF), level=1)
         print_logging_info("Total Kin. E = {:.8f}".format(tot_kinetic_energy), level=1)
