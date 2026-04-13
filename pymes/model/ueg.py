@@ -11,8 +11,8 @@ from pymes.mean_field import hf
 from pymes.model.ueg_helper import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
                                     _triple_contractions_in_3_body,
                                     _double_contractions_in_3_body)
-from pymes.util.tensors import get_block_index, calculate_block_size
-from pymes.util.parallel_tasks import det_num_threads, get_memory_usage
+from pymes.util.tensors import get_block_index
+from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
 from functools import partial
 
@@ -459,7 +459,6 @@ class UEG:
         # Initialize the fock matrix.
         fock_pq = np.zeros([nP, nP], dtype=dtype)
         # Initialize the orbital energies of the occupied and virtual orbitals.
-        Epsilon_  = np.zeros([nP], dtype=dtype)
         Epsilon_i = np.zeros([no], dtype=dtype)
         Epsilon_a = np.zeros([nv], dtype=dtype)
         # Initialize the Hartree Fock energy.
@@ -470,75 +469,56 @@ class UEG:
         tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
 
         # Get the orbital energies (with/without pure 2b int. from transcorrelation).
-        element_size = Epsilon_i.dtype.itemsize  # Size of one element in bytes
-        block_size_occ = calculate_block_size(0, tuple((no, no, no, no)), element_size,
-                                                  memory_fraction=0.75, is_shared_memory=False)
-        block_size_virt = calculate_block_size(0, tuple((nv, no, nv, no)), element_size,
-                                                  memory_fraction=0.75, is_shared_memory=False)
-        if block_size_occ != no and block_size_occ > 1:
-            block_size_occ = int(block_size_occ/2)
-        if block_size_virt != nv and block_size_virt > 1:
-            block_size_virt = int(block_size_virt/2)
-        print_logging_info("Memory usage at start: {:.2f} GB".format(get_memory_usage()), level=1)
-        print_logging_info("Using block size of {} for occupied orbitals.".format(block_size_occ), level=1)
-        print_logging_info("Using block size of {} for virtual orbitals.".format(block_size_virt), level=1)
-
-        Epsilon_ = kinetic_G[:].copy()
+        V_popo = np.zeros([1, no, 1, no], dtype=dtype)
+        V_poop = np.zeros([1, no, no, 1], dtype=dtype)
+        Epsilon_i = kinetic_G[:no].copy()
+        Epsilon_a = kinetic_G[no:].copy()
         HF_dirE = 0.
         HF_exE = 0.
         start_time_orbital_energy = time.time()
         if self.is_tc:
             print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-            for block_start in range(0, no, block_size_occ):
-                block_end = min(block_start + block_size_occ, no)
-                idx = tuple((block_start, block_end, 0, no, block_start, block_end, 0, no))
+            for p in range(no):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
                 V_popo = self.get_2b_int(idx, is_only_2b=True)
-                idx = tuple((block_start, block_end, 0, no, 0, no, block_start, block_end))
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
                 V_poop = self.get_2b_int(idx, is_only_2b=True)
-                dirE = 2. * einsum('popo-> p', V_popo)
-                exE = -1. * einsum('poop-> p', V_poop)
-                Epsilon_[block_start:block_end] += dirE + exE
-                HF_dirE += einsum('p-> ', dirE)
-                HF_exE += einsum('p-> ', exE)
-            del V_popo, V_poop
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_i[p] += dirE + exE
+                HF_dirE += dirE
+                HF_exE += exE
             print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-            for block_start in range(no, nP, block_size_virt):
-                block_end = min(block_start + block_size_virt, nP)
-                idx = tuple((block_start, block_end, 0, no, block_start, block_end, 0, no))
+            for p in range(no, nP):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
                 V_popo = self.get_2b_int(idx, is_only_2b=True)
-                idx = tuple((block_start, block_end, 0, no, 0, no, block_start, block_end))
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
                 V_poop = self.get_2b_int(idx, is_only_2b=True)
-                dirE = 2. * einsum('popo-> p', V_popo)
-                exE = -1. * einsum('poop-> p', V_poop)
-                Epsilon_[block_start:block_end] += dirE + exE
-            del V_popo, V_poop
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_a[p-no] += dirE + exE
         else:
             print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-            for block_start in range(0, no, block_size_occ):
-                block_end = min(block_start + block_size_occ, no)
-                idx = tuple((block_start, block_end, 0, no, block_start, block_end, 0, no))
+            for p in range(no):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
                 V_popo = self.get_2b_int(idx)
-                idx = tuple((block_start, block_end, 0, no, 0, no, block_start, block_end))
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
                 V_poop = self.get_2b_int(idx)
-                dirE = 2. * einsum('popo-> p', V_popo)
-                exE = -1. * einsum('poop-> p', V_poop)
-                Epsilon_[block_start:block_end] += dirE + exE
-                HF_dirE += einsum('p-> ', dirE)
-                HF_exE += einsum('p-> ', exE)
-            del V_popo, V_poop
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_i[p] += dirE + exE
+                HF_dirE += dirE
+                HF_exE += exE
             print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-            for block_start in range(no, nP, block_size_virt):
-                block_end = min(block_start + block_size_virt, nP)
-                idx = tuple((block_start, block_end, 0, no, block_start, block_end, 0, no))
+            for p in range(no, nP):
+                idx = tuple((p,p+1,0,no,p,p+1,0,no))
                 V_popo = self.get_2b_int(idx)
-                idx = tuple((block_start, block_end, 0, no, 0, no, block_start, block_end))
+                idx = tuple((p,p+1,0,no,0,no,p,p+1))
                 V_poop = self.get_2b_int(idx)
-                dirE = 2. * einsum('popo-> p', V_popo)
-                exE = -1. * einsum('poop-> p', V_poop)
-                Epsilon_[block_start:block_end] += dirE + exE
-            del V_popo, V_poop
-        Epsilon_i = Epsilon_[:no]
-        Epsilon_a = Epsilon_[no:]
+                dirE = 2. * einsum('popo->', V_popo)
+                exE = -1. * einsum('poop->', V_poop)
+                Epsilon_a[p-no] += dirE + exE
+        del V_popo, V_poop
         end_time_orbital_energy = time.time()
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_orbital_energy - start_time_orbital_energy) +
                             "calculating the orbital energies.", level=1)

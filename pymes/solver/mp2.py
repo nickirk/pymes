@@ -234,7 +234,7 @@ class MP2:
         # Calculate block size for memory management
         element_size = t_epsilon_i.dtype.itemsize  # Size of one element in bytes
         block_size = tensors.calculate_block_size(0, tuple((nv, nv, no, no)), element_size,
-                                                  memory_fraction=0.75, is_shared_memory=False)
+                                                  memory_fraction=0.55, is_shared_memory=False)
         if block_size != nv and block_size > 1:
             block_size = int(block_size/2)
 
@@ -246,24 +246,18 @@ class MP2:
         for block_start in range(0, nv, block_size):
             start_time_block = time.time()
             block_end = min(block_start + block_size, nv)
-            print_logging_info(" Calculating blocks [vvoo] [oovv]: {} to {}.".format(block_start, block_end), level=3)
-            start_time_calc_block = time.time()
+            print_logging_info(" Calculating block: {} to {}.".format(block_start, block_end), level=3)
             indx = tuple((block_start, block_end, 0, nv, 0, no, 0, no))
             t_T_xbij = eri.get_pqrs('vvoo', idx=indx)
             indx= tuple((0, no, 0, no, block_start, block_end, 0, nv))
             t_V_ijxb = eri.get_pqrs('oovv', idx=indx)
-            end_time_calc_block = time.time()
-            print_logging_info(" Elapsed [vvoo] [oovv] integral time: {:.3f} seconds.".format(end_time_calc_block - start_time_calc_block), level=3)
             print_logging_info(" Memory after loading [vvoo] [oovv] blocks: {:.2f} GB".format(get_memory_usage()), level=3)
-            start_time_contr_block = time.time()
             t_T_xbij /= (t_epsilon_i[None, None, :, None] + t_epsilon_i[None, None, None, :] - t_epsilon_a[block_start:block_end, None, None, None] - t_epsilon_a[None, :, None, None] + level_shift)
             e_dir_mp2 += 2.0*einsum('abij, ijab->',t_T_xbij, t_V_ijxb)
             e_exc_mp2 += -1.0*einsum('abij, jiab->',t_T_xbij, t_V_ijxb)
-            end_time_contr_block = time.time()
-            print_logging_info(" Elapsed [vvoo] [oovv] contraction time: {:.3f} seconds.".format(end_time_contr_block - start_time_contr_block), level=3)
             del t_V_ijxb, t_T_xbij
             end_time_block = time.time()
-            print_logging_info(" Elapsed [vvoo] [oovv] block time: {:.3f} seconds.".format(end_time_block - start_time_block), level=3)
+            print_logging_info(" Completed block in {:.3f} seconds.".format(end_time_block - start_time_block), level=3)
             print_logging_info(" Memory after block cleanup: {:.2f} GB".format(get_memory_usage()), level=3)
             gc.collect()
             sys.stdout.flush()
