@@ -10,7 +10,8 @@ from pymes.log import print_logging_info
 from pymes.mean_field import hf
 from pymes.model.ueg_helper import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
                                     _triple_contractions_in_3_body,
-                                    _double_contractions_in_3_body)
+                                    _double_contractions_in_3_body,
+                                    _solve_mp2)
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
@@ -802,6 +803,91 @@ class UEG:
         print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
         print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) + "initializing UMAT.", level=1)
+
+    def get_mp2(self, Epsilon_i, Epsilon_a, 
+                is_only_2b=False, 
+                is_effect_2b=False,
+                dtype=np.float64):
+        """
+        Member function of class UEG to compute the MP2 correlation energy.
+        This is a tailored implementation for the UEG system, where the MP2 correlation energy can be computed
+        efficiently using the orbital energies and the 2-body integrals in the plane wave basis. The MP2 correlation energy is given by:
+        E_corr = sum_{i,j,a,b} (V_ijab - V_ijba)^2 / (Epsilon_i[i] + Epsilon_i[j] - Epsilon_a[a] - Epsilon_a[b])
+
+        Args:
+            Epsilon_i: 1D array of shape (n_occ,) 
+                The energies of the occupied orbitals.
+            Epsilon_a: 1D array of shape (n_virt,) 
+                The energies of the virtual orbitals.
+
+        Returns:
+            float: The MP2 correlation energy.
+        """
+        algo_name = "ueg.get_mp2"
+        print_logging_info(algo_name, ": calculating the MP2 correlation energy", level=0)
+
+        if self.basis_fns is None:
+            raise ValueError(algo_name, "Basis functions not initialized!")
+        if self.is_tc:
+            print_logging_info("Using TC method", level=1)
+            print_logging_info("TC-type: {}".format(self.tc_type), level=1)
+            if self.correlator is None:
+                raise ValueError(algo_name, "Correlator for the transcorrelated framework not initialized!")
+            else:
+                print_logging_info("Using correlator: ", self.correlator.__name__, level=1)
+            if self.correlator == self.trunc:
+                if self.k_cutoff is None:
+                    raise ValueError(algo_name, "K-cutoff for the transcorrelated trunc. correlator not initialized!")
+                else:
+                    print_logging_info("K-cutoff in trunc. correlator: {:.8f} [2π/L]".format(self.k_cutoff), level=1)
+            else:
+                if self.k_cutoff is None:
+                    print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
+                else:
+                    print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
+        else:
+            print_logging_info("Using non-TC method", level=1)
+
+        nP = int(len(self.basis_fns) / 2)
+        no = int(self.n_ele / 2)
+        nv = nP - no
+        # 1. Unpack data into Numba-compatible structures (NumPy arrays).
+        if self.is_tc:
+            correlator_idx = self.get_correlator_idx()
+        else:
+            # NONE.
+            correlator_idx = self.CORRELATOR_NONE
+            # Dummy UMAT for non-TC calculations.
+            if self.UMAT is None:
+                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        gamma  = self.gamma if self.gamma is not None else 1.0
+        if self.is_tc and self.UMAT is None:
+            raise ValueError(algo_name, "UMAT for the transcorrelated framework not initialized!")
+        basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
+        basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
+        basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
+        # 2. Compute the MP2 correlation energy.
+        start_time = time.time()
+        e_dir_mp2, e_exc_mp2 =  _solve_mp2( self.n_ele, self.Omega, self.L, self.rho,
+                                    self.imax, k_cutoff, gamma,
+                                    self.UMAT, self.basis_indices_map,
+                                    basis_occ_Kp, basis_Kvec, basis_Kp,
+                                    Epsilon_i, Epsilon_a,
+                                    is_only_2b, is_effect_2b, 
+                                    self.is_tc, correlator_idx,
+                                    dtype=dtype)
+        e_total_mp2 = e_dir_mp2 + e_exc_mp2
+        end_time = time.time()
+        print_logging_info("Direct contribution = {:.12f}".format(np.real(e_dir_mp2)),\
+                        level=1)
+        print_logging_info("Exchange contribution = {:.12f}".format(np.real(e_exc_mp2)),\
+                        level=1)
+        print_logging_info("MP2 correlation energy = {:.12f}".format(np.real(e_total_mp2)), level=1)
+        print_logging_info("{:.3f} seconds spent on MP2".format((end_time-start_time)), level=1)
+
+        return {"mp2 e": e_total_mp2, "mp2 e dir": e_dir_mp2, "mp2 e exc": e_exc_mp2}
+
 
     def madelung(self, rs, nel):
         """
