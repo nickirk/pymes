@@ -8,10 +8,10 @@ import pytblis as pytblis
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
-from pymes.model.ueg_helper import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
+from pymes.model.ueg_helper_int import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
                                     _triple_contractions_in_3_body,
-                                    _double_contractions_in_3_body,
-                                    _solve_mp2)
+                                    _double_contractions_in_3_body)
+from pymes.model.ueg_helper_solver import _solve_mp2
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
@@ -810,8 +810,9 @@ class UEG:
                 dtype=np.float64):
         """
         Member function of class UEG to compute the MP2 correlation energy.
-        This is a tailored implementation for the UEG system, where the MP2 correlation energy can be computed
-        efficiently using the orbital energies and the 2-body integrals in the plane wave basis. The MP2 correlation energy is given by:
+        This is a wrapper of a tailored implementation for the UEG system, where the MP2 correlation energy 
+        can be computed efficiently using the orbital energies and the 2-body integrals in the plane wave basis. 
+        The MP2 correlation energy is given by:
         E_corr = sum_{i,j,a,b} (V_ijab - V_ijba)^2 / (Epsilon_i[i] + Epsilon_i[j] - Epsilon_a[a] - Epsilon_a[b])
 
         Args:

@@ -7,6 +7,7 @@ Helper functions for UEG model system JIT-compiled with Numba for better perform
     in a JIT-compiled manner using Numba for enhanced performance.
 Main functions:
     _get_2b_int: Numba JIT-compiled version of the get_2b_int().
+    _get_2b_int_kernel: kernel function for computing two-body integrals.
     _triple_contractions_in_3_body: Numba JIT-compiled version of triple_contractions_in_3_body().
     _double_contractions_in_3_body: Numba JIT-compiled version of double_contractions_in_3_body().
 Auxiliary functions:
@@ -301,78 +302,99 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
                     continue
                 loc_s_idx = s - idx[6]
                 #dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
-                w = 0.0
-                if is_tc:
-                    if is_only_2b:
-                        # Pure 2-body TC integrals.
-                        if np.abs(dk_square) > 0.:
-                            rs_dk = basis_Kp[r] - basis_Kp[s]
-                            rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                            w = 4. * np.pi / dk_square \
-                                + u_mat \
-                                + (dk_square - rs_dk_dot_d_k_vec) \
-                                * corr_dk_square
-                            w = w / Omega
-                        else:
-                            w = u_mat / Omega
-                    elif is_effect_2b:
-                        # Effective 2-body integrals from single contractions of 3-body TC integrals.
-                        if np.abs(dk_square) > 0.:
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                            w_pqrs = -(n_ele) * dk_square \
-                                    * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = -(n_ele) * dk_square \
-                                    * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w = 0.5 * (w_pqrs + w_qpsr)
-                        else:
-                            w = u_mat
-                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w = 0.5 * (w_pqrs + w_qpsr)
-                        w = w / Omega
-                    else:
-                        # Full 2-body integrals including both Coulomb and TC contributions.
-                        if np.abs(dk_square) > 0.:
-                            corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                            rs_dk = basis_Kp[r] - basis_Kp[s]
-                            rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
-                            w = 4. * np.pi / dk_square
-                            w += + u_mat \
-                                + (dk_square - rs_dk_dot_d_k_vec) \
-                                * corr_dk_square
-                            w_pqrs = -(n_ele) * dk_square \
-                                    * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = -(n_ele) * dk_square \
-                                    * corr_dk_square**2 / Omega \
-                                    + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                                    + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w += 0.5 * (w_pqrs + w_qpsr)
-                        else:
-                            w = u_mat
-                            w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                            w += 0.5 * (w_pqrs + w_qpsr)
-                        w = w / Omega
-                else:
-                    # Coulomb integrals only.
-                    if np.abs(dk_square) > 0.:
-                        w = 4. * np.pi / dk_square / Omega
+                
                 V_pqrs[loc_p_idx,
                         loc_q_idx,
                         loc_r_idx,
-                        loc_s_idx] = w
+                        loc_s_idx] = _get_2b_int_kernel(p, q, r, s,
+                                                        dk_square, d_k_vec, u_mat,
+                                                        n_ele, Omega, rho,
+                                                        k_cutoffSquare, gamma,
+                                                        basis_occ_Kp, basis_Kp,
+                                                        is_only_2b, is_effect_2b, 
+                                                        is_tc, correlator_idx)
     return V_pqrs   
+
+@jit(nopython=True)
+def _get_2b_int_kernel(p,q,r,s, 
+                        dk_square, d_k_vec, u_mat,
+                        n_ele, Omega, rho,
+                        k_cutoffSquare, gamma,
+                        basis_occ_Kp, basis_Kp,
+                        is_only_2b, is_effect_2b, 
+                        is_tc, correlator_idx):
+    """Kernel function to compute the two-body integral for given indices p,q,r,s ;
+    their corresponding k-vector differences and the pre-computed UMAT matrix 
+    value for the TC contribution."""
+    w = 0.0
+    if is_tc:
+        if is_only_2b:
+            # Pure 2-body TC integrals.
+            if np.abs(dk_square) > 0.:
+                rs_dk = basis_Kp[r] - basis_Kp[s]
+                rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
+                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                w = 4. * np.pi / dk_square \
+                    + u_mat \
+                    + (dk_square - rs_dk_dot_d_k_vec) \
+                    * corr_dk_square
+                w = w / Omega
+            else:
+                w = u_mat / Omega
+        elif is_effect_2b:
+            # Effective 2-body integrals from single contractions of 3-body TC integrals.
+            if np.abs(dk_square) > 0.:
+                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                w_pqrs = -(n_ele) * dk_square \
+                        * corr_dk_square**2 / Omega \
+                        + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w_qpsr = -(n_ele) * dk_square \
+                        * corr_dk_square**2 / Omega \
+                        + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w = 0.5 * (w_pqrs + w_qpsr)
+            else:
+                w = u_mat
+                w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w = 0.5 * (w_pqrs + w_qpsr)
+            w = w / Omega
+        else:
+            # Full 2-body integrals including both Coulomb and TC contributions.
+            if np.abs(dk_square) > 0.:
+                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
+                rs_dk = basis_Kp[r] - basis_Kp[s]
+                rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
+                w = 4. * np.pi / dk_square
+                w += + u_mat \
+                    + (dk_square - rs_dk_dot_d_k_vec) \
+                    * corr_dk_square
+                w_pqrs = -(n_ele) * dk_square \
+                        * corr_dk_square**2 / Omega \
+                        + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w_qpsr = -(n_ele) * dk_square \
+                        * corr_dk_square**2 / Omega \
+                        + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
+                        + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w += 0.5 * (w_pqrs + w_qpsr)
+            else:
+                w = u_mat
+                w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
+                w += 0.5 * (w_pqrs + w_qpsr)
+            w = w / Omega
+    else:
+        # Coulomb integrals only.
+        if np.abs(dk_square) > 0.:
+            w = 4. * np.pi / dk_square / Omega
+
+    return w
 
 @jit(nopython=True)
 def _contract_exchange_3_body(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx):
@@ -638,169 +660,6 @@ def _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
             umat += inner_int * u_kp * kpSquare
         umat *= prefac
     return umat
-
-@jit(nopython=True, parallel=True)
-def _solve_mp2(n_ele, Omega, L, rho, 
-                imax, k_cutoff, gamma,
-                UMAT, basis_indices_map,
-                basis_occ_Kp, basis_Kvec, basis_Kp,
-                epsilon_i, epsilon_a,
-                is_only_2b, is_effect_2b, is_tc, correlator_idx,
-                dtype=np.float64):
-
-    e_mp2_dir = 0.0
-    e_mp2_exc = 0.0
-
-    no = int(n_ele // 2)
-    nP = int(basis_Kp.shape[0])
-    nv = nP - no
-
-    num_k_in_each_dir = imax * 2 + 1
-    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2*imax
-
-    for a in prange(no, nP):
-        for i in range(no):
-            d_int_k = basis_Kvec[i] - basis_Kvec[a]
-            d_k_vec = basis_Kp[i] - basis_Kp[a]
-            dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
-            u_mat = 0.
-            if is_tc:
-                idx_shift = 2 * imax
-                ix = d_int_k[0] + idx_shift
-                iy = d_int_k[1] + idx_shift
-                iz = d_int_k[2] + idx_shift
-                u_mat = UMAT[ix, iy, iz]
-            for b in range(no, nP):
-                int_kj = basis_Kvec[b] - d_int_k
-                loc_j = num_k_in_each_dir ** 2 * (int_kj[0] + imax) + \
-                        num_k_in_each_dir * (int_kj[1] + imax) + \
-                        int_kj[2] + imax
-                if len(basis_indices_map) > loc_j >= 0:
-                    j = int(basis_indices_map[loc_j])
-                    if j < 0 or j >= no:
-                        continue
-                else:
-                    continue
-                denom  = epsilon_i[i] + epsilon_i[j] - epsilon_a[a-no] - epsilon_a[b-no]
-                # Regularization to avoid singularity in the denominator.
-                if abs(denom) < 1.e-12:
-                    continue
-                # Compute T2 amplitudes.
-                T_abij = _get_2b_int_kernel(a, b, i, j,
-                                            dk_square, d_k_vec, u_mat,
-                                            n_ele, Omega, rho,
-                                            k_cutoffSquare, gamma,
-                                            basis_occ_Kp, basis_Kp,
-                                            is_only_2b, is_effect_2b, is_tc, correlator_idx)
-                T_abij = T_abij / denom
-                # Compute Direct V_ijab: d_k_vec_ijab = k_a - k_i = k_j - k_b (from mom. cons.).
-                # d_k_vec_ijab = - (k_i - k_a) = - d_k_vec.
-                V_ijab = _get_2b_int_kernel(i, j, a, b,
-                                            dk_square, -d_k_vec, u_mat,
-                                            n_ele, Omega, rho,
-                                            k_cutoffSquare, gamma,
-                                            basis_occ_Kp, basis_Kp,
-                                            is_only_2b, is_effect_2b, is_tc, correlator_idx)
-                # Compute Exchange V_jiab: d_k_vec_jiab = k_a - k_j = k_i - k_b (from mom. cons.).
-                # Must be recomputed here since j depends on b and differs from the (a,i) pair.
-                d_int_k_jiab = basis_Kvec[a] - basis_Kvec[j]
-                d_k_vec_jiab = basis_Kp[a] - basis_Kp[j]
-                dk_square_jiab = d_k_vec_jiab[0]**2 + d_k_vec_jiab[1]**2 + d_k_vec_jiab[2]**2
-                u_mat_jiab = 0.
-                if is_tc:
-                    ix_j = d_int_k_jiab[0] + idx_shift
-                    iy_j = d_int_k_jiab[1] + idx_shift
-                    iz_j = d_int_k_jiab[2] + idx_shift
-                    u_mat_jiab = UMAT[ix_j, iy_j, iz_j]
-                V_jiab = _get_2b_int_kernel(j, i, a, b,
-                                            dk_square_jiab, d_k_vec_jiab, u_mat_jiab,
-                                            n_ele, Omega, rho,
-                                            k_cutoffSquare, gamma,
-                                            basis_occ_Kp, basis_Kp,
-                                            is_only_2b, is_effect_2b, is_tc, correlator_idx)
-                # Accumulate MP2 energy contributions.
-                e_mp2_dir += 2 * T_abij * V_ijab
-                e_mp2_exc += -1 * T_abij * V_jiab
-    return e_mp2_dir, e_mp2_exc
-
-@jit(nopython=True)
-def _get_2b_int_kernel(p,q,r,s, 
-                        dk_square, d_k_vec, u_mat,
-                        n_ele, Omega, rho,
-                        k_cutoffSquare, gamma,
-                        basis_occ_Kp, basis_Kp,
-                        is_only_2b, is_effect_2b, 
-                        is_tc, correlator_idx):
-    w = 0.0
-    if is_tc:
-        if is_only_2b:
-            # Pure 2-body TC integrals.
-            if np.abs(dk_square) > 0.:
-                rs_dk = basis_Kp[r] - basis_Kp[s]
-                rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
-                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                w = 4. * np.pi / dk_square \
-                    + u_mat \
-                    + (dk_square - rs_dk_dot_d_k_vec) \
-                    * corr_dk_square
-                w = w / Omega
-            else:
-                w = u_mat / Omega
-        elif is_effect_2b:
-            # Effective 2-body integrals from single contractions of 3-body TC integrals.
-            if np.abs(dk_square) > 0.:
-                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                w_pqrs = -(n_ele) * dk_square \
-                        * corr_dk_square**2 / Omega \
-                        + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w_qpsr = -(n_ele) * dk_square \
-                        * corr_dk_square**2 / Omega \
-                        + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w = 0.5 * (w_pqrs + w_qpsr)
-            else:
-                w = u_mat
-                w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w = 0.5 * (w_pqrs + w_qpsr)
-            w = w / Omega
-        else:
-            # Full 2-body integrals including both Coulomb and TC contributions.
-            if np.abs(dk_square) > 0.:
-                corr_dk_square = _calc_correlator(correlator_idx, dk_square, k_cutoffSquare, rho, gamma)
-                rs_dk = basis_Kp[r] - basis_Kp[s]
-                rs_dk_dot_d_k_vec = rs_dk[0]*d_k_vec[0] + rs_dk[1]*d_k_vec[1] + rs_dk[2]*d_k_vec[2]
-                w = 4. * np.pi / dk_square
-                w += + u_mat \
-                    + (dk_square - rs_dk_dot_d_k_vec) \
-                    * corr_dk_square
-                w_pqrs = -(n_ele) * dk_square \
-                        * corr_dk_square**2 / Omega \
-                        + 2. * _contract_exchange_3_body( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        - 2. * _contract_exchange_3_body( basis_Kp[p], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        + 2. * _contractP_KWithQ( basis_Kp[r], d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w_qpsr = -(n_ele) * dk_square \
-                        * corr_dk_square**2 / Omega \
-                        + 2. * _contract_exchange_3_body( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        - 2. * _contract_exchange_3_body( basis_Kp[q], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx) \
-                        + 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w += 0.5 * (w_pqrs + w_qpsr)
-            else:
-                w = u_mat
-                w_pqrs = 2. * _contractP_KWithQ( basis_Kp[r],  d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w_qpsr = 2. * _contractP_KWithQ( basis_Kp[s], -d_k_vec, basis_occ_Kp, rho, Omega, k_cutoffSquare, gamma, correlator_idx)
-                w += 0.5 * (w_pqrs + w_qpsr)
-            w = w / Omega
-    else:
-        # Coulomb integrals only.
-        if np.abs(dk_square) > 0.:
-            w = 4. * np.pi / dk_square / Omega
-
-    return w
 
 # CORRELATORS -----------------------------------------------------
 
