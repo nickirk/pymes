@@ -12,6 +12,7 @@ Main functions:
                 (both direct and exchange) for the UEG model system.
 """
 
+# MP2 ---------------------------------------------------------------------------------
 @jit(nopython=True, parallel=True)
 def _solve_mp2(n_ele, Omega, L, rho, 
                 imax, k_cutoff, gamma,
@@ -20,9 +21,8 @@ def _solve_mp2(n_ele, Omega, L, rho,
                 epsilon_i, epsilon_a,
                 is_only_2b, is_effect_2b, is_tc, correlator_idx,
                 dtype=np.float64):
-
-    e_mp2_dir = 0.0
-    e_mp2_exc = 0.0
+    """Solve/compute the MP2 correlation energy contributions (both direct and exchange) 
+    for the UEG model system."""
 
     no = int(n_ele // 2)
     nP = int(basis_Kp.shape[0])
@@ -31,6 +31,9 @@ def _solve_mp2(n_ele, Omega, L, rho,
     num_k_in_each_dir = imax * 2 + 1
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
     idx_shift = 2*imax
+
+    e_mp2_dir = 0.0
+    e_mp2_exc = 0.0
 
     for a in prange(no, nP):
         for i in range(no):

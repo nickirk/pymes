@@ -6,6 +6,7 @@ Helper functions for UEG model system JIT-compiled with Numba for better perform
     This module includes functions to compute two-body integrals in a transcorrelated framework
     in a JIT-compiled manner using Numba for enhanced performance.
 Main functions:
+    _get_orbital_energies: Numba JIT-compiled calculation of orbital energies and HF components.
     _get_2b_int: Numba JIT-compiled version of the get_2b_int().
     _get_2b_int_kernel: kernel function for computing two-body integrals.
     _triple_contractions_in_3_body: Numba JIT-compiled version of triple_contractions_in_3_body().
@@ -190,6 +191,142 @@ def _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, n_ele, Omega, rho, k_
 
     return e_perl + e_wave + e_shield + e_frog
 
+# ORBITAL ENERGIES ---------------------------------------------------------------------
+
+@jit(nopython=True, parallel=True)
+def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
+                          imax, k_cutoff, gamma,
+                          UMAT, basis_indices_map,
+                          basis_occ_Kp, basis_Kvec, basis_Kp,
+                          is_only_2b, is_tc, correlator_idx,
+                          dtype=np.float64):
+    """
+    Numba JIT-compiled function to compute the orbital energies for the UEG model system.
+
+    NOTE: This function computes the orbital energies including contributions from kinetic energy,
+    pure 2-body integrals from transcorrelation involving contractions with the Coulomb tensor.
+    This means that the double contractions from the 3-body integrals are not computed here,
+    and must be added a posteriori. Adding the single contractions from the 3-body integrals 
+    to the Coulomb integrals and contracting them with the density matrix will yield a double 
+    counting of an already normal-ordered operator.
+
+    Parameters
+    ----------
+    kinetic_G: nparray of float dtype
+        kinetic energy grid.
+    n_ele: int
+        number of electrons.
+    Omega: float
+        volume of the cubic simulation cell.
+    L: float
+        length of the cubic simulation cell.
+    rho: float
+        electron density.
+    imax: int
+        maximum k-point index in each direction.
+    k_cutoff: float
+        plane wave vector cutoff inside the correlaor function trunc.
+    gamma: float
+        parameter in the correlator function.
+    UMAT: nparray of float dtype
+        pre-computed U matrix for TC (canonical/long-range) integrals.
+    basis_indices_map: nparray of int dtype
+        an array to store indices of basis functions (plane waves) for
+        later lookup. Size Nx*Ny*Nz, Nx, Ny, Nz are the k-vector points
+        in x, y, z directions.
+    basis_occ_Kp: nparray of float dtype
+        an array to store (shifted) k-vectors of occupied orbitals.
+    basis_Kvec: nparray of int dtype
+        an array to store k-vector indices (quantum numbers) of all basis functions.
+    basis_Kp: nparray of float dtype
+        an array to store (shifted) k-vectors of all basis functions.
+    is_only_2b: bool
+        parameter which determines to include only the additional
+        pure 2-body tc integrals, besides the Coulomb integrals.
+    is_tc: bool
+        parameter which determines whether transcorrelated framework is
+        active or not for the calculation of the integrals.
+    correlator_idx: int
+        identifier for the correlator type.
+
+    Returns
+    -------
+    EHF: float
+        Hartree Fock energy computed from the orbital energies and the direct and exchange contributions.
+    epsilon_i: nparray of float dtype
+        orbital energies for the occupied orbitals.
+    epsilon_a: nparray of float dtype
+        orbital energies for the virtual orbitals.
+    """
+    no = int(n_ele // 2)
+    nP = int(basis_Kp.shape[0])
+    nv = nP - no
+
+    k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
+    idx_shift = 2*imax
+
+    epsilon_i = np.zeros(no, dtype=dtype)
+    epsilon_a = np.zeros(nv, dtype=dtype)
+
+    HF_dirE = 0.0
+    HF_exE = 0.0
+
+    for p in prange(nP):
+        # Start with kinetic energy.
+        e_p = kinetic_G[p]
+        e_dir = 0.0
+        e_exc = 0.0
+        for i in range(no):
+            # Direct term V_pipi (only non-zero for transcorrelated integrals).
+            d_int_k = basis_Kvec[p] - basis_Kvec[p]
+            d_k_vec = basis_Kp[p] - basis_Kp[p]
+            dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
+            u_mat = 0.
+            if is_tc:
+                idx_shift = 2 * imax
+                ix = d_int_k[0] + idx_shift
+                iy = d_int_k[1] + idx_shift
+                iz = d_int_k[2] + idx_shift
+                u_mat = UMAT[ix, iy, iz]
+            V_pipi = _get_2b_int_kernel(p, i, p, i,
+                                        dk_square, d_k_vec, u_mat,
+                                        n_ele, Omega, rho,
+                                        k_cutoffSquare, gamma,
+                                        basis_occ_Kp, basis_Kp,
+                                        is_only_2b, False, 
+                                        is_tc, correlator_idx)
+            e_dir += V_pipi
+            # Exchange term V_ippi.
+            d_int_k = basis_Kvec[i] - basis_Kvec[p]
+            d_k_vec = basis_Kp[i] - basis_Kp[p]
+            dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
+            u_mat = 0.
+            if is_tc:
+                idx_shift = 2 * imax
+                ix = d_int_k[0] + idx_shift
+                iy = d_int_k[1] + idx_shift
+                iz = d_int_k[2] + idx_shift
+                u_mat = UMAT[ix, iy, iz]
+            V_piip = _get_2b_int_kernel(p, i, i, p,
+                                        dk_square, d_k_vec, u_mat,
+                                        n_ele, Omega, rho,
+                                        k_cutoffSquare, gamma,
+                                        basis_occ_Kp, basis_Kp,
+                                        is_only_2b, False, 
+                                        is_tc, correlator_idx)
+            e_exc += V_piip
+        e_p += 2 * e_dir - e_exc
+        if p < no:
+            HF_dirE += 2. * e_dir
+            HF_exE += -1. * e_exc
+            epsilon_i[p] = e_p
+        else:
+            epsilon_a[p-no] = e_p
+
+    EHF = 2. * np.sum(epsilon_i) - HF_dirE - HF_exE
+
+    return EHF, epsilon_i, epsilon_a
+
 # PURE AND EFFECTIVETWO-BODY INTEGRALS -------------------------------------------------
 
 @jit(nopython=True, parallel=True)
@@ -325,7 +462,16 @@ def _get_2b_int_kernel(p,q,r,s,
                         is_tc, correlator_idx):
     """Kernel function to compute the two-body integral for given indices p,q,r,s ;
     their corresponding k-vector differences and the pre-computed UMAT matrix 
-    value for the TC contribution."""
+    value for the TC contribution.
+    
+    NOTE: This function must me called with indices (p,q,r,s) of V_{pq}^{rs} of an allowed
+            non-zero matrix element, i.e. with k_p - k_r = k_q - k_s, so that the corresponding 
+            k-vector differences and UMAT value are correctly computed and passed in. This
+            check must be performed in the calling function (e.g. _get_2b_int) to avoid 
+            redundant calculations of the k-vector differences and UMAT values for zero matrix elements.
+            No checks on this are performed inside this function.
+
+    """
     w = 0.0
     if is_tc:
         if is_only_2b:

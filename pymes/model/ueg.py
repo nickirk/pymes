@@ -8,9 +8,10 @@ import pytblis as pytblis
 from pymes.basis_set import planewave
 from pymes.log import print_logging_info
 from pymes.mean_field import hf
-from pymes.model.ueg_helper_int import (_get_2b_int, _init_UMAT_TC, _init_UMAT_lr_TC,
-                                    _triple_contractions_in_3_body,
-                                    _double_contractions_in_3_body)
+from pymes.model.ueg_helper_int import (_get_orbital_energies, _get_2b_int, 
+                                        _init_UMAT_TC, _init_UMAT_lr_TC,
+                                        _triple_contractions_in_3_body,
+                                        _double_contractions_in_3_body)
 from pymes.model.ueg_helper_solver import _solve_mp2
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
@@ -468,65 +469,43 @@ class UEG:
         kinetic_G = self.compute_kinetic_energy()
         # Get the total kinetic energy of the system.
         tot_kinetic_energy = 2 * np.sum(kinetic_G[:no])
-
+        # Unpack data into Numba-compatible structures (NumPy arrays).
+        if self.is_tc:
+            correlator_idx = self.get_correlator_idx()
+        else:
+            # NONE.
+            correlator_idx = self.CORRELATOR_NONE
+            # Dummy UMAT for non-TC calculations.
+            if self.UMAT is None:
+                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        gamma  = self.gamma if self.gamma is not None else 1.0
+        if self.is_tc and self.UMAT is None:
+            raise ValueError(algo_name, "UMAT for the transcorrelated framework not initialized!")
+        basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
+        basis_Kvec = np.array([self.basis_fns[i * 2].k for i in range(nP)], dtype=np.int32)
+        basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # Get the orbital energies (with/without pure 2b int. from transcorrelation).
-        V_popo = np.zeros([1, no, 1, no], dtype=dtype)
-        V_poop = np.zeros([1, no, no, 1], dtype=dtype)
-        Epsilon_i = kinetic_G[:no].copy()
-        Epsilon_a = kinetic_G[no:].copy()
-        HF_dirE = 0.
-        HF_exE = 0.
+        print_logging_info("Calculating the orbital energies [popo][poop]", level=1)
         start_time_orbital_energy = time.time()
         if self.is_tc:
-            print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-            for p in range(no):
-                idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                V_popo = self.get_2b_int(idx, is_only_2b=True)
-                idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                V_poop = self.get_2b_int(idx, is_only_2b=True)
-                dirE = 2. * einsum('popo->', V_popo)
-                exE = -1. * einsum('poop->', V_poop)
-                Epsilon_i[p] += dirE + exE
-                HF_dirE += dirE
-                HF_exE += exE
-            print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-            for p in range(no, nP):
-                idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                V_popo = self.get_2b_int(idx, is_only_2b=True)
-                idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                V_poop = self.get_2b_int(idx, is_only_2b=True)
-                dirE = 2. * einsum('popo->', V_popo)
-                exE = -1. * einsum('poop->', V_poop)
-                Epsilon_a[p-no] += dirE + exE
+            is_only_2b=True
         else:
-            print_logging_info("Calculating the occupied orbital energies [popo][poop]", level=1)
-            for p in range(no):
-                idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                V_popo = self.get_2b_int(idx)
-                idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                V_poop = self.get_2b_int(idx)
-                dirE = 2. * einsum('popo->', V_popo)
-                exE = -1. * einsum('poop->', V_poop)
-                Epsilon_i[p] += dirE + exE
-                HF_dirE += dirE
-                HF_exE += exE
-            print_logging_info("Calculating the virtual orbital energies [popo][poop]", level=1)
-            for p in range(no, nP):
-                idx = tuple((p,p+1,0,no,p,p+1,0,no))
-                V_popo = self.get_2b_int(idx)
-                idx = tuple((p,p+1,0,no,0,no,p,p+1))
-                V_poop = self.get_2b_int(idx)
-                dirE = 2. * einsum('popo->', V_popo)
-                exE = -1. * einsum('poop->', V_poop)
-                Epsilon_a[p-no] += dirE + exE
-        del V_popo, V_poop
+            is_only_2b=False
+        EHF, Epsilon_i, Epsilon_a = _get_orbital_energies(kinetic_G, 
+                                                    self.n_ele, self.Omega, self.L, self.rho,
+                                                    self.imax, k_cutoff, gamma,
+                                                    self.UMAT, self.basis_indices_map,
+                                                    basis_occ_Kp, basis_Kvec, basis_Kp,
+                                                    is_only_2b, self.is_tc, 
+                                                    correlator_idx,
+                                                    dtype=dtype)
         end_time_orbital_energy = time.time()
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time_orbital_energy - start_time_orbital_energy) +
                             "calculating the orbital energies.", level=1)
 
         # Get the Hartree Fock energy.
         print_logging_info("Calculating the Hartree Fock energy", level=1)
-        EHF = 2. * np.sum(Epsilon_i) - HF_dirE - HF_exE
         print_logging_info("HF E = {:.8f}".format(EHF), level=1)
 
         # Get doubly and triply contractions of the 3-body integrals,
@@ -652,11 +631,13 @@ class UEG:
         algo_name = "ueg.get_triple_contractions_3b_int"
         print_logging_info(algo_name, level=1)
         no = int(self.n_ele / 2)
+        # 1. Unpack data into Numba-compatible structures (NumPy arrays).
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         correlator_idx = self.get_correlator_idx()
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
         gamma = self.gamma if self.gamma is not None else 1.0
+        # 2. Compute the triply contracted 3-body integrals.
         return _triple_contractions_in_3_body(basis_occ_Kp, self.n_ele, self.Omega, self.rho,
                                               k_cutoffSquare, gamma, correlator_idx)
 
@@ -678,12 +659,14 @@ class UEG:
         print_logging_info(algo_name, level=1)
         no = int(self.n_ele / 2)
         nP   = int(len(self.basis_fns) / 2)
+        # 1. Unpack data into Numba-compatible structures (NumPy arrays).
         basis_occ_Kp = np.array([self.basis_fns[i * 2].kp for i in range(no)], dtype=np.float64)
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)],  dtype=np.float64)
         correlator_idx = self.get_correlator_idx()
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
         gamma = self.gamma if self.gamma is not None else 1.0
+        # 2. Compute the doubly contracted 3-body integrals.
         return _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, self.n_ele, self.Omega, self.rho,
                                               k_cutoffSquare, gamma, correlator_idx)
 
@@ -870,7 +853,8 @@ class UEG:
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Compute the MP2 correlation energy.
         start_time = time.time()
-        e_dir_mp2, e_exc_mp2 =  _solve_mp2( self.n_ele, self.Omega, self.L, self.rho,
+        print_logging_info("Calculating MP2 correlation energy", level=1)
+        e_dir_mp2, e_exc_mp2 =  _solve_mp2(self.n_ele, self.Omega, self.L, self.rho,
                                     self.imax, k_cutoff, gamma,
                                     self.UMAT, self.basis_indices_map,
                                     basis_occ_Kp, basis_Kvec, basis_Kp,
