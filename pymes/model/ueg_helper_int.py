@@ -914,6 +914,88 @@ def _RPA_correlator(kSquare, rho, k_cutoffSquare, gamma):
         corr = 0.0
     return corr * gamma
 
+
+# MADELUNG CONSTANT -----------------------------------------------
+
+@jit(nopython=True, parallel=True)
+def _get_effective_potential(wp, kFermi, r, correlator_idx):
+    """ 
+    Function to compute the effective potential at distances r for the selected correlator type.
+
+    Parameters
+    ----------
+    wp: float
+        Plasma frequency.
+    kFermi: float
+        Fermi wave vector.
+    r: array of float
+        Real-space distances.
+    correlator_idx: int
+        Identifier for the correlator type (0: None, 1: trunc, 2: coulomb, 3: coulomb-yukawa, 4: RPA).
+
+    Returns
+    -------
+    v_eff: array of float
+        Effective potential at distances r for the selected correlator type.
+    """
+    v_eff = np.zeros(r.shape[0], dtype=np.float64)
+    for i in prange(r.shape[0]):
+        v_eff[i] = _calc_eff_potential(correlator_idx, wp, kFermi, r[i])
+    return v_eff
+
+
+@jit(nopython=True)
+def _calc_eff_potential(correlator_idx, wp, kFermi, r):
+    """
+    Wrapper function to select and apply the appropriate potential.
+
+    Input:
+    ------
+    correlator_idx: int
+        Identifier for the correlator type.
+    wp: float
+        Plasma frequency.
+    kFermi: float
+        Fermi wave vector.
+    r: float
+        real-space position.
+    
+    Parameters:
+    -----------
+    correlator_id: int
+        0: None,
+        1: trunc,
+        2: coulomb,
+        3: coulomb-yukawa,
+        4: RPA.
+    """
+
+    if correlator_idx == 0:  # None
+        return 0.0
+    elif correlator_idx == 1:  # trunc
+        return 0.0
+    elif correlator_idx == 2:  # coulomb
+        return 0.0
+    elif correlator_idx == 3:  # coulomb-yukawa
+        return _coulomb_yukawa_potential(r, wp)
+    elif correlator_idx == 4:  # RPA
+        return _RPA_potential(r, wp, kFermi)
+
+@jit(nopython=True)
+def _coulomb_yukawa_potential(r, wp):
+    v_eff_2 = - ( (-1. / (wp * r**2)) + ((1./(wp * r**2))+(1./(np.sqrt(wp) * r))) * np.exp(-np.sqrt(wp) * r))**2
+    v_eff_3 = ((np.sqrt(wp) * r + 2)*np.exp(-np.sqrt(wp) * r)) / (2 * r)
+    return v_eff_2 + v_eff_3
+
+@jit(nopython=True)
+def _RPA_potential(r, wp, kFermi):
+    v_eff_2 = - 1. / (wp**2 * r**4)
+    v_eff_3 = 4. / ( np.sqrt(3. * np.pi * kFermi) * r**2) 
+    return v_eff_2 + v_eff_3
+
+
+# NOT YET IMPLEMENTED -----------------------------------------------------
+
 #@jit(nopython=True)
 #def _yukawa_correlator(kSquare, k_cutoffSquare, rho, gamma, multiply_by_k_square=False):
 #    """ Numba JIT-compiled version of the yukawa_correlator function for better performance.
