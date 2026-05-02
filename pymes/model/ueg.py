@@ -12,7 +12,8 @@ from pymes.model.ueg_helper_int import (_get_orbital_energies, _get_2b_int,
                                         _init_UMAT_TC, _init_UMAT_lr_TC,
                                         _triple_contractions_in_3_body,
                                         _double_contractions_in_3_body,
-                                        _get_effective_potential,
+                                        _get_eff_madelung_self_image,
+                                        _get_eff_madelung_background,
                                         )
 from pymes.model.ueg_helper_solver import _solve_mp2
 from pymes.util.tensors import get_block_index
@@ -698,7 +699,7 @@ class UEG:
         else:
             raise ValueError(algo_name, "init_kPrime not needed for long-range TC method!")
     
-    def init_ConvMesh( self, nx=200, dkfac=60, kmaxfac=50):
+    def init_ConvMesh( self, nx=300, dkfac=100, kmaxfac=100):
         """
         Member function of class UEG
         This function initializes the integration spherical mesh/grid for the 
@@ -791,6 +792,61 @@ class UEG:
         print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) + "initializing UMAT.", level=1)
 
+    def madelung(self, rs=None, nel=None, Rcut=200, nr=2000000, dtype=np.float64):
+        """
+        Madelung Constant for the UEG: correction of the interaction of the electrons
+        with themselves (periodic images) and positive background in the Ewald summation.
+        Notes:
+            # there is still uncertainty in the factor of 2 divided ##
+            # but using it seems to make the tc-dcd agree with BF-DMC
+
+        Args:
+            rs: float. 
+                Wigner-Seitz radius for controlling the density
+            nel: int. 
+                Number of electrons.
+            Rcut: float. 
+                Cutoff radius for the Madelung constant calculation, in units of L.
+            nr: int. 
+                Number of grid points for the continuous integration.
+
+        Returns:
+            mc: float.
+                (1/2) Madelung constant per electron.
+        """
+        algo_name = "ueg.madelung"
+
+        print_logging_info(algo_name, ": calculating the Madelung constant", level=0)
+        if self.is_tc and self.tc_type == 'long-range':
+            print_logging_info("Calculating Madelung constant for long-range TC method with effective potential", level=1)
+        else:
+            print_logging_info("Calculating standard Madelung constant", level=1)
+
+        rs = self.rs if rs is None else rs
+        nel = self.n_ele if nel is None else nel
+        L = rs * ((4.0 * np.pi * nel) / 3.0) ** (1.0 / 3.0)
+
+        if self.is_tc and self.tc_type == "long-range":
+            if self.correlator is None:
+                raise ValueError("Correlator for the transcorrelated framework not initialized!")
+            correlator_idx = self.get_correlator_idx()
+            Rmax = Rcut * self.L
+            nmax = int(np.ceil(Rcut))
+            # [1] Self-image interactions.
+            print_logging_info("Calculating self-image contribution with Rmax={}*L".format(Rcut), level=1)
+            vm_self_image = _get_eff_madelung_self_image(self.L, self.wp, self.kFermi, Rmax, nmax, correlator_idx,)
+            print_logging_info("Self-image contribution: {:.15f}".format(vm_self_image), level=2)
+            # [2] Background interaction.
+            print_logging_info("Calculating background contribution with Rmax={}*L, nr={}".format(Rcut, nr), level=1)
+            vm_background = _get_eff_madelung_background(self.Omega, self.wp, self.kFermi, Rmax, nr, correlator_idx)
+            print_logging_info("Background contribution: {:.15f}".format(vm_background), level=2)
+            # [3] Get the Madelung constant.
+            vm = ( vm_self_image + vm_background ) / 2.0
+        else:
+            vm = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
+        print_logging_info("Madelung constant [Ha/e] (with factor 1/2): {:.15f}".format(vm), level=1)
+        return vm
+
     def get_mp2(self, Epsilon_i, Epsilon_a, 
                 is_only_2b=False, 
                 is_effect_2b=False,
@@ -876,91 +932,6 @@ class UEG:
         print_logging_info("{:.3f} seconds spent on MP2".format((end_time-start_time)), level=1)
 
         return {"mp2 e": e_total_mp2, "mp2 e dir": e_dir_mp2, "mp2 e exc": e_exc_mp2}
-
-    def madelung(self, rs=None, nel=None, Rmaxfac=None, nr=None, dtype=np.float64):
-        """
-        Madelung Constant for the UEG: correction of the interaction of the electrons
-        with themselves (periodic images) and positive background in the Ewald summation.
-        Notes:
-            # there is still uncertainty in the factor of 2 divided ##
-            # but using it seems to make the tc-dcd agree with BF-DMC
-
-        Args:
-            rs: float. 
-                Wigner-Seitz radius for controlling the density
-            nel: int. 
-                Number of electrons.
-            Rmaxfac: float. 
-                Factor for the maximum radius for the Madelung constant calculation, in units of L.
-            nr: int. 
-                Number of grid points for the continuous integration.
-
-        Returns:
-            mc: float.
-                (1/2) Madelung constant per electron.
-        """
-        algo_name = "ueg.madelung"
-
-        print_logging_info(algo_name, ": calculating the Madelung constant", level=0)
-        if self.is_tc and self.tc_type is 'long-range':
-            print_logging_info("Calculating Madelung constant for long-range TC method with effective potential", level=1)
-        else:
-            print_logging_info("Calculating standard Madelung constant", level=1)
-
-        rs = self.rs if rs is None else rs
-        nel = self.n_ele if nel is None else nel
-        L = rs * ((4.0 * np.pi * nel) / 3.0) ** (1.0 / 3.0)
-
-        if self.is_tc and self.tc_type == "long-range":
-            if self.correlator is None:
-                raise ValueError("Correlator for the transcorrelated framework not initialized!")
-            correlator_idx = self.get_correlator_idx()
-            if Rmaxfac is None:
-                Rmaxfac = 50.0
-            Rcut = Rmaxfac * self.L
-            nmax = int(np.ceil(Rmaxfac))
-            # [1] Self-image interactions.
-            print_logging_info("Calculating self-image contribution to the Madelung constant with Rmaxfac={}, Rcut={:.2f} [L]".format(Rmaxfac, Rcut), level=1)
-            # Lattice grid, unique shells and multiplicities.
-            shells = {}
-            for n1 in range ( -nmax, nmax+1):
-                for n2 in range ( -nmax, nmax+1):
-                    for n3 in range ( -nmax, nmax+1):
-                        if n1 == 0 and n2 == 0 and n3 == 0:
-                            continue
-                        R2 = n1**2 + n2**2 + n3**2
-                        R = np.sqrt(R2) * self.L
-                        if R <= Rcut:
-                            shells[R2] = shells.get(R2, 0) + 1
-            R2_unique = sorted(shells.keys())
-            R = np.array([np.sqrt(R2) * self.L for R2 in R2_unique])
-            wR = np.array([shells[R2] for R2 in R2_unique])
-            # Precompute effective potential.
-            v_eff_sum = np.zeros([len(R)], dtype=dtype)
-            v_eff_sum = _get_effective_potential(self.wp, self.kFermi, R, correlator_idx)
-            # Get the self-image contribution to the Madelung constant.
-            mc_self_image = np.sum(wR * v_eff_sum)
-            print_logging_info("Self-image contribution to the Madelung constant: {:.8f}".format(mc_self_image), level=1)
-            # [2] Background interaction.
-            print_logging_info("Calculating background contribution to the Madelung constant with Rcut={:.2f}, nr={}".format(Rcut, nr), level=1)
-            # Continuous integration grid.
-            if nr is None:
-                nr = 2000
-            r = np.linspace(1e-6*self.L, Rcut, nr)
-            # Precompute effective potential.
-            v_eff_int = np.zeros([len(r)], dtype=dtype)
-            v_eff_int = _get_effective_potential(self.wp, self.kFermi, r, correlator_idx)
-            # Get the background contribution to the Madelung constant.
-            integrand = v_eff_int * r**2
-            integral = np.trapezoid(integrand, r)
-            mc_background = - 4.0 * np.pi * integral / self.Omega
-            print_logging_info("Background contribution to the Madelung constant: {:.8f}".format(mc_background), level=1)
-            # [3] Get the Madelung constant.
-            mc = ( mc_self_image + mc_background ) / 2.0
-        else:
-            mc = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
-        print_logging_info("Madelung constant (per electron, with factor 1/2): {:.8f}".format(mc), level=1)
-        return mc
 
     # CORRELATORS -----------------------------------------------------
     # Collection of correlators, should them be collected into a class?

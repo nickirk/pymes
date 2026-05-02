@@ -1,4 +1,5 @@
 import numpy as np
+from pymes.util.lattice import _get_lattice_shells_jit
 from numba import jit, prange, get_num_threads, config
 
 """
@@ -914,35 +915,77 @@ def _RPA_correlator(kSquare, rho, k_cutoffSquare, gamma):
         corr = 0.0
     return corr * gamma
 
-
 # MADELUNG CONSTANT -----------------------------------------------
 
 @jit(nopython=True, parallel=True)
-def _get_effective_potential(wp, kFermi, r, correlator_idx):
+def _get_eff_madelung_self_image(L, wp, kFermi, Rmax, nmax, correlator_idx,):
     """ 
-    Function to compute the effective potential at distances r for the selected correlator type.
-
-    Parameters
+    Function to compute the self-image contribution to the effective Madelung constant 
+    for a given Wigner-Seitz radius (rs), number of electrons (nel), 
+    and correlator type (correlator_idx).
+    v_{M}^{self-image} = ∑A v_eff(R_{A}) * w_{A} where A runs over shells of lattice vectors.
     ----------
+    L: float
+        Length of the cubic simulation cell.
     wp: float
         Plasma frequency.
     kFermi: float
         Fermi wave vector.
-    r: array of float
-        Real-space distances.
+    Rmax: float
+        Maximum radius for the lattice sum.
+    nmax: int
+        Maximum integer for counting lattice vectors in each direction (total range: -nmax to nmax).
     correlator_idx: int
-        Identifier for the correlator type (0: None, 1: trunc, 2: coulomb, 3: coulomb-yukawa, 4: RPA).
-
+        Identifier for the correlator type.
+    
     Returns
     -------
-    v_eff: array of float
-        Effective potential at distances r for the selected correlator type.
+    madelung: float
+        Self-image interaction contribution to the effective Madelung constant.
     """
-    v_eff = np.zeros(r.shape[0], dtype=np.float64)
-    for i in prange(r.shape[0]):
-        v_eff[i] = _calc_eff_potential(correlator_idx, wp, kFermi, r[i])
-    return v_eff
+    R, wR = _get_lattice_shells_jit(L, Rmax, nmax)
+    image_sum = 0.0 
+    for r in prange(len(R)):
+        v_eff = _calc_eff_potential(correlator_idx, wp, kFermi, R[r])
+        image_sum += v_eff * wR[r]
+    return image_sum
 
+@jit(nopython=True, parallel=True)
+def _get_eff_madelung_background(Omega, wp, kFermi, Rmax, nr, correlator_idx):
+    """ 
+    Function to compute the background contribution to the effective Madelung constant 
+    for a given Wigner-Seitz radius (rs), number of electrons (nel), 
+    and correlator type (correlator_idx). 
+    v_{M}^{background} = - 1/Ω  ∫ d³r V_eff(r)
+                       = - 4π/Ω ∫ dr r² V_eff(r) [assuming spherical symmetry of V_eff(r)]
+    ----------
+    Omega: float
+        Volume of the simulation cell.
+    wp: float
+        Plasma frequency.
+    kFermi: float
+        Fermi wave vector.
+        Number of electrons.
+    Rmax: float
+        Maximum radius for the integration.
+    nr: int
+        Number of radial points for the integration.
+    correlator_idx: int
+        Identifier for the correlator type.
+    
+    Returns
+    -------
+    madelung: float
+        Self-image interaction contribution to the effective Madelung constant.
+    """
+    dr = Rmax / nr
+    r = np.arange(0.0 + 0.5*dr, Rmax, dr)
+    prefac = - 4. * np.pi * dr / Omega
+    integral_sum = 0.0 
+    for i in prange(len(r)):
+        v_eff = _calc_eff_potential(correlator_idx, wp, kFermi, r[i])
+        integral_sum += r[i]**2 * v_eff
+    return prefac * integral_sum
 
 @jit(nopython=True)
 def _calc_eff_potential(correlator_idx, wp, kFermi, r):
