@@ -1,6 +1,7 @@
 import numpy as np
 import spglib as spg
 
+from numba import jit, prange, get_num_threads, config
 from pymes.log import print_title, print_logging_info
 
 def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, kpoints='irreducible', is_shift=False):
@@ -91,3 +92,29 @@ def gen_ir_ks(mesh=None, lattice=None, positions=None, number=None, kpoints='irr
         raise ValueError("Invalid type for k-point generation: %s" % kpoints)
 
     return frac_grid, weight
+
+@jit(nopython=True)
+def inverse_spherical_FT(r, f_k, kpoints, dk):
+    """
+    Function to compute the inverse (spherical) Fourier Transform
+    of a function f(k) on a point r based on a grid of kpoints.
+    f(r) = ∫ d³k f(k) exp(i k*r) = 1/(2π²r) ∫ dk k*sin(k*r) f(k)
+    
+    Args:
+        r: float
+            The distance at which to evaluate the inverse Fourier Transform.
+        f_k: np array of floats
+            The function values at the k-points.
+        kpoints: np array of floats
+            The k-points at which f(k) is evaluated.
+        dk: float
+            The spacing between the k-points in the grid.
+    Returns:
+        f_r: float
+            The value of the inverse Fourier Transform at distance r.
+    """
+    if r < 1.e-12:
+        return 0.0
+    prefac = dk / (2.0 * np.pi**2 * r)
+    integrand = kpoints * np.sin(kpoints * r) * f_k
+    return np.sum(integrand) * prefac

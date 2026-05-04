@@ -14,6 +14,7 @@ from pymes.model.ueg_helper_int import (_get_orbital_energies, _get_2b_int,
                                         _double_contractions_in_3_body,
                                         _get_eff_madelung_self_image,
                                         _get_eff_madelung_background,
+                                        _get_eff_potential_on_grid
                                         )
 from pymes.model.ueg_helper_solver import _solve_mp2
 from pymes.util.tensors import get_block_index
@@ -830,18 +831,58 @@ class UEG:
             if self.correlator is None:
                 raise ValueError("Correlator for the transcorrelated framework not initialized!")
             correlator_idx = self.get_correlator_idx()
+            k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+            k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
+            gamma = self.gamma if self.gamma is not None else 1.0
+            if correlator_idx == self.CORRELATOR_RPA:
+                if self.kpts_mesh is None or self.xtheta_mesh is None:
+                    raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
+                #kpts_mesh = self.kpts_mesh
+                #dkpts = self.dkpts
+                kpoints = np.linspace(1e-6, 50 * self.kFermi, 100000)
+                dkpts = (kpoints[-1] - kpoints[0]) / (len(kpoints) - 1)
+                #print('nkpts in kpts_mesh: ', len(kpts_mesh))
+                print_logging_info("Calculating the convolution integral of the squared gradient of the correlator function in k-space for RPA correlator", level=1)
+                w_kp, u_kp, F_kp = _get_eff_potential_on_grid(self.rho, kpoints, self.kpts_mesh, self.xtheta_mesh, 
+                                                                self.dkpts, self.dxtheta, k_cutoffSquare, 
+                                                                gamma, correlator_idx)
+                kpts_mesh = kpoints
+                # dkpts = (kpoints[-1] - kpoints[0]) / (len(kpoints) - 1)
+                #nk=10000
+                #kmax_factor=50
+                #kpts_mesh = np.linspace(1e-6, kmax_factor * self.kFermi, nk)
+                #dkpts = (kmax_factor * self.kFermi - 1e-6) / (nk - 1)
+                for i in range(len(kpts_mesh)):
+                    print_logging_info("k' = {:.8f} [2π/L], w_kp = {:.8e}, u_kp = {:.8e}, F_kp = {:.8e}".format(
+                        kpts_mesh[i], w_kp[i], u_kp[i], F_kp[i]), level=2)
+            else: #: Dummy variables.
+                kpts_mesh = np.array([0.0], dtype=np.float64)
+                dkpts = 1
+                w_kp = np.array([0.0], dtype=np.float64)
+                u_kp = np.array([0.0], dtype=np.float64)
+                F_kp = np.array([0.0], dtype=np.float64)
             Rmax = Rcut * self.L
             nmax = int(np.ceil(Rcut))
             # [1] Self-image interactions.
             print_logging_info("Calculating self-image contribution with Rmax={}*L".format(Rcut), level=1)
-            vm_self_image = _get_eff_madelung_self_image(self.L, self.wp, self.kFermi, Rmax, nmax, correlator_idx,)
+            vm_self_image = _get_eff_madelung_self_image(self.L, self.rho, self.wp,
+                                                        Rmax, nmax, 
+                                                        w_kp, u_kp, F_kp,
+                                                        kpts_mesh, dkpts,
+                                                        correlator_idx)
             print_logging_info("Self-image contribution: {:.15f}".format(vm_self_image), level=2)
             # [2] Background interaction.
             print_logging_info("Calculating background contribution with Rmax={}*L, nr={}".format(Rcut, nr), level=1)
-            vm_background = _get_eff_madelung_background(self.Omega, self.wp, self.kFermi, Rmax, nr, correlator_idx)
+            vm_background = _get_eff_madelung_background(self.Omega, self.rho, self.wp, 
+                                                        Rmax, nr,
+                                                        w_kp, u_kp, F_kp,
+                                                        kpts_mesh, dkpts,
+                                                        correlator_idx)
             print_logging_info("Background contribution: {:.15f}".format(vm_background), level=2)
             # [3] Get the Madelung constant.
             vm = ( vm_self_image + vm_background ) / 2.0
+            #if self.correlator == self.RPA:
+            #    vm += -1.760118928190842*rs**(-1)*nel**(-1./3)/2
         else:
             vm = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
         print_logging_info("Madelung constant [Ha/e] (with factor 1/2): {:.15f}".format(vm), level=1)

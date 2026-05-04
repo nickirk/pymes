@@ -1,4 +1,5 @@
 import numpy as np
+from pymes.util.kpoints import inverse_spherical_FT
 from pymes.util.lattice import _get_lattice_shells_jit
 from numba import jit, prange, get_num_threads, config
 
@@ -672,7 +673,7 @@ def _init_UMAT_lr_TC(L, rho, imax,
 @jit(nopython=True)
 def _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx):
     """ Numba JIT-compiled version of the sumNablaUSquare function for better performance.
-    Computes: sum_k' (k1 · k2) * u(k1^2) * u(k2^2) / Omega
+    Computes: sum_k' (k1 · k2) * u(k1²) * u(k2²) / Omega
     Parameters
     ----------
     kVec: nparray of float dtype
@@ -918,7 +919,10 @@ def _RPA_correlator(kSquare, rho, k_cutoffSquare, gamma):
 # MADELUNG CONSTANT -----------------------------------------------
 
 @jit(nopython=True, parallel=True)
-def _get_eff_madelung_self_image(L, wp, kFermi, Rmax, nmax, correlator_idx,):
+def _get_eff_madelung_self_image(L, rho, wp, Rmax, nmax,
+                                w_kp, u_kp, F_kp,
+                                kpts_mesh, dkpts,
+                                correlator_idx,):
     """ 
     Function to compute the self-image contribution to the effective Madelung constant 
     for a given Wigner-Seitz radius (rs), number of electrons (nel), 
@@ -946,12 +950,17 @@ def _get_eff_madelung_self_image(L, wp, kFermi, Rmax, nmax, correlator_idx,):
     R, wR = _get_lattice_shells_jit(L, Rmax, nmax)
     image_sum = 0.0 
     for r in prange(len(R)):
-        v_eff = _calc_eff_potential(correlator_idx, wp, kFermi, R[r])
+        v_eff = _calc_eff_potential(correlator_idx, R[r], rho, wp, 
+                                    w_kp, u_kp, F_kp,
+                                    kpts_mesh, dkpts) 
         image_sum += v_eff * wR[r]
     return image_sum
 
 @jit(nopython=True, parallel=True)
-def _get_eff_madelung_background(Omega, wp, kFermi, Rmax, nr, correlator_idx):
+def _get_eff_madelung_background(Omega, rho, wp, Rmax, nr,
+                                    w_kp, u_kp, F_kp,
+                                    kpts_mesh, dkpts,
+                                    correlator_idx):
     """ 
     Function to compute the background contribution to the effective Madelung constant 
     for a given Wigner-Seitz radius (rs), number of electrons (nel), 
@@ -983,12 +992,16 @@ def _get_eff_madelung_background(Omega, wp, kFermi, Rmax, nr, correlator_idx):
     prefac = - 4. * np.pi * dr / Omega
     integral_sum = 0.0 
     for i in prange(len(r)):
-        v_eff = _calc_eff_potential(correlator_idx, wp, kFermi, r[i])
+        v_eff = _calc_eff_potential(correlator_idx, r[i], rho, wp, 
+                                    w_kp, u_kp, F_kp,
+                                    kpts_mesh, dkpts)
         integral_sum += r[i]**2 * v_eff
     return prefac * integral_sum
 
 @jit(nopython=True)
-def _calc_eff_potential(correlator_idx, wp, kFermi, r):
+def _calc_eff_potential(correlator_idx, r, rho, wp,
+                        w_kp, u_kp, F_kp,
+                        kpts_mesh, dkpts):
     """
     Wrapper function to select and apply the appropriate potential.
 
@@ -1022,19 +1035,60 @@ def _calc_eff_potential(correlator_idx, wp, kFermi, r):
     elif correlator_idx == 3:  # coulomb-yukawa
         return _coulomb_yukawa_potential(r, wp)
     elif correlator_idx == 4:  # RPA
-        return _RPA_potential(r, wp, kFermi)
+        return _RPA_potential(r, rho, w_kp, u_kp, F_kp, kpts_mesh, dkpts)
 
 @jit(nopython=True)
 def _coulomb_yukawa_potential(r, wp):
-    v_eff_2 = - ( (-1. / (wp * r**2)) + ((1./(wp * r**2))+(1./(np.sqrt(wp) * r))) * np.exp(-np.sqrt(wp) * r))**2
-    v_eff_3 = ((np.sqrt(wp) * r + 2)*np.exp(-np.sqrt(wp) * r)) / (2 * r)
+    sqrt_wp = np.sqrt(wp)
+    exp = np.exp(-sqrt_wp * r)
+    v_eff_2 = - ( (-1. / (wp * r**2)) + ((1./(wp * r**2))+(1./(sqrt_wp* r))) * exp)**2
+    v_eff_3 = ((sqrt_wp * r + 2)*exp) / (2 * r)
     return v_eff_2 + v_eff_3
 
 @jit(nopython=True)
-def _RPA_potential(r, wp, kFermi):
-    v_eff_2 = - 1. / (wp**2 * r**4)
-    v_eff_3 = 4. / ( np.sqrt(3. * np.pi * kFermi) * r**2) 
-    return v_eff_2 + v_eff_3
+def _RPA_potential(r, rho, v_eff_kp, u_kp, F_kp, kpts_mesh, dkpts):
+    correlator_idx = 4
+    #v_eff_kp = np.zeros(len(kpts_mesh))
+    #nkp = kpts_mesh.shape[0]
+    #kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+    #for ikp in prange(nkp):
+    #    kp = kpts_mesh[ikp]
+    #    kpSquare = kp**2
+    #    if kp > (2*kFermi):
+    #        T2 = 1.0
+    #    else:
+    #        T2 = (3./4.)*(kp/kFermi) - (1./16.)*(kp/kFermi)**3
+    #    v_eff_kp[ikp] = kpSquare*u_kp[ikp]*(1- 1./T2) +  F_kp[ikp] # kpSquare*u_kp[ikp] + F_kp[ikp]   - rho*kpSquare*(u_kp[ikp]**2) + 4. * np.pi / kpSquare
+    v_eff = inverse_spherical_FT(r, v_eff_kp, kpts_mesh, dkpts)
+    return v_eff
+
+@jit(nopython=True, parallel=True)
+def _get_eff_potential_on_grid(rho, kpoints, kpts_mesh, xtheta_mesh, dkpts, dxtheta, 
+                                            k_cutoffSquare, gamma, correlator_idx):
+    nkp = kpoints.shape[0]
+    w_kp = np.zeros(nkp)
+    u_kp = np.zeros(nkp)
+    F_kp = np.zeros(nkp)
+    kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+    for ikp in prange(nkp):
+        kp = kpoints[ikp]
+        kVec = np.array([0,0,kp])
+        kpSquare = kp**2
+        u_kp[ikp] = _calc_correlator(correlator_idx, kpSquare, k_cutoffSquare, rho, gamma)
+        F_kp[ikp] = _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
+                                    rho, k_cutoffSquare, gamma, correlator_idx)
+        if kp > 2.0 * kFermi:
+            w_kp[ikp] = F_kp[ikp]
+        else:
+            T2 = 0.75 * (kp / kFermi) - (kp / kFermi)**3 / 16.0
+            if abs(T2) < 1.0e-15:
+                w_kp[ikp] = F_kp[ikp]
+            else:
+                #w_kp[ikp] = kpSquare * u_kp[ikp] * (1.0 - 1.0 / T2) + F_kp[ikp]
+                w_kp[ikp] = -1.0 * ( kpSquare * u_kp[ikp]   / T2) + F_kp[ikp]
+        #w_kp[ikp] = kpSquare * u_kp[ikp] + F_kp[ikp] - rho*kpSquare*(u_kp[ikp]**2) #+ 4. * np.pi / kpSquare
+        
+    return w_kp, u_kp, F_kp
 
 
 # NOT YET IMPLEMENTED -----------------------------------------------------
