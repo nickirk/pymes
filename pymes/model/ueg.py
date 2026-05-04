@@ -119,7 +119,7 @@ class UEG:
         self.correlator = None
         self.k_cutoff = None
         self.gamma = None
-        self.imax_umat = 0 # Having it separated from self.imax_basis allows flexibility for precomputing for several subsequent calculations (e.g. TA).
+        self.imax_umat = None # Having it separated from self.imax_basis allows flexibility for precomputing for several subsequent calculations (e.g. TA).
         self.UMAT = None
         ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC].
         if tc is not None:
@@ -484,6 +484,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
+                self.imax_umat = self.imax_basis
                 self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
@@ -605,6 +606,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
+                self.imax_umat = self.imax_basis
                 self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
@@ -952,6 +954,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
+                self.imax_umat = self.imax_basis
                 self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
