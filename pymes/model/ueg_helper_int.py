@@ -197,8 +197,9 @@ def _double_contractions_in_3_body(basis_occ_Kp, basis_Kp, n_ele, Omega, rho, k_
 
 @jit(nopython=True, parallel=True)
 def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
-                          imax, k_cutoff, gamma,
-                          UMAT, basis_indices_map,
+                          imax_basis, k_cutoff, gamma,
+                          imax_umat, UMAT, 
+                          basis_indices_map,
                           basis_occ_Kp, basis_Kvec, basis_Kp,
                           is_only_2b, is_tc, correlator_idx,
                           dtype=np.float64):
@@ -224,12 +225,14 @@ def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
         length of the cubic simulation cell.
     rho: float
         electron density.
-    imax: int
+    imax_basis: int
         maximum k-point index in each direction.
     k_cutoff: float
         plane wave vector cutoff inside the correlaor function trunc.
     gamma: float
         parameter in the correlator function.
+    imax_umat: int
+        maximum k-point index in each direction for the pre-computed UMAT.
     UMAT: nparray of float dtype
         pre-computed U matrix for TC (canonical/long-range) integrals.
     basis_indices_map: nparray of int dtype
@@ -265,7 +268,7 @@ def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
     nv = nP - no
 
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2*imax
+    idx_shift = 2*imax_umat
 
     epsilon_i = np.zeros(no, dtype=dtype)
     epsilon_a = np.zeros(nv, dtype=dtype)
@@ -285,7 +288,6 @@ def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
             dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
             u_mat = 0.
             if is_tc:
-                idx_shift = 2 * imax
                 ix = d_int_k[0] + idx_shift
                 iy = d_int_k[1] + idx_shift
                 iz = d_int_k[2] + idx_shift
@@ -304,7 +306,6 @@ def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
             dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
             u_mat = 0.
             if is_tc:
-                idx_shift = 2 * imax
                 ix = d_int_k[0] + idx_shift
                 iy = d_int_k[1] + idx_shift
                 iz = d_int_k[2] + idx_shift
@@ -333,8 +334,9 @@ def _get_orbital_energies(kinetic_G, n_ele, Omega, L, rho,
 
 @jit(nopython=True, parallel=True)
 def _get_2b_int( idx, n_ele, Omega, L, rho, 
-                    imax, k_cutoff, gamma,
-                    UMAT, basis_indices_map,
+                    imax_basis, k_cutoff, gamma,
+                    imax_umat, UMAT, 
+                    basis_indices_map,
                     basis_occ_Kp, basis_Kvec, basis_Kp,
                     is_only_2b, is_effect_2b, is_tc, correlator_idx,
                     dtype=np.float64):
@@ -351,12 +353,14 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
         length of the cubic simulation cell
     rho: float
         electron density
-    imax: int
+    imax_basis: int
         maximum k-point index in each direction
     k_cutoff: float
         plane wave vector cutoff inside the correlaor function trunc.
     gamma: float
         parameter in the correlator function.
+    imax_umat: int
+        maximum k-point index in each direction for the pre-computed UMAT.
     UMAT: nparray of float dtype
         pre-computed U matrix for TC (canonical/long-range) integrals.
     basis_indices_map: nparray of int dtype
@@ -388,10 +392,10 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
     V_pqrs: tensor object (tensor by default)
         of size [ idx[0], idx[1], idx[2], idx[3], idx[4], idx[5], idx[6], idx[7] ], np array.
     """
-    num_k_in_each_dir = imax * 2 + 1
+    num_k_in_each_dir = imax_basis * 2 + 1
     V_pqrs = np.zeros((idx[1]-idx[0], idx[3]-idx[2], idx[5]-idx[4], idx[7]-idx[6]), dtype=dtype)
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2*imax
+    idx_shift = 2*imax_umat
 
     #p_range = idx[1] - idx[0]
     #r_range = idx[5] - idx[4]
@@ -427,9 +431,9 @@ def _get_2b_int( idx, n_ele, Omega, L, rho,
                 loc_q_idx = q - idx[2]
                 int_ks = basis_Kvec[q] - d_int_k
                 # [s] index to basis_indices_map.
-                loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + imax) + \
-                        num_k_in_each_dir * (int_ks[1] + imax) + \
-                        int_ks[2] + imax
+                loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + imax_basis) + \
+                        num_k_in_each_dir * (int_ks[1] + imax_basis) + \
+                        int_ks[2] + imax_basis
                 # check if ks-vector is in the basis set.
                 if len(basis_indices_map) > loc_s >= 0:
                     # check if s index of ks-vector is in the range of
@@ -629,17 +633,17 @@ def _contractP_KWithQ(pVec, kVec, occ_Kp, rho, Omega, k_cutoffSquare, gamma, cor
 # UMATRIX FOR PURE AND EFFECTIVE TWO-BODY TC INTEGRALS -------------------------------------------------
 
 @jit(nopython=True, parallel=True)
-def _init_UMAT_TC(Omega, L, rho, imax, 
+def _init_UMAT_TC(Omega, L, rho, imax_umat, 
                     k_cutoff, gamma,
                     kPrime, correlator_idx,
                     dtype=np.float64):
-    dim = 4 * imax + 1
+    dim = 4 * imax_umat + 1
     UMAT = np.zeros((dim, dim, dim), dtype=dtype)
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2 * imax
-    for i in prange(-2*imax, 2*imax+1):
-        for j in range(-2*imax, 2*imax+1):
-            for k in range(-2*imax, 2*imax+1):
+    idx_shift = 2 * imax_umat
+    for i in prange(-2*imax_umat, 2*imax_umat+1):
+        for j in range(-2*imax_umat, 2*imax_umat+1):
+            for k in range(-2*imax_umat, 2*imax_umat+1):
                 kVec = np.array([i, j, k], dtype=dtype) * (2 * np.pi / L)
                 F = _sumNablaUSquare(kVec, rho, Omega, kPrime, k_cutoffSquare, gamma, correlator_idx)
                 UMAT[i+idx_shift,
@@ -648,19 +652,19 @@ def _init_UMAT_TC(Omega, L, rho, imax,
     return UMAT
 
 @jit(nopython=True, parallel=True)
-def _init_UMAT_lr_TC(L, rho, imax, 
+def _init_UMAT_lr_TC(L, rho, imax_umat, 
                         k_cutoff, gamma,
                         kpts_mesh, xtheta_mesh,
                         dkpts, dxtheta,
                         correlator_idx,
                         dtype=np.float64):
-    dim = 4 * imax + 1
+    dim = 4 * imax_umat + 1
     UMAT = np.zeros((dim, dim, dim), dtype=dtype)
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2 * imax
-    for i in prange(-2*imax, 2*imax+1):
-        for j in range(-2*imax, 2*imax+1):
-            for k in range(-2*imax, 2*imax+1):
+    idx_shift = 2 * imax_umat
+    for i in prange(-2*imax_umat, 2*imax_umat+1):
+        for j in range(-2*imax_umat, 2*imax_umat+1):
+            for k in range(-2*imax_umat, 2*imax_umat+1):
                 kVec = np.array([i, j, k], dtype=dtype) * (2 * np.pi / L)
                 F = _intNablaUSquare(kVec, kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
                                         rho, k_cutoffSquare, gamma, correlator_idx)

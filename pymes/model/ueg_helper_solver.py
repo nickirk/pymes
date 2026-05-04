@@ -15,8 +15,9 @@ Main functions:
 # MP2 ---------------------------------------------------------------------------------
 @jit(nopython=True, parallel=True)
 def _solve_mp2(n_ele, Omega, L, rho, 
-                imax, k_cutoff, gamma,
-                UMAT, basis_indices_map,
+                imax_basis, k_cutoff, gamma,
+                imax_umat, UMAT, 
+                basis_indices_map,
                 basis_occ_Kp, basis_Kvec, basis_Kp,
                 epsilon_i, epsilon_a,
                 is_only_2b, is_effect_2b, is_tc, correlator_idx,
@@ -28,9 +29,9 @@ def _solve_mp2(n_ele, Omega, L, rho,
     nP = int(basis_Kp.shape[0])
     nv = nP - no
 
-    num_k_in_each_dir = imax * 2 + 1
+    num_k_in_each_dir = imax_basis * 2 + 1
     k_cutoffSquare = (2 * np.pi * k_cutoff / L)**2
-    idx_shift = 2*imax
+    idx_shift = 2*imax_umat
 
     e_mp2_dir = 0.0
     e_mp2_exc = 0.0
@@ -42,16 +43,15 @@ def _solve_mp2(n_ele, Omega, L, rho,
             dk_square = d_k_vec[0]**2 + d_k_vec[1]**2 + d_k_vec[2]**2
             u_mat = 0.
             if is_tc:
-                idx_shift = 2 * imax
                 ix = d_int_k[0] + idx_shift
                 iy = d_int_k[1] + idx_shift
                 iz = d_int_k[2] + idx_shift
                 u_mat = UMAT[ix, iy, iz]
             for b in range(no, nP):
                 int_kj = basis_Kvec[b] - d_int_k
-                loc_j = num_k_in_each_dir ** 2 * (int_kj[0] + imax) + \
-                        num_k_in_each_dir * (int_kj[1] + imax) + \
-                        int_kj[2] + imax
+                loc_j = num_k_in_each_dir ** 2 * (int_kj[0] + imax_basis) + \
+                        num_k_in_each_dir * (int_kj[1] + imax_basis) + \
+                        int_kj[2] + imax_basis
                 if len(basis_indices_map) > loc_j >= 0:
                     j = int(basis_indices_map[loc_j])
                     if j < 0 or j >= no:

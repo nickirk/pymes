@@ -110,7 +110,7 @@ class UEG:
         self.wp = np.sqrt(4.0 * np.pi * self.rho)
         #: Single particle basis functions (PWs).
         self.basis_fns = None
-        self.imax = 0
+        self.imax_basis = 0
         self.cutoff = 0.
         self.basis_indices_map = None
         #: TC [transcorrelated] method.
@@ -119,6 +119,7 @@ class UEG:
         self.correlator = None
         self.k_cutoff = None
         self.gamma = None
+        self.imax_umat = 0 # Having it separated from self.imax_basis allows flexibility for precomputing for several subsequent calculations (e.g. TA).
         self.UMAT = None
         ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC].
         if tc is not None:
@@ -174,12 +175,12 @@ class UEG:
                 size = product of numbers of k-points in x, y, z directions
         """
 
-        num_k_in_each_dir = self.imax * 2 + 1
+        num_k_in_each_dir = self.imax_basis * 2 + 1
         self.basis_indices_map = -1 * np.ones(num_k_in_each_dir ** 3).astype(int)
         for i in range(int(len(self.basis_fns) / 2)):
-            s = num_k_in_each_dir ** 2 * (self.basis_fns[i * 2].k[0] + self.imax) + \
-                num_k_in_each_dir * (self.basis_fns[i * 2].k[1] + self.imax) + \
-                self.basis_fns[i * 2].k[2] + self.imax
+            s = num_k_in_each_dir ** 2 * (self.basis_fns[i * 2].k[0] + self.imax_basis) + \
+                num_k_in_each_dir * (self.basis_fns[i * 2].k[1] + self.imax_basis) + \
+                self.basis_fns[i * 2].k[2] + self.imax_basis
             self.basis_indices_map[s] = i
 
     # --- Basis set ---
@@ -221,16 +222,16 @@ class UEG:
         k_shift += self.k_symm_shift 
 
         kp_shift = k_shift * 2 * np.pi / self.L
-        imax = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1
+        imax_basis = int(np.ceil(np.sqrt(cutoff + k_shift.dot(k_shift)))) + 1
         self.cutoff = cutoff
-        self.imax = imax
+        self.imax_basis = imax_basis
         basis_fns = []
         print_logging_info("Total k-shift: {} [2π/L]".format(k_shift), level=1)
-        print_logging_info("Generating basis functions with imax: {}".format(imax), level=1)
+        print_logging_info("Generating basis functions with imax [basis]: {}".format(imax_basis), level=1)
 
-        for i in range(-imax, imax + 1):
-            for j in range(-imax, imax + 1):
-                for k in range(-imax, imax + 1):
+        for i in range(-imax_basis, imax_basis + 1):
+            for j in range(-imax_basis, imax_basis + 1):
+                for k in range(-imax_basis, imax_basis + 1):
                     bfn = planewave.BasisFunc(i, j, k, self.L, 1, k_shift)
                     if self.is_k_in_basis(bfn.kinetic):
                         basis_fns.append(planewave.BasisFunc(i, j, k, self.L, 1, k_shift))
@@ -483,7 +484,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
-                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
+                self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
         if self.is_tc and self.UMAT is None:
@@ -500,8 +501,9 @@ class UEG:
             is_only_2b=False
         EHF, Epsilon_i, Epsilon_a = _get_orbital_energies(kinetic_G, 
                                                     self.n_ele, self.Omega, self.L, self.rho,
-                                                    self.imax, k_cutoff, gamma,
-                                                    self.UMAT, self.basis_indices_map,
+                                                    self.imax_basis, k_cutoff, gamma,
+                                                    self.imax_umat, self.UMAT,
+                                                    self.basis_indices_map,
                                                     basis_occ_Kp, basis_Kvec, basis_Kp,
                                                     is_only_2b, self.is_tc, 
                                                     correlator_idx,
@@ -603,7 +605,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
-                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
+                self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
         if self.is_tc and self.UMAT is None:
@@ -613,8 +615,9 @@ class UEG:
         basis_Kp = np.array([self.basis_fns[i * 2].kp for i in range(nP)], dtype=np.float64)
         # 2. Compute the integrals.
         V_pqrs=  _get_2b_int( idx, self.n_ele, self.Omega, self.L, self.rho,
-                                self.imax, k_cutoff, gamma,
-                                self.UMAT, self.basis_indices_map,
+                                self.imax_basis, k_cutoff, gamma,
+                                self.imax_umat, self.UMAT, 
+                                self.basis_indices_map,
                                 basis_occ_Kp, basis_Kvec, basis_Kp,
                                 is_only_2b, is_effect_2b, self.is_tc,
                                 correlator_idx,
@@ -763,6 +766,10 @@ class UEG:
                 print_logging_info("K-cutoff in correlator not initialized, using default 1.e-12.", level=1)
             else:
                 print_logging_info("K-cutoff in correlator: {:.8e} [2π/L]".format(self.k_cutoff), level=1)
+        if self.imax_umat is None:
+            self.imax_umat = self.imax_basis
+            print_logging_info("No custom imax [UMAT], setting it to imax [basis]: {}".format(self.imax_umat), level=1)
+
 
         correlator_idx = self.get_correlator_idx()
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
@@ -776,21 +783,22 @@ class UEG:
                 kPrime = self.kPrime.astype(np.float64) * (2.0 * np.pi / self.L)
             print_logging_info("Calculating UMAT elements with canonical TC: _init_UMAT_TC()", level=1)
             self.UMAT = _init_UMAT_TC(self.Omega, self.L, self.rho, 
-                                        self.imax, k_cutoff, gamma,
+                                        self.imax_umat, k_cutoff, gamma,
                                         kPrime, correlator_idx,
                                         dtype=dtype)
         elif self.tc_type == "long-range":
             if self.kpts_mesh is None or self.xtheta_mesh is None:
                 raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
             print_logging_info("Calculating UMAT elements with long-range TC: _init_UMAT_lr_TC()", level=1)
-            self.UMAT = _init_UMAT_lr_TC(self.L, self.rho, self.imax, k_cutoff, gamma,
+            self.UMAT = _init_UMAT_lr_TC(self.L, self.rho, self.imax_umat, k_cutoff, gamma,
                                         self.kpts_mesh, self.xtheta_mesh,
                                         self.dkpts, self.dxtheta,
                                         correlator_idx,
                                         dtype=dtype)
         end_time = time.time()
+        print_logging_info("Using imax [UMAT]: {}".format(self.imax_umat), level=1)
         print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
-        print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax, 2*self.imax, 2*self.imax]), level=1)
+        print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax_umat, 2*self.imax_umat, 2*self.imax_umat]), level=1)
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) + "initializing UMAT.", level=1)
 
     def madelung(self, rs=None, nel=None, Rcut=200, nr=2000000, dtype=np.float64):
@@ -944,7 +952,7 @@ class UEG:
             correlator_idx = self.CORRELATOR_NONE
             # Dummy UMAT for non-TC calculations.
             if self.UMAT is None:
-                self.UMAT = np.zeros((4*self.imax+1, 4*self.imax+1, 4*self.imax+1), dtype=dtype)
+                self.UMAT = np.zeros((4*self.imax_umat+1, 4*self.imax_umat+1, 4*self.imax_umat+1), dtype=dtype)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
         gamma  = self.gamma if self.gamma is not None else 1.0
         if self.is_tc and self.UMAT is None:
@@ -956,8 +964,9 @@ class UEG:
         start_time = time.time()
         print_logging_info("Calculating MP2 correlation energy", level=1)
         e_dir_mp2, e_exc_mp2 =  _solve_mp2(self.n_ele, self.Omega, self.L, self.rho,
-                                    self.imax, k_cutoff, gamma,
-                                    self.UMAT, self.basis_indices_map,
+                                    self.imax_basis, k_cutoff, gamma,
+                                    self.imax_umat, self.UMAT, 
+                                    self.basis_indices_map,
                                     basis_occ_Kp, basis_Kvec, basis_Kp,
                                     Epsilon_i, Epsilon_a,
                                     is_only_2b, is_effect_2b, 
@@ -1228,7 +1237,7 @@ class UEG:
         V_opqrst = np.zeros([nP, nP, nP, nP, nP, nP], dtype=dtype)
         # due to the momentum conservation, only 5 indices are free.
         # implementation follow closely the get_lmat_ueg in NECI
-        num_k_in_each_dir = self.imax * 2 + 1
+        num_k_in_each_dir = self.imax_basis * 2 + 1
 
         for o in range(nP):
             print_logging_info("Elapsed time = {:.3f} s: "
@@ -1241,9 +1250,9 @@ class UEG:
                         k_int_vec2 = self.basis_fns[2 * p].k - self.basis_fns[2 * s].k
                         for q in range(nP):
                             t_int_vec = -k_int_vec1 + k_int_vec2 + self.basis_fns[2 * q].k
-                            locT = num_k_in_each_dir ** 2 * (t_int_vec[0] + self.imax) + \
-                                   num_k_in_each_dir * (t_int_vec[1] + self.imax) + \
-                                   t_int_vec[2] + self.imax
+                            locT = num_k_in_each_dir ** 2 * (t_int_vec[0] + self.imax_basis) + \
+                                   num_k_in_each_dir * (t_int_vec[1] + self.imax_basis) + \
+                                   t_int_vec[2] + self.imax_basis
                             if len(self.basis_indices_map) > locT >= 0:
                                 t = int(self.basis_indices_map[locT])
                                 if t < 0:
@@ -1388,7 +1397,7 @@ class UEG:
         indices = []
         values = []
 
-        num_k_in_each_dir = self.imax * 2 + 1
+        num_k_in_each_dir = self.imax_basis * 2 + 1
 
         for p in range(n_p):
             print_logging_info("Elapsed time = {:.3f} s: calculating "
@@ -1405,9 +1414,9 @@ class UEG:
                 for q in range(n_p):
                     int_ks = self.basis_fns[q * 2].k - d_int_k
                     # if self.is_k_in_basis(int_ks):
-                    loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax) + \
-                            num_k_in_each_dir * (int_ks[1] + self.imax) + \
-                            int_ks[2] + self.imax
+                    loc_s = num_k_in_each_dir ** 2 * (int_ks[0] + self.imax_basis) + \
+                            num_k_in_each_dir * (int_ks[1] + self.imax_basis) + \
+                            int_ks[2] + self.imax_basis
                     if len(self.basis_indices_map) > loc_s >= 0:
                         s = int(self.basis_indices_map[loc_s])
                         if s < 0 or s >= n_p:
