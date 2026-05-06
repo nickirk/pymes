@@ -1,6 +1,5 @@
 import numpy as np
-from pymes.util.kpoints import inverse_spherical_FT
-from pymes.util.lattice import _get_lattice_shells_jit
+from pymes.util.kpoints import inverse_spherical_FT, grad_inverse_spherical_FT
 from numba import jit, prange, get_num_threads, config
 
 """
@@ -1094,6 +1093,85 @@ def _get_eff_potential_on_grid(rho, kpoints, kpts_mesh, xtheta_mesh, dkpts, dxth
         
     return w_kp, u_kp, F_kp
 
+@jit(nopython=True, parallel=True)
+def _get_weff_kspace(rho, kpoints, kpts_mesh, xtheta_mesh, dkpts, dxtheta, 
+                    k_cutoffSquare, gamma, correlator_idx, is_weff_tc=False):
+    nkp = kpoints.shape[0]
+    u_kp = np.zeros(nkp)
+    w0_kp = np.zeros(nkp)
+    w1_kp = np.zeros(nkp)
+    w2_kp = np.zeros(nkp)
+    w3_kp = np.zeros(nkp)
+    kSquare = kpoints**2
+
+    if is_weff_tc:
+        w0_kp = 4. * np.pi / kSquare
+        for ikp in prange(nkp):
+            u_kp[ikp] = _calc_correlator(correlator_idx, kSquare[ikp], k_cutoffSquare, rho, gamma)
+            w2_kp[ikp] = _intNablaUSquare(np.array([0,0,kpoints[ikp]]), kpts_mesh, xtheta_mesh, dkpts, dxtheta, \
+                                    rho, k_cutoffSquare, gamma, correlator_idx)
+            w1_kp[ikp] = kSquare[ikp] * u_kp[ikp]
+            w3_kp[ikp] = - rho * kSquare[ikp] * (u_kp[ikp]**2)
+    else:
+        if correlator_idx == 0:  # None
+            w0_kp = 4. * np.pi / kSquare
+        else:
+            w0_kp = 4. * np.pi / kSquare
+            for ikp in prange(nkp):
+                u_kp[ikp] = _calc_correlator(correlator_idx, kSquare[ikp], k_cutoffSquare, rho, gamma)
+
+    return u_kp, w0_kp, w1_kp, w2_kp, w3_kp
+
+@jit(nopython=True, parallel=True)
+def _get_veff_rspace(rho, rpoints, rc, kpoints, dk, k_cutoffSquare, gamma, correlator_idx):
+
+    nr = rpoints.shape[0]
+    v1_r = np.zeros(nr)
+    v2_r = np.zeros(nr)
+    v3_r = np.zeros(nr)
+
+    kFermi = (3.0 * np.pi**2 * rho) ** (1.0 / 3.0)
+    wp = np.sqrt(4. * np.pi * rho)
+
+    if correlator_idx == 3:  # coulomb-yukawa
+        sqrt_wp = np.sqrt(wp)
+        exp = np.exp(-sqrt_wp * rpoints)
+        v1_r = - ( exp / rpoints )
+        v2_r = - ( (-1. / (wp * rpoints**2)) + ((1./(wp * rpoints**2))+(1./(sqrt_wp* rpoints))) * exp)**2
+        v3_r = ((sqrt_wp * rpoints + 2)*exp) / (2 * rpoints)
+    else:
+        nkp = kpoints.shape[0]
+        u_kp = np.zeros(nkp)
+        w1_kp = np.zeros(nkp)
+        w3_kp = np.zeros(nkp)
+        kpSquare = kpoints**2
+        for ikp in prange(nkp):
+            u_kp[ikp] = _calc_correlator(correlator_idx, kpSquare[ikp], k_cutoffSquare, rho, gamma)
+        w1_kp = kpSquare * u_kp
+        w3_kp = 4 * np.pi / kpSquare - rho * kpSquare * (u_kp**2)
+        for ir in prange(nr):
+            if rc > 0.0 and rpoints[ir] > rc:
+                v1_r[ir], v2_r[ir], v3_r[ir] = _calc_veff_long_range(rpoints[ir], wp, kFermi, correlator_idx)
+            else:
+                v1_r[ir] = inverse_spherical_FT(rpoints[ir], w1_kp, kpoints, dk)
+                v3_r[ir] = inverse_spherical_FT(rpoints[ir], w3_kp, kpoints, dk)
+
+                dudr = grad_inverse_spherical_FT(rpoints[ir], u_kp, kpoints, dk)
+                v2_r[ir] = - dudr**2
+
+    return v1_r, v2_r, v3_r
+
+@jit(nopython=True)
+def _calc_veff_long_range(r, wp, kFermi, correlator_idx):
+    if correlator_idx == 4:
+        v1 = - 2./(kFermi**2 * r**4)
+        v2 = - 1./(wp**2 * r**4)
+        v3 = + 4./(np.sqrt(3.*np.pi*kFermi) * r**2)
+    else:
+        v1 = 0.0
+        v2 = 0.0
+        v3 = 0.0
+    return v1, v2, v3
 
 # NOT YET IMPLEMENTED -----------------------------------------------------
 

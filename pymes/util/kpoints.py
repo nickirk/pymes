@@ -118,3 +118,32 @@ def inverse_spherical_FT(r, f_k, kpoints, dk):
     prefac = dk / (2.0 * np.pi**2 * r)
     integrand = kpoints * np.sin(kpoints * r) * f_k
     return np.sum(integrand) * prefac
+
+@jit(nopython=True)
+def grad_inverse_spherical_FT(r, f_k, kpoints, dk):
+    """
+    Function to compute the gradient (derivative) of the inverse (spherical) 
+    Fourier Transform of a function f(k) on a point r based on a grid of kpoints.
+    (d/dr)f(r) = (d/dr)∫ d³k f(k) exp(i k*r) = 1/(2π²r) ∫ dk k*sin(k*r) f(k)
+               = 1/(2π²r) ∫ dk k²*cos(k*r)*k*f(k) - 1/(2π²r²) ∫ dk k*sin(k*r) f(k)
+    
+    Args:
+        r: float
+            The distance at which to evaluate the inverse Fourier Transform.
+        f_k: np array of floats
+            The function values at the k-points.
+        kpoints: np array of floats
+            The k-points at which f(k) is evaluated.
+        dk: float
+            The spacing between the k-points in the grid.
+    Returns:
+        f_r: float
+            The value of the inverse Fourier Transform at distance r.
+    """
+    if r < 1.e-12:
+        return 0.0
+    prefac_cos = dk / (2.0 * np.pi**2 * r)
+    prefac_sin = dk / (2.0 * np.pi**2 * r**2)
+    integrand_cos = kpoints *  kpoints * np.cos(kpoints * r) * f_k
+    integrand_sin = kpoints * np.sin(kpoints * r) * f_k
+    return np.sum(integrand_cos) * prefac_cos - np.sum(integrand_sin) * prefac_sin

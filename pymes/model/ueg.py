@@ -14,13 +14,18 @@ from pymes.model.ueg_helper_int import (_get_orbital_energies, _get_2b_int,
                                         _double_contractions_in_3_body,
                                         _get_eff_madelung_self_image,
                                         _get_eff_madelung_background,
-                                        _get_eff_potential_on_grid
+                                        _get_eff_potential_on_grid,
+                                        _get_weff_kspace,
+                                        _get_veff_rspace
                                         )
 from pymes.model.ueg_helper_solver import _solve_mp2
+from pymes.util.lattice import get_lattice_shells
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
 from functools import partial
+
+from util.lattice import _get_lattice_shells_jit
 
 einsum = partial(pytblis.einsum, optimize='greedy')
 
@@ -119,7 +124,7 @@ class UEG:
         self.correlator = None
         self.k_cutoff = None
         self.gamma = None
-        self.imax_umat = None # Having it separated from self.imax_basis allows flexibility for precomputing for several subsequent calculations (e.g. TA).
+        self.imax_umat = None # [Having it separated from self.imax_basis allows flexibility for precomputing for several subsequent calculations (e.g. TA)].
         self.UMAT = None
         ##: Type of TC treatment: TC [canonical TC] l-TC [long-range TC].
         if tc is not None:
@@ -802,8 +807,111 @@ class UEG:
         print_logging_info("UMAT shape: {}".format(self.UMAT.shape), level=1)
         print_logging_info("Gamma-point (Γ) UMAT value: {:.15e}".format(self.UMAT[2*self.imax_umat, 2*self.imax_umat, 2*self.imax_umat]), level=1)
         print_logging_info("Elapsed time = {:.3f} s: ".format(end_time - start_time) + "initializing UMAT.", level=1)
+    
+    def get_weff_kspace(self, kpoints):
+        """
+        Member function of class UEG to compute the effective potential in k-space for a given set of k-points.
+        w^{eff}(k) = 4π/k² + k²u(k) + F{(∇u)²}(k) + -ρk²u²(k) ( w0_k + w1_k + w2_k + w3_k )
 
-    def madelung(self, rs=None, nel=None, Rcut=200, nr=2000000, dtype=np.float64):
+        Args:
+            kpoints: array-like
+                Array of k-points (in units of 2π/L) at which to evaluate the effective potential.
+        Returns:
+            u_k: array-like
+                Array of correlator function u(k) values in k-space corresponding to the input k-points.
+            w0_k: array-like
+                Array of effective potential [0] 4π/k² values in k-space corresponding to the input k-points.
+            w1_k: array-like
+                Array of effective potential [1] k²u(k) values in k-space corresponding to the input k-points.
+            w2_k: array-like
+                Array of effective potential [2] F{(∇u)²}(k) values in k-space corresponding to the input k-points.
+            w3_k: array-like
+                Array of effective potential [3] -ρk²u²(k) values in k-space corresponding to the input k-points.
+        """
+        algo_name = "ueg.get_weff_kspace"
+
+        is_weff_tc = False
+        if self.is_tc and self.tc_type == "long-range":
+            if self.kpts_mesh is None or self.xtheta_mesh is None:
+                raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
+            correlator_idx = self.get_correlator_idx()
+            kpts_mesh = self.kpts_mesh
+            xtheta_mesh = self.xtheta_mesh
+            dkpts = self.dkpts
+            dxtheta = self.dxtheta
+            is_weff_tc = True
+        else:
+            if self.is_tc:
+                correlator_idx = self.get_correlator_idx()
+            else:
+                correlator_idx = self.CORRELATOR_NONE
+            kpts_mesh = np.array([0.0], dtype=np.float64)
+            xtheta_mesh = np.array([0.0], dtype=np.float64)
+            dkpts = 1
+            dxtheta = 1
+
+        k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+        k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
+        gamma = self.gamma if self.gamma is not None else 1.0
+        u_k, w0_k, w1_k, w2_k, w3_k = _get_weff_kspace(self.rho, kpoints, kpts_mesh, xtheta_mesh, 
+                                                        dkpts, dxtheta, k_cutoffSquare, 
+                                                        gamma, correlator_idx, is_weff_tc)
+        return u_k, w0_k, w1_k, w2_k, w3_k
+    
+    def get_veff_rspace(self, rpoints, rc=-1.0, dkfac=100000, kmaxfac=500):
+        """
+        Member function of class UEG to compute the effective potential in r-space for a given set of r-points.
+        v^{eff}(r) = v0(r) : bare Coulomb potential 1/r.
+        v^{eff}(r) = v1(r) + v2(r) + v3(r) = - ∇²u(r) - (∇u(r))² + 1/r + RPA: ∇_{i}u(r_{ij}) ⋅ ∇_{i}u(r_{ik})
+
+        NOTE: In the case of long-range TC the effective potential is computed via a spherical inverse
+        Fourier Transform of the effective potential components in k-space. The integrans oscillates
+        ~ k*sin(kr) so fine k-space grids are required.
+
+        Args:
+            rpoints: array-like
+                Array of r-points at which to evaluate the effective potential.
+            rc: float
+                cutoff radius for the effective potential in r-space, to determine the long-range vs short-range behavior. If rc < 0, no cutoff is applied.
+            dkfac: int
+                determines the k-space grid spacing for the inverse Fourier Transform as dk = k_F/dkfac.
+            kmaxfac: float
+                determines the maximum k value in the grid for the inverse Fourier Transform as kmax = k_F*kmaxfac.
+        Returns:
+            v_0: array-like
+                Array of effective potential [0] 1/r values in r-space corresponding to the input r-points.
+            v1_r: array-like
+                Array of effective potential [1] -∇²u(r) values in r-space corresponding to the input r-points.
+            v2_r: array-like
+                Array of effective potential [2] -(∇u(r))² values in r-space corresponding to the input r-points.
+            v3_r: array-like
+                Array of effective potential [3] RPA: 1/r + ∇_{i}u(r_{ij}) ⋅ ∇_{i}u(r_{ik}) values in r-space corresponding to the input r-points.
+        """
+        algo_name = "ueg.get_veff_rspace"
+
+        if self.is_tc and self.tc_type == "long-range":
+            correlator_idx = self.get_correlator_idx()
+            k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
+            gamma  = self.gamma if self.gamma is not None else 1.0
+            k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
+            gamma = self.gamma if self.gamma is not None else 1.0
+            #: k-mesh for the inverse Fourier Transform.
+            dk = self.kFermi / dkfac
+            kmax = self.kFermi * kmaxfac
+            kpoints = np.arange(0.0 + dk, kmax + dk, dk)
+            v1_r, v2_r, v3_r = _get_veff_rspace(self.rho, rpoints, rc,
+                                                    kpoints, dk,
+                                                    k_cutoffSquare, gamma, 
+                                                    correlator_idx)
+            return v1_r, v2_r, v3_r
+        else:
+            nr = len(rpoints)
+            v0_r = np.zeros(nr, dtype=np.float64)
+            v0_r = 1.0 / rpoints
+            return v0_r
+
+
+    def madelung(self, Rcut=200, nr=2000000, veff=None, rpoints=None, dtype=np.float64):
         """
         Madelung Constant for the UEG: correction of the interaction of the electrons
         with themselves (periodic images) and positive background in the Ewald summation.
@@ -820,10 +928,14 @@ class UEG:
                 Cutoff radius for the Madelung constant calculation, in units of L.
             nr: int. 
                 Number of grid points for the continuous integration.
+            veff: array-like, optional.
+                Effective potential in r-space.
+            rpoints: array-like, optional.
+                Array of r-points corresponding to the veff values, if veff is provided.
 
         Returns:
             mc: float.
-                (1/2) Madelung constant per electron.
+                Madelung constant per electron.
         """
         algo_name = "ueg.madelung"
 
@@ -832,6 +944,45 @@ class UEG:
             print_logging_info("Calculating Madelung constant for long-range TC method with effective potential", level=1)
         else:
             print_logging_info("Calculating standard Madelung constant", level=1)
+
+        if self.is_tc and self.tc_type == "long-range":
+            Rmax = Rcut * self.L
+            nmax = int(np.ceil(Rcut))
+            #: Self-image contribution.
+            print_logging_info("Calculating self-image contribution with Rmax={}*L".format(Rcut), level=1)
+            R, wR = get_lattice_shells(self.L, Rmax, nmax)
+            if veff is not None and rpoints is not None:
+                veff_R = np.interp(R, rpoints, veff)
+            else:
+                v1, v2, v3 = self.get_veff_rspace(R)
+                veff_R = v2 + v3
+            vm_self_image = np.sum(wR * veff_R)
+            #: Background contribution.
+            print_logging_info("Calculating background contribution with Rmax={}*L, nr={}".format(Rcut, nr), level=1)
+            dr = Rmax / nr
+            r = np.arange(0.0 + 0.5*dr, Rmax, dr)
+            prefac = - 4. * np.pi / self.Omega
+            if veff is not None and rpoints is not None:
+                veff_r = np.interp(r, rpoints, veff)
+            else:
+                v1, v2, v3 = self.get_veff_rspace(r)
+                veff_r = v2 + v3
+            vm_background = prefac * np.trapezoid(r**2 * veff_r, r)
+            #: Get the Madelung constant.
+            vm = ( vm_self_image + vm_background )
+        else:
+            vm = -1.760118928190842*self.rs**(-1)*self.n_ele**(-1./3)
+        print_logging_info("Madelung constant [Ha/e]: {:.15f}".format(vm), level=1)
+        return vm
+
+
+
+
+
+
+
+
+
 
         rs = self.rs if rs is None else rs
         nel = self.n_ele if nel is None else nel
