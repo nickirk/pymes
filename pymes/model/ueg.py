@@ -12,9 +12,6 @@ from pymes.model.ueg_helper_int import (_get_orbital_energies, _get_2b_int,
                                         _init_UMAT_TC, _init_UMAT_lr_TC,
                                         _triple_contractions_in_3_body,
                                         _double_contractions_in_3_body,
-                                        _get_eff_madelung_self_image,
-                                        _get_eff_madelung_background,
-                                        _get_eff_potential_on_grid,
                                         _get_weff_kspace,
                                         _get_veff_rspace
                                         )
@@ -23,9 +20,8 @@ from pymes.util.lattice import get_lattice_shells
 from pymes.util.tensors import get_block_index
 from pymes.util.parallel_tasks import det_num_threads
 from scipy import special
+from scipy.interpolate import CubicSpline
 from functools import partial
-
-from util.lattice import _get_lattice_shells_jit
 
 einsum = partial(pytblis.einsum, optimize='greedy')
 
@@ -858,7 +854,7 @@ class UEG:
                                                         gamma, correlator_idx, is_weff_tc)
         return u_k, w0_k, w1_k, w2_k, w3_k
     
-    def get_veff_rspace(self, rpoints, rc=-1.0, dkfac=100000, kmaxfac=500):
+    def get_veff_rspace(self, rpoints, rc=-1.0, dkfac=100000, kmaxfac=50):
         """
         Member function of class UEG to compute the effective potential in r-space for a given set of r-points.
         v^{eff}(r) = v0(r) : bare Coulomb potential 1/r.
@@ -948,12 +944,20 @@ class UEG:
         if self.is_tc and self.tc_type == "long-range":
             Rmax = Rcut * self.L
             nmax = int(np.ceil(Rcut))
+            if veff is not None and rpoints is not None:
+                if len(veff) != len(rpoints):
+                    raise ValueError(algo_name, ": length of veff ({}) and rpoints ({}) must be the same!".format(len(veff), len(rpoints)))
+                if np.max(rpoints) < Rmax:
+                    raise ValueError(algo_name, ": rpoints[{}..{}] does not cover the required range [0.0, {}]!".format(np.min(rpoints), np.max(rpoints), Rmax))
+                print_logging_info("Interpolating effective potential", level=1)
+                veff_interpol = CubicSpline(rpoints, veff)
             #: Self-image contribution.
             print_logging_info("Calculating self-image contribution with Rmax={}*L".format(Rcut), level=1)
-            R, wR = get_lattice_shells(self.L, Rmax, nmax)
+            R, wR = get_lattice_shells(self.L, Rmax, nmax, is_R0=False, dtype=dtype)
             if veff is not None and rpoints is not None:
-                veff_R = np.interp(R, rpoints, veff)
+                veff_R = veff_interpol(R)
             else:
+                print_logging_info("Calculating effective potential for lattice shell points", level=1)
                 v1, v2, v3 = self.get_veff_rspace(R)
                 veff_R = v2 + v3
             vm_self_image = np.sum(wR * veff_R)
@@ -963,8 +967,9 @@ class UEG:
             r = np.arange(0.0 + 0.5*dr, Rmax, dr)
             prefac = - 4. * np.pi / self.Omega
             if veff is not None and rpoints is not None:
-                veff_r = np.interp(r, rpoints, veff)
+                veff_r = veff_interpol(r)
             else:
+                print_logging_info("Calculating effective potential for background integration points", level=1)
                 v1, v2, v3 = self.get_veff_rspace(r)
                 veff_r = v2 + v3
             vm_background = prefac * np.trapezoid(r**2 * veff_r, r)
@@ -973,80 +978,6 @@ class UEG:
         else:
             vm = -1.760118928190842*self.rs**(-1)*self.n_ele**(-1./3)
         print_logging_info("Madelung constant [Ha/e]: {:.15f}".format(vm), level=1)
-        return vm
-
-
-
-
-
-
-
-
-
-
-        rs = self.rs if rs is None else rs
-        nel = self.n_ele if nel is None else nel
-        L = rs * ((4.0 * np.pi * nel) / 3.0) ** (1.0 / 3.0)
-
-        if self.is_tc and self.tc_type == "long-range":
-            if self.correlator is None:
-                raise ValueError("Correlator for the transcorrelated framework not initialized!")
-            correlator_idx = self.get_correlator_idx()
-            k_cutoff = self.k_cutoff if self.k_cutoff is not None else 1.e-12
-            k_cutoffSquare = (k_cutoff * 2 * np.pi / self.L) ** 2
-            gamma = self.gamma if self.gamma is not None else 1.0
-            if correlator_idx == self.CORRELATOR_RPA:
-                if self.kpts_mesh is None or self.xtheta_mesh is None:
-                    raise ValueError(algo_name, "Integration meshes (kpts_mesh, xtheta_mesh) not initialized for long-range TC!")
-                #kpts_mesh = self.kpts_mesh
-                #dkpts = self.dkpts
-                kpoints = np.linspace(1e-6, 50 * self.kFermi, 100000)
-                dkpts = (kpoints[-1] - kpoints[0]) / (len(kpoints) - 1)
-                #print('nkpts in kpts_mesh: ', len(kpts_mesh))
-                print_logging_info("Calculating the convolution integral of the squared gradient of the correlator function in k-space for RPA correlator", level=1)
-                w_kp, u_kp, F_kp = _get_eff_potential_on_grid(self.rho, kpoints, self.kpts_mesh, self.xtheta_mesh, 
-                                                                self.dkpts, self.dxtheta, k_cutoffSquare, 
-                                                                gamma, correlator_idx)
-                kpts_mesh = kpoints
-                # dkpts = (kpoints[-1] - kpoints[0]) / (len(kpoints) - 1)
-                #nk=10000
-                #kmax_factor=50
-                #kpts_mesh = np.linspace(1e-6, kmax_factor * self.kFermi, nk)
-                #dkpts = (kmax_factor * self.kFermi - 1e-6) / (nk - 1)
-                for i in range(len(kpts_mesh)):
-                    print_logging_info("k' = {:.8f} [2π/L], w_kp = {:.8e}, u_kp = {:.8e}, F_kp = {:.8e}".format(
-                        kpts_mesh[i], w_kp[i], u_kp[i], F_kp[i]), level=2)
-            else: #: Dummy variables.
-                kpts_mesh = np.array([0.0], dtype=np.float64)
-                dkpts = 1
-                w_kp = np.array([0.0], dtype=np.float64)
-                u_kp = np.array([0.0], dtype=np.float64)
-                F_kp = np.array([0.0], dtype=np.float64)
-            Rmax = Rcut * self.L
-            nmax = int(np.ceil(Rcut))
-            # [1] Self-image interactions.
-            print_logging_info("Calculating self-image contribution with Rmax={}*L".format(Rcut), level=1)
-            vm_self_image = _get_eff_madelung_self_image(self.L, self.rho, self.wp,
-                                                        Rmax, nmax, 
-                                                        w_kp, u_kp, F_kp,
-                                                        kpts_mesh, dkpts,
-                                                        correlator_idx)
-            print_logging_info("Self-image contribution: {:.15f}".format(vm_self_image), level=2)
-            # [2] Background interaction.
-            print_logging_info("Calculating background contribution with Rmax={}*L, nr={}".format(Rcut, nr), level=1)
-            vm_background = _get_eff_madelung_background(self.Omega, self.rho, self.wp, 
-                                                        Rmax, nr,
-                                                        w_kp, u_kp, F_kp,
-                                                        kpts_mesh, dkpts,
-                                                        correlator_idx)
-            print_logging_info("Background contribution: {:.15f}".format(vm_background), level=2)
-            # [3] Get the Madelung constant.
-            vm = ( vm_self_image + vm_background ) / 2.0
-            #if self.correlator == self.RPA:
-            #    vm += -1.760118928190842*rs**(-1)*nel**(-1./3)/2
-        else:
-            vm = -1.760118928190842*rs**(-1)*nel**(-1./3)/2
-        print_logging_info("Madelung constant [Ha/e] (with factor 1/2): {:.15f}".format(vm), level=1)
         return vm
 
     def get_mp2(self, Epsilon_i, Epsilon_a, 

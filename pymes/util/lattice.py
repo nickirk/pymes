@@ -4,7 +4,7 @@ from numba import jit, prange, get_num_threads, config
 
 from pymes.log import print_title, print_logging_info
 
-def get_lattice_shells(L, Rmax, nmax, use_jit=True):
+def get_lattice_shells(L, Rmax, nmax, is_R0=False, use_jit=True, dtype=np.float64):
     """
     Function to compute the lattice shells and their multiplicities for a simple cubic lattice.
     Parameters
@@ -15,8 +15,12 @@ def get_lattice_shells(L, Rmax, nmax, use_jit=True):
         Maximum radius for including lattice shells.
     nmax : int
         Maximum integer index for lattice points (defines the search range).
-        use_jit : bool, optional
+    is_R0 : bool, optional
+        Whether to include the origin (R=0) in the shells.
+    use_jit : bool, optional
         Whether to use the JIT-compiled version of the function for performance.
+    dtype : np.dtype, optional
+        Data type for the returned arrays.
     Returns
     -------
     R : np.ndarray
@@ -25,20 +29,21 @@ def get_lattice_shells(L, Rmax, nmax, use_jit=True):
         Array of multiplicities (number of lattice points) for each shell.
     """
     if use_jit:
-        R, wR = _get_lattice_shells_jit(L, Rmax, nmax)
+        R, wR = _get_lattice_shells_jit(L, Rmax, nmax, is_R0, dtype=dtype)
     else:
-        R, wR = _get_lattice_shells(L, Rmax, nmax)
+        R, wR = _get_lattice_shells(L, Rmax, nmax, is_R0, dtype=dtype)
     return R, wR
 
 @jit(nopython=True)
-def _get_lattice_shells_jit(L, Rmax, nmax):
+def _get_lattice_shells_jit(L, Rmax, nmax, is_R0=False, dtype=np.float64):
     maxR2 = 3 * nmax * nmax
     counts = np.zeros(maxR2 + 1, np.int64)
     for n1 in range(-nmax, nmax + 1):
         for n2 in range(-nmax, nmax + 1):
             for n3 in range(-nmax, nmax + 1):
                 if n1 == 0 and n2 == 0 and n3 == 0:
-                    continue
+                    if not is_R0:
+                        continue
                 R2 = n1 * n1 + n2 * n2 + n3 * n3
                 Rtmp = np.sqrt(R2) * L
                 if Rtmp <= Rmax:
@@ -60,18 +65,19 @@ def _get_lattice_shells_jit(L, Rmax, nmax):
             idx += 1
     return R, wR
 
-def _get_lattice_shells(L, Rmax, nmax):
+def _get_lattice_shells(L, Rmax, nmax, is_R0=False, dtype=np.float64):
     shells = {}
     for n1 in range ( -nmax, nmax+1):
         for n2 in range ( -nmax, nmax+1):
             for n3 in range ( -nmax, nmax+1):
                 if n1 == 0 and n2 == 0 and n3 == 0:
-                    continue
+                    if not is_R0:
+                        continue
                 R2 = n1**2 + n2**2 + n3**2
                 R = np.sqrt(R2) * L
                 if R <= Rmax:
                     shells[R2] = shells.get(R2, 0) + 1
     R2_unique = sorted(shells.keys())
-    R = np.array([np.sqrt(R2) * L for R2 in R2_unique])
-    wR = np.array([shells[R2] for R2 in R2_unique])
+    R = np.array([np.sqrt(R2) * L for R2 in R2_unique], dtype=dtype)
+    wR = np.array([shells[R2] for R2 in R2_unique], dtype=np.int64)
     return R, wR
