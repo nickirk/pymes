@@ -50,7 +50,8 @@ def main(nel, rs,
          nrpoints=None, \
          write_madelung=False, \
          write_veff=False, \
-         filename='madelung.out',
+         madelung_filename='madelung.out',
+         veff_filename='veff_rspace.dat',
          mode='madelung'):
 
     
@@ -96,25 +97,40 @@ def main(nel, rs,
         print_logging_info("{:.3f} seconds spent on computing Madelung constant"\
                         .format((time.time()-time_madelung)))
         if write_madelung:
-            print_logging_info( "Writing Madelung constant to file: {}".format(filename))
-            with open(filename, 'a') as f:
+            print_logging_info( "Writing Madelung constant to file: {}".format(madelung_filename))
+            with open(madelung_filename, 'a') as f:
                 f.write("{:.3f} {} {:.12e}\n".format(rs, nel, madelung_constant))
     elif mode == 'veff':
         print_title("Computing Effective Potential on a Grid", '=')
-        print_logging_info( "Using rmax = {} and nrpoints = {}".format(rmax, nrpoints))
-        time_veff = time.time()
-        rpoints = np.geomspace(0.001, rmax, nrpoints)
-        v1, v2, v3 = ueg_model.get_veff_rspace(rpoints, rc=-1)
-        veff = v2 + v3
-        print_logging_info("Computed effective potential on a grid with {} points.".format(len(rpoints)))
-        print_logging_info("{:.3f} seconds spent on computing effective potential".\
-                        format((time.time()-time_veff)))
-        if write_veff:
-            print_logging_info( "Writing effective potential to file: veff_rspace.dat")
-            with open('veff_rspace.dat', 'w') as f:
-                f.write("# 1. r [Bohr] | 2. v_eff [a.u.]\n")
-                for r, v in zip(rpoints, veff):
-                    f.write("{:.15e} {:.15e}\n".format(r, v))
+        if os.path.exists(veff_filename):
+            print_logging_info("Found existing effective potential file: {}. Loading...".format(veff_filename))
+            rpoints = []
+            veff = []
+            with open(veff_filename, 'r') as f:
+                for line in f:
+                    if line.startswith("#"):
+                        continue
+                    r, v = map(float, line.split())
+                    rpoints.append(r)
+                    veff.append(v)
+            rpoints = np.array(rpoints)
+            veff = np.array(veff)
+            print_logging_info("Loaded effective potential from file with {} points.".format(len(rpoints)))
+        else:
+            print_logging_info( "Using rmax = {} and nrpoints = {}".format(rmax, nrpoints))
+            time_veff = time.time()
+            rpoints = np.geomspace(0.001, rmax, nrpoints)
+            v1, v2, v3 = ueg_model.get_veff_rspace(rpoints, rc=-1)
+            veff = v2 + v3
+            print_logging_info("Computed effective potential on a grid with {} points.".format(len(rpoints)))
+            print_logging_info("{:.3f} seconds spent on computing effective potential".\
+                            format((time.time()-time_veff)))
+            if write_veff:
+                print_logging_info( "Writing effective potential to file: veff_rspace.dat")
+                with open(veff_filename, 'w') as f:
+                    f.write("# 1. r [Bohr] | 2. v_eff [a.u.]\n")
+                    for r, v in zip(rpoints, veff):
+                        f.write("{:.15e} {:.15e}\n".format(r, v))
         return veff, rpoints
 
 
@@ -128,12 +144,12 @@ if __name__ == '__main__':
     # Madelung options.
     Rcut = 200
     nr = 1000000
-    write_madelung = True
-    filename='madelung.out'
+    madelung_filename='madelung.out'
     # Potential options.
     precalc_veff = True
     nrpoints = 100000
     rmax = 0.0
+    veff_filename = 'veff_rspace.dat'
 
     if k_symm == 'gamma':
         nelec = [2, 14, 38, 54, 66, 114, 162, 186, 246, 294, 342, 358, 406, 502, 514, 610, 682, 730, 778, 874, 922, 970, 1030, 1174, 1238, 1382, 1478, 1502, 1598, 1694, 1790, 1850, 1898, 2042, 2090, 2282, 2378, 2426, 2474, 2618, 2714, 2730, 2838, 3006, 3102, 3150, 3294, 3486, 3582, 3678, 3726, 3870]
@@ -143,9 +159,9 @@ if __name__ == '__main__':
         raise ValueError("Invalid k-symmetry. Choose from 'gamma' or 'baldereschi'.")
 
     for correlator in ['rpa']:
-        filename = 'madelung.{}.out'.format(correlator)
+        madelung_filename = 'madelung.{}.out'.format(correlator)
         if write_madelung:
-            with open(filename, 'w') as f:
+            with open(madelung_filename, 'w') as f:
                 f.write("# 1. rs.____| 2. N____| 3. Mc [Ha/e]\n")
         for rs in [0.5]:
             if precalc_veff:
@@ -167,6 +183,7 @@ if __name__ == '__main__':
                         nrpoints=nrpoints, \
                         write_madelung=False,
                         write_veff=True, \
+                        veff_filename=veff_filename, \
                         mode='veff')
             else:
                 veff = None
@@ -182,7 +199,7 @@ if __name__ == '__main__':
                     rpoints=rpoints, \
                     Rcut=Rcut, 
                     nr=nr, \
-                    write_madelung=write_madelung, \
+                    write_madelung=True, \
                     write_veff=False, \
-                    filename=filename, \
+                    madelung_filename=madelung_filename, \
                     mode='madelung')

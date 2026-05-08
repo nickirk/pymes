@@ -854,7 +854,7 @@ class UEG:
                                                         gamma, correlator_idx, is_weff_tc)
         return u_k, w0_k, w1_k, w2_k, w3_k
     
-    def get_veff_rspace(self, rpoints, rc=-1.0, dkfac=500000, kmaxfac=100):
+    def get_veff_rspace(self, rpoints, rc=-1.0, dkfac=500000, kmaxfac=500):
         """
         Member function of class UEG to compute the effective potential in r-space for a given set of r-points.
         v^{eff}(r) = v0(r) : bare Coulomb potential 1/r.
